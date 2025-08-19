@@ -1,0 +1,140 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: cms-postgres
+    environment:
+      POSTGRES_DB: production_cms
+      POSTGRES_USER: cms_user
+      POSTGRES_PASSWORD: cms_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    networks:
+      - cms_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cms_user -d production_cms"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Elasticsearch
+  elasticsearch:
+    image: elasticsearch:8.11.0
+    container_name: cms-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - cms_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Redis (セッション・キャッシュ用)
+  redis:
+    image: redis:7-alpine
+    container_name: cms-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - cms_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # CMS Application
+  cms-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cms-backend
+    environment:
+      - DATABASE_URL=postgresql://cms_user:cms_password@postgres:5432/production_cms
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ELASTICSEARCH_INDEX=cms_posts
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=production-jwt-secret-must-be-at-least-32-characters-long-for-security
+      - SESSION_SECRET=production-session-secret-must-be-at-least-32-characters-long-for-security
+      - WEBAUTHN_RP_ID=localhost
+      - WEBAUTHN_RP_NAME=Production CMS
+      - WEBAUTHN_ORIGIN=http://localhost:3000
+      - PORT=3000
+      - ENVIRONMENT=production
+      - LOG_LEVEL=info
+      - RUST_LOG=cms_backend=info,tower_http=info
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - cms_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # pgAdmin (データベース管理用 - 開発時のみ)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: cms-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - cms_network
+    profiles:
+      - development
+
+  # Elasticsearch Head (Elasticsearch管理用 - 開発時のみ)
+  elasticsearch-head:
+    image: mobz/elasticsearch-head:5
+    container_name: cms-es-head
+    ports:
+      - "9100:9100"
+    networks:
+      - cms_network
+    profiles:
+      - development
+
+volumes:
+  postgres_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  cms_network:
+    driver: bridge

@@ -1,0 +1,67 @@
+[package]
+name = "cms-backend"
+version = "1.0.0"
+edition = "2021"
+description = "Production CMS Backend - Unified Architecture"
+authors = ["CMS Development Team"]
+
+[lib]
+name = "cms_backend"
+path = "src/lib.rs"
+
+[dependencies]
+# Core Web Framework
+axum = { version = "0.7", features = ["macros"] }
+tokio = { version = "1.35", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Database
+diesel = { version = "2.1", features = ["postgres", "chrono", "uuid", "r2d2"] }
+diesel_migrations = "2.1"
+r2d2 = "0.8"
+
+# Search (Rust-native)
+tantivy = "0.21"
+elasticsearch = "9.0.0-alpha.1"
+# Cache
+redis = { version = "0.24", features = ["aio", "tokio-comp"] }
+
+# Authentication
+argon2 = "0.5"
+jsonwebtoken = "9.2"
+uuid = { version = "1.7", features = ["v4", "serde"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Date/Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error Handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Configuration
+dotenvy = "0.15"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# OpenAPI
+utoipa = { version = "4.2", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "6.0", features = ["axum"] }
+
+# Async utilities
+async-trait = "0.1"
+futures = "0.3"
+
+[[bin]]
+name = "cms-backend"
+path = "src/main.rs"
+
+[profile.release]
+lto = true
+codegen-units = 1

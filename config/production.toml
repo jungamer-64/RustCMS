@@ -1,0 +1,77 @@
+# Production CMS Configuration
+# 大規模アクセス対応の本番環境設定
+
+[server]
+host = "0.0.0.0"
+port = 3000
+max_request_size = 52428800  # 50MB for large media uploads
+request_timeout = 60         # 60 seconds for complex operations
+worker_threads = 16          # 大規模トラフィック対応
+
+[database]
+url = "postgresql://cms_user:cms_password@localhost:5432/cms_production"
+max_connections = 50         # 高トラフィック対応
+min_connections = 10
+connection_timeout = 30
+idle_timeout = 300
+max_lifetime = 1800
+enable_migrations = true
+
+[cache]
+url = "redis://localhost:6379"
+pool_size = 20               # 大規模キャッシュ対応
+default_ttl = 3600
+key_prefix = "cms:prod:"
+
+[search]
+index_path = "./data/search_index_prod"
+writer_memory = 134217728    # 128MB for large content indexing
+max_results = 1000
+enable_fuzzy = true
+fuzzy_distance = 2
+
+[auth]
+jwt_secret = "${JWT_SECRET}"
+jwt_expiration = 3600        # 1 hour
+biscuit_root_key = "${BISCUIT_ROOT_KEY}"
+bcrypt_cost = 14             # 高セキュリティ
+session_timeout = 86400      # 24 hours
+
+[auth.webauthn]
+rp_id = "${WEBAUTHN_RP_ID}"
+rp_name = "Production CMS"
+rp_origin = "${WEBAUTHN_ORIGIN}"
+timeout = 60000
+
+[media]
+upload_dir = "/var/cms/uploads"
+max_file_size = 104857600    # 100MB
+allowed_types = "jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,txt,md,mp4,webm"
+thumbnail_sizes = "150x150,300x300,800x600,1200x800"
+
+[notifications]
+[notifications.email]
+smtp_host = "${SMTP_HOST}"
+smtp_port = 587
+smtp_username = "${SMTP_USERNAME}"
+smtp_password = "${SMTP_PASSWORD}"
+from_address = "${EMAIL_FROM}"
+from_name = "Production CMS"
+
+[notifications.webhooks]
+enabled = true
+timeout = 30
+retry_attempts = 5
+
+[security]
+rate_limit_requests = 1000   # requests per minute
+rate_limit_window = 60
+cors_origins = ["https://yourdomain.com", "https://admin.yourdomain.com"]
+enable_compression = true
+max_payload_size = 52428800
+
+[monitoring]
+enable_metrics = true
+metrics_port = 9090
+health_check_interval = 30
+log_level = "info"

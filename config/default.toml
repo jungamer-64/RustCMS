@@ -1,0 +1,48 @@
+[server]
+host = "127.0.0.1"
+port = 3000
+max_request_size = 10485760
+request_timeout = 30
+worker_threads = 4
+
+environment = "development"
+
+[media]
+upload_dir = "./uploads"
+max_file_size = 10485760
+allowed_types = ["jpg","jpeg","png","gif","webp","pdf","txt","md"]
+thumbnail_sizes = [[150, 150], [300, 300]]
+
+[notifications]
+[notifications.email]
+smtp_host = "localhost"
+smtp_port = 587
+smtp_username = "user"
+smtp_password = "pass"
+from_address = "noreply@example.com"
+from_name = "CMS"
+
+[notifications.webhooks]
+enabled = false
+timeout = 30
+retry_attempts = 3
+
+[security]
+# CORS origins allowed for development
+cors_origins = ["http://localhost:3000"]
+# Rate limiting defaults
+rate_limit_requests = 100
+rate_limit_window = 60
+
+[database]
+# Use environment variable to avoid committing secrets. Set DATABASE_URL in your environment.
+# Example: DATABASE_URL=postgresql://user:password@host:5432/dbname?sslmode=require
+# If your password contains special characters, URL-encode them (e.g. ^ -> %5E, & -> %26).
+url = "${DATABASE_URL}"
+# Connection pool and timeouts
+max_connections = 20
+min_connections = 5
+connection_timeout = 30
+idle_timeout = 600
+max_lifetime = 3600
+enable_migrations = true
