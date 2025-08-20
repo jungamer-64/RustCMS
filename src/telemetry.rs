@@ -1,12 +1,6 @@
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use tracing_opentelemetry::OpenTelemetryLayer;
-use opentelemetry::{
-    global,
-    sdk::{trace::TracerProvider, Resource},
-    KeyValue,
-};
 use opentelemetry_jaeger::new_agent_pipeline;
-use std::time::Duration;
 
 /// Initialize comprehensive telemetry for enterprise monitoring
 pub fn init_telemetry() -> Result<(), Box<dyn std::error::Error>> {

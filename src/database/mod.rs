@@ -47,7 +47,7 @@ impl Database {
 
     // User CRUD operations
     pub async fn create_user(&self, request: CreateUserRequest) -> Result<User> {
-        use diesel::prelude::*;
+        
 
         // Build user with hashed password (this returns crate::AppError on failure)
         let user = User::new_with_password(
@@ -67,28 +67,28 @@ impl Database {
     }
 
     /// List users helper used by admin CLI (stub)
-    pub async fn list_users(&self, role: Option<&str>, active_only: Option<bool>) -> Result<Vec<User>> {
+    pub async fn list_users(&self, _role: Option<&str>, _active_only: Option<bool>) -> Result<Vec<User>> {
         // Placeholder: return empty list
         Ok(vec![])
     }
 
     /// Get user by username helper used by admin CLI (stub)
-    pub async fn get_user_by_username(&self, username: &str) -> Result<User> {
+    pub async fn get_user_by_username(&self, _username: &str) -> Result<User> {
         // Placeholder: not implemented, return NotFound
         Err(crate::AppError::NotFound("User not found".to_string()))
     }
 
-    pub async fn get_user_by_id(&self, id: Uuid) -> Result<User> {
+    pub async fn get_user_by_id(&self, _id: Uuid) -> Result<User> {
         // Placeholder implementation
         Err(crate::AppError::NotFound("User not found".to_string()))
     }
 
-    pub async fn get_users(&self, page: u32, limit: u32, role: Option<String>, active: Option<bool>, sort: Option<String>) -> Result<Vec<User>> {
+    pub async fn get_users(&self, _page: u32, _limit: u32, _role: Option<String>, _active: Option<bool>, _sort: Option<String>) -> Result<Vec<User>> {
         // Placeholder implementation
         Ok(vec![])
     }
 
-    pub async fn update_user(&self, id: Uuid, request: UpdateUserRequest) -> Result<User> {
+    pub async fn update_user(&self, _id: Uuid, _request: UpdateUserRequest) -> Result<User> {
         // Placeholder implementation
         Err(crate::AppError::Internal("Not implemented".to_string()))
     }
@@ -129,50 +129,50 @@ impl Database {
         Ok(inserted)
     }
 
-    pub async fn get_post_by_id(&self, id: Uuid) -> Result<Post> {
+    pub async fn get_post_by_id(&self, _id: Uuid) -> Result<Post> {
         // Placeholder implementation
         Err(crate::AppError::NotFound("Post not found".to_string()))
     }
 
-    pub async fn get_posts(&self, page: u32, limit: u32, status: Option<String>, author: Option<Uuid>, tag: Option<String>, sort: Option<String>) -> Result<Vec<Post>> {
+    pub async fn get_posts(&self, _page: u32, _limit: u32, _status: Option<String>, _author: Option<Uuid>, _tag: Option<String>, _sort: Option<String>) -> Result<Vec<Post>> {
         // Placeholder implementation
         Ok(vec![])
     }
 
-    pub async fn update_post(&self, id: Uuid, request: UpdatePostRequest) -> Result<Post> {
+    pub async fn update_post(&self, _id: Uuid, _request: UpdatePostRequest) -> Result<Post> {
         // Placeholder implementation
         Err(crate::AppError::Internal("Not implemented".to_string()))
     }
 
-    pub async fn delete_post(&self, id: Uuid) -> Result<()> {
+    pub async fn delete_post(&self, _id: Uuid) -> Result<()> {
         // Placeholder implementation
         Ok(())
     }
 
-    pub async fn count_posts(&self, tag: Option<&str>) -> Result<usize> {
+    pub async fn count_posts(&self, _tag: Option<&str>) -> Result<usize> {
         // Placeholder implementation
         Ok(0)
     }
 
-    pub async fn count_posts_by_author(&self, author_id: Uuid) -> Result<usize> {
+    pub async fn count_posts_by_author(&self, _author_id: Uuid) -> Result<usize> {
         // Placeholder implementation
         Ok(0)
     }
 
     /// Delete a user by ID
-    pub async fn delete_user(&self, id: Uuid) -> Result<()> {
+    pub async fn delete_user(&self, _id: Uuid) -> Result<()> {
         // Placeholder - would delete user from database
         Ok(())
     }
 
     /// Reset user password helper used by admin CLI (stub)
-    pub async fn reset_user_password(&self, id: Uuid, new_password: &str) -> Result<()> {
+    pub async fn reset_user_password(&self, _id: Uuid, _new_password: &str) -> Result<()> {
         // Placeholder: noop
         Ok(())
     }
 
     fn run_migrations(pool: &DatabasePool) -> Result<()> {
-        use diesel::prelude::*;
+        
         
         let mut conn = pool.get()?;
         conn.run_pending_migrations(MIGRATIONS)

@@ -52,7 +52,7 @@ pub struct SystemInfo {
 pub async fn health_check(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse> {
-    let start_time = std::time::Instant::now();
+    let _start_time = std::time::Instant::now();
     
     // Check all services conditionally
     let mut services = ServiceHealthDetails {

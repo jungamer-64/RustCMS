@@ -228,7 +228,7 @@ async fn seed_database(database: &Database) -> Result<()> {
         last_name: Some("".to_string()),
     };
 
-    let admin = database.create_user(admin_user).await?;
+    let _admin = database.create_user(admin_user).await?;
     
     info!("⚙️  Creating default settings...");
     

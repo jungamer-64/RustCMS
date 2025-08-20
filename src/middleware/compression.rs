@@ -1,13 +1,9 @@
 use axum::{
-    body::Body,
     extract::Request,
-    http::{header::CONTENT_ENCODING, StatusCode},
+    http::StatusCode,
     middleware::Next,
     response::Response,
 };
-use flate2::write::GzEncoder;
-use flate2::Compression;
-use std::io::Write;
 
 pub async fn compression_middleware(
     req: Request,

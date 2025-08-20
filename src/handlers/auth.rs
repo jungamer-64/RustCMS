@@ -4,7 +4,7 @@
 
 use axum::{
     response::{IntoResponse, Json},
-    extract::{State, Query},
+    extract::State,
     http::StatusCode,
 };
 use serde::{Deserialize, Serialize};
@@ -123,7 +123,7 @@ pub async fn login(
 
 /// Logout user
 pub async fn logout(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     // Extract token from Authorization header in middleware
 ) -> Result<impl IntoResponse> {
     // In a real implementation, you'd extract the token from the Authorization header
@@ -137,7 +137,7 @@ pub async fn logout(
 
 /// Get current user profile
 pub async fn profile(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     // User would be extracted from middleware after token validation
 ) -> Result<impl IntoResponse> {
     // Placeholder - in real implementation, user ID would come from validated token
@@ -149,7 +149,7 @@ pub async fn profile(
 
 /// Refresh token
 pub async fn refresh_token(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
 ) -> Result<impl IntoResponse> {
     // Placeholder for token refresh logic
     Ok(Json(json!({

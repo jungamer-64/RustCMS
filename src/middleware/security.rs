@@ -1,7 +1,6 @@
 use axum::{
     extract::Request,
     http::{HeaderMap, HeaderValue, HeaderName},
-    middleware::Next,
     response::Response,
 };
 use tower::{Layer, Service};

@@ -104,6 +104,7 @@ pub enum FilterOperator {
 }
 
 /// Search service implementation
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct SearchService {
     index: Index,
@@ -177,7 +178,7 @@ impl SearchService {
     }
     
     /// Search documents
-    pub async fn search(&self, request: SearchRequest) -> Result<SearchResults<serde_json::Value>> {
+    pub async fn search(&self, _request: SearchRequest) -> Result<SearchResults<serde_json::Value>> {
         // Simplified implementation for now
         Ok(SearchResults {
             hits: vec![],

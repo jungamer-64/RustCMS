@@ -31,11 +31,11 @@ axum = { version = "0.7", features = ["multipart", "ws", "macros", "form"] }
 axum-extra = { version = "0.9", features = ["typed-header", "cookie", "query", "form"] }
 tower = { version = "0.4", features = ["full"] }
 tower-http = { version = "0.5", features = ["cors", "trace", "fs", "limit", "timeout", "request-id", "auth", "sensitive-headers", "compression-gzip", "normalize-path"], default-features = false }
-hyper = { version = "1.0", features = ["full"] }
-hyper-rustls = { version = "0.24", features = ["http2"], default-features = false }
+hyper = { version = "1.6", features = ["full"] }
+hyper-rustls = { version = "0.27", features = ["http2"], default-features = false }
 
 # ===== ASYNC RUNTIME =====
-tokio = { version = "1.35", features = ["full"] }
+tokio = { version = "1.47", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["full"] }
 futures = "0.3"
 futures-util = "0.3"
@@ -68,11 +68,11 @@ argon2 = { version = "0.5", optional = true }
 # JWT tokens for compatibility (rustls only)
 jsonwebtoken = { version = "9.2", default-features = false, features = ["use_pem"], optional = true }
 # OAuth2 support (rustls only)
-oauth2 = "4.4"
+oauth2 = "5.0.0-rc.1"
 
 # ===== CACHING (Redis + In-Memory) =====
-redis = { version = "0.24", features = ["tokio-rustls-comp", "serde_json", "cluster", "streams"], default-features = false, optional = true }
-deadpool-redis = { version = "0.15", optional = true }
+redis = { version = "0.32.5", features = ["tokio-rustls-comp", "cluster", "streams"], default-features = false, optional = true }
+deadpool-redis = { version = "0.22.0", optional = true }
 moka = { version = "0.12", features = ["future"] }
 
 # ===== TLS & CRYPTOGRAPHY (rustls only, no OpenSSL) =====
@@ -85,7 +85,7 @@ hmac = "0.12"
 aes-gcm = "0.10"
 
 # ===== UTILITIES =====
-uuid = { version = "1.7", features = ["v4", "v7", "serde", "fast-rng"] }
+uuid = { version = "1.18.0", features = ["v4", "v7", "serde", "fast-rng"] }
 chrono = { version = "0.4", features = ["serde", "clock"] }
 time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
 url = { version = "2.5", features = ["serde"] }
@@ -108,7 +108,7 @@ tracing-opentelemetry = { version = "0.21" }
 opentelemetry = { version = "0.20", features = ["rt-tokio"] }
 opentelemetry-jaeger = { version = "0.19", features = ["rt-tokio"] }
 metrics = { version = "0.22.4", optional = true }
-metrics-exporter-prometheus = { version = "0.12", optional = true }
+metrics-exporter-prometheus = { version = "0.17", optional = true }
 prometheus = { version = "0.13", optional = true }
 metrics-prometheus = { version = "0.6", optional = true }
 
@@ -128,7 +128,7 @@ mime_guess = "2.0"
 tempfile = "3.8"
 
 # ===== HTTP CLIENT (rustls only) =====
-reqwest = { version = "0.11", features = ["json", "rustls-tls", "stream", "multipart"], default-features = false }
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream", "multipart"], default-features = false }
 
 # ===== COMPRESSION (Pure Rust implementations) =====
 flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
@@ -169,7 +169,7 @@ serial_test = "3.0"
 pretty_assertions = "1.4"
 insta = "1.34"
 mockall = "0.12"
-wiremock = "0.5"
+wiremock = "0.6"
 
 # CLI integration test helpers
 assert_cmd = "2.0"
@@ -184,7 +184,7 @@ rand = "0.8"
 # ===== FEATURES (Enterprise Production) =====
 [features]
 # Default production features - core functionality without WebAuthn for now
-default = ["database", "search", "cache", "auth", "email", "monitoring", "compression"]
+default = ["database", "search", "cache", "auth", "email", "compression"]
 
 # Core database functionality with PostgreSQL and Diesel
 database = [
@@ -276,3 +276,4 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 # ===== PATCH: unify metrics version =====
 [patch.crates-io]
+

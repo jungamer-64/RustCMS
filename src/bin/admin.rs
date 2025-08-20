@@ -6,13 +6,12 @@
 use cms_backend::{
     config::Config,
     database::Database,
-    models::{CreateUserRequest, UpdateUserRequest, CreatePostRequest, UserRole},
+    models::{CreateUserRequest, UpdateUserRequest, UserRole},
     Result,
 };
 use clap::{Parser, Subcommand};
-use serde_json::json;
 use std::io::{self, Write};
-use tracing::{info, error, warn};
+use tracing::{info, warn};
 
 #[derive(Parser)]
 #[command(name = "cms-admin")]
@@ -430,7 +429,7 @@ async fn handle_content_action(action: ContentAction, _database: &Database) -> R
             // Implementation would list posts with filters
         }
         
-        ContentAction::Create { title, file, author, status } => {
+        ContentAction::Create { title, file: _file, author: _author, status: _status } => {
             info!("📝 Creating post: {}", title);
             // Implementation would create post
         }

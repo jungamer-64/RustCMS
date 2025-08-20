@@ -143,6 +143,7 @@ impl<T> ApiResponse<T> {
         }
     }
     
+    #[allow(dead_code)]
     fn error(message: &str) -> Self {
         Self {
             success: false,

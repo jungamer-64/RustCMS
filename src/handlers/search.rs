@@ -5,9 +5,8 @@
 use axum::{
     response::{IntoResponse, Json},
     extract::{State, Query},
-    http::StatusCode,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use std::time::Duration;
 
@@ -137,7 +136,7 @@ pub async fn search_stats(
 
 /// Reindex all content
 pub async fn reindex(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
 ) -> Result<impl IntoResponse> {
     // This would be an admin-only endpoint in production
     // For now, return a placeholder response

@@ -5,7 +5,6 @@
 use axum::{
     response::{IntoResponse, Json},
     extract::{State, Path, Query},
-    http::StatusCode,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -14,7 +13,7 @@ use uuid::Uuid;
 
 use crate::{
     AppState, Result,
-    models::{User, UpdateUserRequest},
+    models::UpdateUserRequest,
     handlers::auth::UserInfo,
 };
 
@@ -155,7 +154,7 @@ pub async fn delete_user(
         is_active: Some(false),
     };
 
-    let user = state.database.update_user(id, update_request).await?;
+    let _user = state.database.update_user(id, update_request).await?;
     
     // Remove from search index
     if let Err(e) = state.search.remove_document(&id.to_string()).await {

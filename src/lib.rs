@@ -19,10 +19,7 @@
 //! - **Real-time Monitoring**: Prometheus metrics, OpenTelemetry tracing
 //! - **Zero-downtime Deployments**: Graceful shutdown and health checks
 
-use axum::{
-    response::{IntoResponse, Json},
-    http::StatusCode,
-};
+use axum::response::{IntoResponse, Json};
 use serde_json::json;
 
 // Core enterprise modules

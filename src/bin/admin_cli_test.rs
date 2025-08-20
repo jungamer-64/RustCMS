@@ -4,7 +4,7 @@ use cms_backend::handlers::admin;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
-    let cfg = Config::from_env()?;
+    let _cfg = Config::from_env()?;
     let state = AppState::from_env().await?;
 
     // Call list_posts handler directly

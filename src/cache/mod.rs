@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
-use redis::{Client, AsyncCommands, RedisResult};
-use serde::{Serialize, Deserialize, de::DeserializeOwned};
+use redis::{Client, AsyncCommands};
+use serde::{Serialize, de::DeserializeOwned};
 use serde_json;
 use thiserror::Error;
 
@@ -82,10 +82,10 @@ impl CacheService {
     pub async fn new(config: &RedisConfig) -> Result<Self> {
         let redis_client = Client::open(config.url.as_str())?;
         
-        // Test connection
-        let mut conn = redis_client.get_async_connection().await?;
-        let _: String = conn.set("test", "test").await?;
-        let _: bool = conn.del("test").await?;
+    // Test connection (use multiplexed connection API)
+    let mut conn = redis_client.get_multiplexed_async_connection().await?;
+    let _: String = conn.set("test", "test").await?;
+    let _: bool = conn.del("test").await?;
         
         Ok(Self {
             redis_client,
@@ -104,8 +104,8 @@ impl CacheService {
         let serialized = serde_json::to_vec(value)?;
         let full_key = format!("{}{}", self.config.key_prefix, key);
         
-        // Set in Redis
-        let mut conn = self.redis_client.get_async_connection().await?;
+    // Set in Redis (multiplexed)
+    let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         if let Some(ttl) = ttl {
             let _: () = conn.set_ex(&full_key, &serialized, ttl.as_secs()).await?;
         } else {
@@ -189,7 +189,7 @@ impl CacheService {
         }
         
         // Try Redis cache
-        let mut conn = self.redis_client.get_async_connection().await?;
+    let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         let result: Option<Vec<u8>> = conn.get(&full_key).await?;
         
         if let Some(data) = result {
@@ -228,7 +228,7 @@ impl CacheService {
         let full_key = format!("{}{}", self.config.key_prefix, key);
         
         // Remove from Redis
-        let mut conn = self.redis_client.get_async_connection().await?;
+    let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         let _: () = conn.del(&full_key).await?;
         
         // Remove from memory cache
@@ -256,7 +256,7 @@ impl CacheService {
         }
         
         // Check Redis
-        let mut conn = self.redis_client.get_async_connection().await?;
+    let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         let exists: bool = conn.exists(&full_key).await?;
         
         Ok(exists)
@@ -267,7 +267,7 @@ impl CacheService {
         let full_key = format!("{}{}", self.config.key_prefix, key);
         
         // Set TTL in Redis
-        let mut conn = self.redis_client.get_async_connection().await?;
+    let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         let _: () = conn.expire(&full_key, ttl.as_secs() as i64).await?;
         
         // Update memory cache entry
@@ -283,7 +283,7 @@ impl CacheService {
     pub async fn clear(&self) -> Result<()> {
         // Clear Redis with pattern
         let pattern = format!("{}*", self.config.key_prefix);
-        let mut conn = self.redis_client.get_async_connection().await?;
+    let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         
         let keys: Vec<String> = conn.keys(&pattern).await?;
         if !keys.is_empty() {
@@ -322,7 +322,7 @@ impl CacheService {
     
     /// Health check
     pub async fn health_check(&self) -> Result<()> {
-        let mut conn = self.redis_client.get_async_connection().await?;
+    let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         let _: String = conn.set("health_check", "ok").await?;
         let _: bool = conn.del("health_check").await?;
         Ok(())

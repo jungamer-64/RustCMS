@@ -275,7 +275,7 @@ impl Config {
     pub fn from_env() -> Result<Self, crate::AppError> {
         dotenvy::dotenv().ok();
         
-        let mut config = config::Config::builder()
+        let config = config::Config::builder()
             .add_source(config::File::with_name("config/default").required(false))
             .add_source(config::File::with_name("config/local").required(false))
             .add_source(config::Environment::with_prefix("CMS").separator("_"))

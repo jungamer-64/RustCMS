@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
 
     // Build router and attach state
-    let router: AxumRouter = create_router().with_state(state);
+    let _router: AxumRouter = create_router().with_state(state);
 
     let addr: SocketAddr = format!("{}:{}", config.server.host, config.server.port).parse()?;
     info!("Initialized services; server binding skipped in minimal build (would listen on http://{}).", addr);

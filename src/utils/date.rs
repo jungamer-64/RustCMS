@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, Utc, Datelike};
+use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, Utc, Datelike, TimeZone};
 use serde::{Deserialize, Serialize};
 
 /// 日付時刻のフォーマット定数
@@ -19,7 +19,8 @@ pub fn parse_date(date_str: &str) -> Result<NaiveDate, chrono::ParseError> {
 /// 文字列から日付時刻を解析
 pub fn parse_datetime(datetime_str: &str) -> Result<DateTime<Utc>, chrono::ParseError> {
     let naive = NaiveDateTime::parse_from_str(datetime_str, DATETIME_FORMAT)?;
-    Ok(DateTime::from_utc(naive, Utc))
+    // Use recommended constructor instead of deprecated DateTime::from_utc
+    Ok(Utc.from_utc_datetime(&naive))
 }
 
 /// ISO 8601形式から日付時刻を解析
@@ -82,8 +83,8 @@ impl DateRange {
         let end = now.date_naive().and_hms_opt(23, 59, 59).unwrap();
         
         Self {
-            start: DateTime::from_utc(start, Utc),
-            end: DateTime::from_utc(end, Utc),
+            start: Utc.from_utc_datetime(&start),
+            end: Utc.from_utc_datetime(&end),
         }
     }
     
@@ -94,8 +95,8 @@ impl DateRange {
         let end_of_week = start_of_week + Duration::days(6);
         
         Self {
-            start: DateTime::from_utc(start_of_week.and_hms_opt(0, 0, 0).unwrap(), Utc),
-            end: DateTime::from_utc(end_of_week.and_hms_opt(23, 59, 59).unwrap(), Utc),
+            start: Utc.from_utc_datetime(&start_of_week.and_hms_opt(0, 0, 0).unwrap()),
+            end: Utc.from_utc_datetime(&end_of_week.and_hms_opt(23, 59, 59).unwrap()),
         }
     }
     
@@ -109,8 +110,8 @@ impl DateRange {
         };
         
         Self {
-            start: DateTime::from_utc(start_of_month.and_hms_opt(0, 0, 0).unwrap(), Utc),
-            end: DateTime::from_utc(end_of_month.and_hms_opt(23, 59, 59).unwrap(), Utc),
+            start: Utc.from_utc_datetime(&start_of_month.and_hms_opt(0, 0, 0).unwrap()),
+            end: Utc.from_utc_datetime(&end_of_month.and_hms_opt(23, 59, 59).unwrap()),
         }
     }
     

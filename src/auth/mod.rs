@@ -9,9 +9,8 @@
 
 use std::sync::Arc;
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
-use biscuit_auth::{Biscuit, KeyPair, PrivateKey, PublicKey, AuthorizerLimits, Authorizer};
+use biscuit_auth::{KeyPair, PrivateKey, PublicKey};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use argon2::password_hash::{SaltString, rand_core::OsRng};
 use jsonwebtoken::{encode, decode, Header, Algorithm, Validation, EncodingKey, DecodingKey};
@@ -67,6 +66,7 @@ impl From<AuthError> for crate::AppError {
 }
 
 /// Authentication service
+#[allow(dead_code)]
 pub struct AuthService {
     /// Biscuit private key for token generation
     biscuit_private_key: PrivateKey,
@@ -487,13 +487,13 @@ impl AuthService {
     }
 
     /// Authenticate user (simplified version for handlers)
-    pub async fn authenticate_user(&self, request: LoginRequest) -> Result<User> {
+    pub async fn authenticate_user(&self, _request: LoginRequest) -> Result<User> {
         // Placeholder - would use database to verify credentials
         Err(AuthError::InvalidCredentials.into())
     }
 
     /// Validate JWT token and return user if valid
-    pub async fn validate_token(&self, token: &str) -> Result<User> {
+    pub async fn validate_token(&self, _token: &str) -> Result<User> {
         // Placeholder - would validate JWT token and return user
         Err(AuthError::InvalidCredentials.into())
     }

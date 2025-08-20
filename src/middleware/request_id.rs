@@ -1,10 +1,8 @@
 use axum::{
     extract::Request,
-    http::{HeaderMap, HeaderValue},
-    middleware::Next,
+    http::HeaderValue,
     response::Response,
 };
-use std::time::Duration;
 use tower::{Layer, Service};
 use uuid::Uuid;
 

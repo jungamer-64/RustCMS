@@ -3,7 +3,7 @@
 //! Defines all HTTP routes and their corresponding handlers
 
 use axum::{
-    routing::{get, post, put, delete},
+    routing::{get, post, delete},
     Router,
 };
 
