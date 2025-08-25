@@ -1,5 +1,5 @@
 use clap::Parser;
-use cms_backend::{config::Config, database::Database, Result};
+use cms_backend::{Result};
 use diesel::prelude::*;
 use serde_json::json;
 
@@ -24,12 +24,12 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let args = Args::parse();
 
-    let config = Config::from_env()?;
-    let database = Database::new(&config.database).await?;
-    let mut conn = database.get_connection()?;
+    // Initialize common app state (includes database)
+    let state = cms_backend::utils::init::init_app_state().await?;
+    let mut conn = state.get_conn()?;
 
-    use cms_backend::database::schema::users::dsl as users_dsl;
     use cms_backend::database::schema::posts::dsl as posts_dsl;
+    use cms_backend::database::schema::users::dsl as users_dsl;
     use cms_backend::models::User;
 
     // If delete_post provided, attempt deletion and exit
@@ -101,13 +101,15 @@ async fn main() -> Result<()> {
         let admin = admin_user.map(|u| json!({"username": u.username, "email": u.email}));
         let posts_json: Vec<_> = recent
             .into_iter()
-            .map(|p| json!({
-                "id": p.id.to_string(),
-                "title": p.title,
-                "author_id": p.author_id.to_string(),
-                "status": p.status,
-                "created_at": p.created_at.to_rfc3339(),
-            }))
+            .map(|p| {
+                json!({
+                    "id": p.id.to_string(),
+                    "title": p.title,
+                    "author_id": p.author_id.to_string(),
+                    "status": p.status,
+                    "created_at": p.created_at.to_rfc3339(),
+                })
+            })
             .collect();
 
         println!(
@@ -129,11 +131,7 @@ async fn main() -> Result<()> {
             for p in recent {
                 println!(
                     "- {} | {} | author={} | {} | {}",
-                    p.id,
-                    p.title,
-                    p.author_id,
-                    p.status,
-                    p.created_at
+                    p.id, p.title, p.author_id, p.status, p.created_at
                 );
             }
         }

@@ -1,280 +1,162 @@
-# Production CMS - 本番環境対応のコンテンツ管理システム
+# Production CMS — 実装と同期したリファレンス
+
+このファイルはリポジトリの実装（Cargo.toml とソース構成）に合わせて更新しています。以下は現行コードベースに即した概要と運用手順です。
 
 ## 概要
 
-本プロジェクトは、大規模アクセスに対応する実用的なコンテンツ管理システム（CMS）です。以下の最新技術を使用して構築されています：
+本プロジェクトは Rust + Axum を用いたスケーラブルな CMS バックエンドです。主要な実装ポイント:
 
-- **Rust** + **Axum** - 高性能なWebサーバー
-- **PostgreSQL** + **Diesel** - 堅牢なデータベースアクセス
-- **Elasticsearch** - 高速な全文検索
-- **biscuit-auth** - トークンベース認証
-- **WebAuthn** - パスワードレス認証
+- HTTP 層: axum
+- データベース: PostgreSQL + Diesel（feature=`database` にて有効）
+- 検索: Tantivy（feature=`search` にて有効）
+- 認証: biscuit-auth / JWT + Argon2（feature=`auth` にて有効）
+- TLS: rustls（OpenSSL 非依存）
 
-## 特徴
+注: Elasticsearch 等の外部検索は現行実装に含まれていません（Tantivy をオンプロセスで使用する形）。
 
-### 🚀 パフォーマンス
-- 非同期処理による高いスループット
-- コネクションプーリングによる効率的なDB接続
-- Elasticsearchによる高速検索
+## 主要バイナリ
 
-### 🔒 セキュリティ
-- WebAuthnによるFIDO2対応のパスワードレス認証
-- biscuit-authによる細かな権限制御
-- bcryptによる安全なパスワードハッシュ化
-- レート制限とCSRF保護
+Cargo マニフェストに定義されている主要バイナリ:
 
-### 📈 スケーラビリティ
-- PostgreSQLによる堅牢なデータストレージ
-- Elasticsearchによるスケーラブルな検索
-- Docker対応による簡単なデプロイメント
+- `cms-server` — デフォルトの HTTP サーバ（`default-run`）
+- `cms-migrate` — マイグレーション実行用
+- `cms-admin` — 管理用 CLI（簡易）
 
-## 前提条件
+開発支援・デバッグ用バイナリ（`dev-tools` feature が必要）:
 
-- **Rust** 1.75以上
-- **PostgreSQL** 14以上
-- **Elasticsearch** 8.5以上
-- **Docker** (オプション)
+- `admin_server`, `run_docs`, `dev-tools`, `cms-simple`, `cms-lightweight`, など（Cargo.toml の [[bin]] を参照）
 
-## セットアップ
+## feature とビルド設定
 
-### 1. リポジトリのクローン
+主な feature:
 
-```bash
-git clone <repository-url>
-cd rust-backend
+- `auth` — Argon2 / biscuit-auth / jsonwebtoken を含む認証機能
+- `database` — Diesel / deadpool-diesel 等の DB レイヤ
+- `search` — Tantivy による全文検索
+- `cache` — Redis-based キャッシュ（optional）
+- `monitoring` — metrics / prometheus（オプショナル）
+- `dev-tools` — 開発用ユーティリティ群（いくつかの追加バイナリが有効化される）
+
+デフォルトで有効化される feature は `default`（Cargo.toml で定義）。実行時は必要な feature を明示してビルド/実行してください。
+
+## 前提（推奨）
+
+- Rust toolchain (Rust 1.70+ を想定; Cargo.toml の features により最新の安定版を推奨)
+- PostgreSQL 13/14 以上（production 環境に合わせて）
+- Docker はオプション（ローカル検証向け）
+
+## 環境変数（例）
+
+主要な環境変数例（`.env` に設定）:
+
+- `DATABASE_URL` — PostgreSQL 接続文字列
+- `JWT_SECRET` / `SESSION_SECRET` — 認証シークレット
+- `CMS_ENVIRONMENT` / `CONFIG_FILE` — 実行時設定
+
+（詳細は `config/` フォルダの TOML を参照）
+
+## ビルドと実行（Windows PowerShell 例）
+
+以下は簡潔な例。環境や必要な feature に応じて適宜調整してください。
+
+```powershell
+# フル（デフォルト feature）を使ってサーバを起動 (デフォルトバイナリ: cms-server)
+cargo run --bin cms-server
+
+# デフォルトを無効化して DB と Auth のみで起動する例
+cargo run --no-default-features --features database,auth --bin cms-server
+
+# マイグレーション実行（database feature を有効にすることを推奨）
+cargo run --no-default-features --features database --bin cms-migrate
+
+# dev-tools バイナリを実行する例（dev-tools feature が必要）
+cargo run --bin admin_server --features "dev-tools"
 ```
 
-### 2. 環境変数の設定
+注意: 一部の開発用バイナリは `required-features = ["dev-tools"]` により有効化されるため、`--features dev-tools` を付与する必要があります。
 
-`.env.example`を`.env`にコピーして設定を編集：
+## Docker（簡易）
 
-```bash
-cp .env.example .env
-```
+ローカル検証用に Docker イメージを作る例:
 
-重要な設定項目：
-```env
-DATABASE_URL=postgresql://username:password@localhost:5432/production_cms
-ELASTICSEARCH_URL=http://localhost:9200
-JWT_SECRET=your-super-secret-jwt-key-must-be-at-least-32-characters
-SESSION_SECRET=your-super-secret-session-key-must-be-at-least-32-characters
-WEBAUTHN_RP_ID=localhost
-WEBAUTHN_ORIGIN=http://localhost:3000
-```
-
-### 3. データベースのセットアップ
-
-#### PostgreSQLの起動
-```bash
-# Dockerを使用する場合
-docker run --name postgres-cms \
-  -e POSTGRES_DB=production_cms \
-  -e POSTGRES_USER=cms_user \
-  -e POSTGRES_PASSWORD=cms_password \
-  -p 5432:5432 \
-  -d postgres:15
-```
-
-#### マイグレーションの実行
-```bash
-# Windows
-migrate.bat
-
-# Linux/Mac
-chmod +x migrate.sh
-./migrate.sh
-```
-
-### 4. Elasticsearchのセットアップ
-
-```bash
-# Dockerを使用する場合
-docker run --name elasticsearch-cms \
-  -e "discovery.type=single-node" \
-  -e "xpack.security.enabled=false" \
-  -p 9200:9200 \
-  -d elasticsearch:8.11.0
-```
-
-### 5. 依存関係のインストール
-
-```bash
-cargo build --release
-```
-
-### 6. アプリケーションの起動
-
-```bash
-cargo run --release
-```
-
-または
-
-```bash
-./target/release/cms-backend
-```
-
-## Docker Compose でのセットアップ
-
-完全な環境をDocker Composeで起動：
-
-```bash
-docker-compose up -d
-```
-
-これにより以下が起動されます：
-- PostgreSQL (ポート5432)
-- Elasticsearch (ポート9200)
-- CMS Application (ポート3000)
-
-## API エンドポイント
-
-### 認証
-- `POST /auth/register` - ユーザー登録
-- `POST /auth/login` - ログイン
-- `POST /auth/logout` - ログアウト
-- `GET /auth/profile` - プロフィール取得
-- `PUT /auth/profile` - プロフィール更新
-
-### WebAuthn
-- `POST /auth/webauthn/register/start` - WebAuthn登録開始
-- `POST /auth/webauthn/register/finish` - WebAuthn登録完了
-- `POST /auth/webauthn/login/start` - WebAuthnログイン開始
-- `POST /auth/webauthn/login/finish` - WebAuthnログイン完了
-
-### ポスト管理
-- `GET /posts` - 公開ポスト一覧
-- `GET /posts/:id` - ポスト詳細
-- `GET /posts/slug/:slug` - スラグによるポスト取得
-- `POST /posts` - ポスト作成 (認証必要)
-- `PUT /posts/:id` - ポスト更新 (認証必要)
-- `DELETE /posts/:id` - ポスト削除 (認証必要)
-
-### 検索
-- `GET /search` - ポスト検索
-- `GET /search/suggest` - 検索候補
-- `GET /search/analytics` - 検索分析 (編集者権限必要)
-
-### ヘルスチェック
-- `GET /health` - 基本ヘルスチェック
-- `GET /health/detailed` - 詳細ヘルスチェック (管理者権限必要)
-
-### ドキュメント
-- `GET /docs` - API ドキュメント (Swagger UI)
-- `GET /docs/openapi.json` - OpenAPI 仕様
-
-## ユーザーロール
-
-1. **User** - 基本ユーザー
-2. **Author** - 記事作成・編集
-3. **Editor** - 記事公開・編集管理
-4. **Admin** - システム全体の管理
-
-## テスト
-
-```bash
-# 単体テスト
-cargo test
-
-# 統合テスト
-cargo test --test integration_tests
-
-# カバレッジレポート
-cargo tarpaulin --out Html
-```
-
-## 本番環境デプロイ
-
-### Docker使用
-
-```bash
+```powershell
 # イメージをビルド
 docker build -t production-cms .
 
-# コンテナを起動
-docker run -d \
-  --name production-cms \
-  -p 3000:3000 \
-  --env-file .env \
-  production-cms
+# コンテナを起動 (環境変数は --env-file で渡す)
+docker run -d --name production-cms -p 3000:3000 --env-file .env production-cms
 ```
 
-### 直接デプロイ
+また、`docker-compose.yml` を用意しているので複合サービス構成も可能です（Compose ファイルを確認してください）。
 
-```bash
-# リリースビルド
-cargo build --release
+## API（実装に合わせた主要エンドポイント）
 
-# バイナリを本番サーバーにコピー
-scp target/release/cms-backend user@server:/opt/cms/
+本実装では API は `/api/v1` プレフィックス配下に定義されます。代表的なエンドポイント:
 
-# Systemdサービスとして起動
-sudo systemctl start cms-backend
-sudo systemctl enable cms-backend
+- 認証 (feature=`auth` が有効な場合)
+  - POST /api/v1/auth/register
+  - POST /api/v1/auth/login
+  - POST /api/v1/auth/logout
+  - GET  /api/v1/auth/profile
+
+- ポスト / ユーザ操作 (feature=`database`)
+  - GET  /api/v1/posts/
+  - POST /api/v1/posts/
+  - GET  /api/v1/posts/:id
+  - PUT  /api/v1/posts/:id
+  - DELETE /api/v1/posts/:id
+
+- 検索 (feature=`search`)
+  - GET /api/v1/search
+  - POST /api/v1/search/reindex
+
+- ヘルスチェック
+  - GET /api/v1/health
+  - GET /api/v1/health/liveness
+  - GET /api/v1/health/readiness
+
+※ 実際のルート一覧は `src/routes` 内の定義を参照してください。
+
+## モニタリング / ロギング
+
+- ロギングは `tracing`/`tracing-subscriber` を用いており、構造化ログ（JSON）出力が可能です。
+- Prometheus 等のメトリクスはオプション（`monitoring` feature）で、Cargo.toml に metrics 関連依存が定義されていますが、エンドポイント `/metrics` はプロジェクト設定や feature によって有効化が必要です。
+
+## テスト
+
+```powershell
+# 単体テスト
+cargo test -j1
+
+# 統合テスト（テストファイル名に依存）
+cargo test --test integration_tests -j1
 ```
 
-## モニタリング
+## 本番デプロイのヒント
 
-### ヘルスチェックエンドポイント
-- `GET /health` - アプリケーションの基本状態
-- `GET /health/detailed` - データベース・Elasticsearch・サービス状態
+- release ビルド: `cargo build --release`
+- バイナリは `target/release/` に作成されます。必要な環境変数／シークレットはデプロイ環境側で安全に管理してください（Doppler 等の外部シークレットマネージャも想定）。
+- システム起動スクリプトや systemd ユニットで `cms-server` バイナリを起動する形を推奨します。
 
-### ログ
-アプリケーションは構造化ログ（JSON形式）を出力し、以下の情報を記録：
-- リクエスト/レスポンス
-- エラー詳細
-- パフォーマンスメトリクス
-- セキュリティイベント
+## 実装差分・注意点
 
-### メトリクス
-Prometheusメトリクスエンドポイント（将来実装予定）：
-- `GET /metrics` - アプリケーションメトリクス
-
-## セキュリティ考慮事項
-
-1. **環境変数の保護** - `.env`ファイルを本番環境では適切に保護
-2. **HTTPS使用** - 本番環境では必ずHTTPS通信を使用
-3. **定期的な更新** - 依存関係とセキュリティパッチの定期更新
-4. **アクセス制御** - データベースとElasticsearchへの適切なアクセス制限
-
-## トラブルシューティング
-
-### よくある問題
-
-1. **データベース接続エラー**
-   ```
-   ERROR: Connection refused
-   ```
-   - PostgreSQLサービスが起動しているか確認
-   - DATABASE_URLが正しいか確認
-
-2. **Elasticsearch接続エラー**
-   ```
-   ERROR: Elasticsearch unreachable
-   ```
-   - Elasticsearchサービスが起動しているか確認
-   - ELASTICSEARCH_URLが正しいか確認
-
-3. **WebAuthn登録失敗**
-   ```
-   ERROR: WebAuthn registration failed
-   ```
-   - WEBAUTHN_ORIGINがブラウザのURLと一致するか確認
-   - HTTPSを使用しているか確認（localhost以外）
+- Cargo.toml の `default` feature により、ローカルで `cargo run` を行うと複数の機能が有効化されます。プロダクションでは必要な feature / 設定だけを有効化してください。
+- 一部の機能（メール送信, Redis キャッシュ, Prometheus エクスポーター等）は optional / feature-gated です。Cargo.toml を確認して必要な feature を明示的に有効化してください。
 
 ## コントリビューション
 
-1. プルリクエストを作成する前にissueを作成
-2. コードフォーマット: `cargo fmt`
-3. リンター: `cargo clippy`
-4. テスト: `cargo test`
+- PR 前に issue を立てる
+- フォーマット: `cargo fmt`
+- リンター: `cargo clippy`
+- テスト: `cargo test`
 
 ## ライセンス
 
-MIT License
+MIT
 
 ## サポート
 
-- Issues: GitHub Issues
-- Email: support@example.com
-- Documentation: `/docs` エンドポイント
+- Issues: リポジトリの Issues
+- Documentation: `/api/docs`（実装されている場合）
+
+---

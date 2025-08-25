@@ -1,20 +1,25 @@
 //! Post Handlers
-//! 
+//!
+//! Handles CRUD operations for blog posts and content management
+
+//! Post Handlers
+//!
 //! Handles CRUD operations for blog posts and content management
 
 use axum::{
-    response::{IntoResponse, Json},
-    extract::{State, Path, Query},
+    extract::{Path, Query, State},
     http::StatusCode,
+    response::{IntoResponse, Json},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::time::Duration;
 use uuid::Uuid;
 
+use crate::utils::api_types::ApiResponse;
 use crate::{
+    models::{CreatePostRequest, Post, UpdatePostRequest},
     AppState, Result,
-    models::{Post, CreatePostRequest, UpdatePostRequest},
 };
 
 /// Post query parameters
@@ -81,23 +86,16 @@ pub async fn create_post(
     State(state): State<AppState>,
     Json(request): Json<CreatePostRequest>,
 ) -> Result<impl IntoResponse> {
-    // Create post in database with validated data
-    let post = state.database.create_post(request).await?;
-    
-    // Index post for search (optional feature)
-    #[cfg(feature = "search")]
-    if let Err(e) = state.search.index_post(&post).await {
-        // Log error but don't fail the creation
-        eprintln!("Failed to index post for search: {}", e);
-    }
-
-    // Clear relevant cache entries (optional feature)
+    let post = state.db_create_post(request).await?;
     #[cfg(feature = "cache")]
     if let Err(e) = state.cache.delete("posts:*").await {
         eprintln!("Failed to clear post cache: {}", e);
     }
-
-    Ok((StatusCode::CREATED, Json(PostResponse::from(&post))))
+    #[cfg(feature = "search")]
+    if let Err(e) = state.search.index_post(&post).await {
+        eprintln!("Failed to index post for search: {}", e);
+    }
+    Ok((StatusCode::CREATED, Json(ApiResponse::success(PostResponse::from(&post)))))
 }
 
 /// Get post by ID
@@ -105,22 +103,22 @@ pub async fn get_post(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
-    // Try cache first
     let cache_key = format!("post:{}", id);
+    #[cfg(feature = "cache")]
     if let Ok(Some(cached)) = state.cache.get::<PostResponse>(&cache_key).await {
-        return Ok(Json(cached));
+        return Ok(Json(ApiResponse::success(cached)));
     }
-
-    // Get from database
-    let post = state.database.get_post_by_id(id).await?;
+    let post = state.db_get_post_by_id(id).await?;
     let response = PostResponse::from(&post);
-    
-    // Cache the result
-    if let Err(e) = state.cache.set(cache_key, &response, Some(Duration::from_secs(300))).await {
+    #[cfg(feature = "cache")]
+    if let Err(e) = state
+        .cache
+        .set(cache_key, &response, Some(Duration::from_secs(300)))
+        .await
+    {
         eprintln!("Failed to cache post: {}", e);
     }
-
-    Ok(Json(response))
+    Ok(Json(ApiResponse::success(response)))
 }
 
 /// Get all posts with pagination and filtering
@@ -130,36 +128,27 @@ pub async fn get_posts(
 ) -> Result<impl IntoResponse> {
     let page = query.page.unwrap_or(1);
     let limit = query.limit.unwrap_or(20);
-    
-    // Build cache key based on query parameters
     let cache_key = format!(
-        "posts:page:{}:limit:{}:status:{}:author:{}:tag:{}:sort:{}", 
+        "posts:page:{}:limit:{}:status:{}:author:{}:tag:{}:sort:{}",
         page,
         limit,
         query.status.as_deref().unwrap_or("all"),
-        query.author.map(|a| a.to_string()).unwrap_or_else(|| "all".to_string()),
+        query
+            .author
+            .map(|a| a.to_string())
+            .unwrap_or_else(|| "all".to_string()),
         query.tag.as_deref().unwrap_or("all"),
         query.sort.as_deref().unwrap_or("created_at")
     );
-
-    // Try cache first
+    #[cfg(feature = "cache")]
     if let Ok(Some(cached)) = state.cache.get::<PostsResponse>(&cache_key).await {
         return Ok(Json(cached));
     }
-
-    // Get from database
-    let posts = state.database.get_posts(
-        page,
-        limit,
-        query.status,
-        query.author,
-        query.tag,
-        query.sort,
-    ).await?;
-    
-    let total = state.database.count_posts(None).await?;
+    let posts = state
+        .db_get_posts(page, limit, query.status, query.author, query.tag, query.sort)
+        .await?;
+    let total = state.db_count_posts(None).await?;
     let total_pages = (total as f32 / limit as f32).ceil() as u32;
-    
     let response = PostsResponse {
         posts: posts.iter().map(PostResponse::from).collect(),
         total,
@@ -167,12 +156,14 @@ pub async fn get_posts(
         limit,
         total_pages,
     };
-    
-    // Cache the result for 5 minutes
-    if let Err(e) = state.cache.set(cache_key, &response, Some(Duration::from_secs(300))).await {
+    #[cfg(feature = "cache")]
+    if let Err(e) = state
+        .cache
+        .set(cache_key, &response, Some(Duration::from_secs(300)))
+        .await
+    {
         eprintln!("Failed to cache posts: {}", e);
     }
-
     Ok(Json(response))
 }
 
@@ -182,26 +173,21 @@ pub async fn update_post(
     Path(id): Path<Uuid>,
     Json(request): Json<UpdatePostRequest>,
 ) -> Result<impl IntoResponse> {
-    // Update in database
-    let post = state.database.update_post(id, request).await?;
-    
-    // Update search index
+    let post = state.db_update_post(id, request).await?;
+    #[cfg(feature = "search")]
     if let Err(e) = state.search.index_post(&post).await {
         eprintln!("Failed to update post in search index: {}", e);
     }
-
-    // Clear cache
     let cache_key = format!("post:{}", id);
+    #[cfg(feature = "cache")]
     if let Err(e) = state.cache.delete(&cache_key).await {
         eprintln!("Failed to clear post cache: {}", e);
     }
-    
-    // Clear posts list cache
+    #[cfg(feature = "cache")]
     if let Err(e) = state.cache.delete("posts:*").await {
         eprintln!("Failed to clear posts cache: {}", e);
     }
-
-    Ok(Json(PostResponse::from(&post)))
+    Ok(Json(ApiResponse::success(PostResponse::from(&post))))
 }
 
 /// Delete post
@@ -209,29 +195,24 @@ pub async fn delete_post(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
-    // Delete from database
-    state.database.delete_post(id).await?;
-    
-    // Remove from search index
+    state.db_delete_post(id).await?;
+    #[cfg(feature = "search")]
     if let Err(e) = state.search.remove_document(&id.to_string()).await {
         eprintln!("Failed to remove post from search index: {}", e);
     }
-
-    // Clear cache
     let cache_key = format!("post:{}", id);
+    #[cfg(feature = "cache")]
     if let Err(e) = state.cache.delete(&cache_key).await {
         eprintln!("Failed to clear post cache: {}", e);
     }
-    
-    // Clear posts list cache
+    #[cfg(feature = "cache")]
     if let Err(e) = state.cache.delete("posts:*").await {
         eprintln!("Failed to clear posts cache: {}", e);
     }
-
-    Ok(Json(json!({
+    Ok(Json(ApiResponse::success(json!({
         "success": true,
         "message": "Post deleted successfully"
-    })))
+    }))))
 }
 
 /// Get posts by tag
@@ -242,19 +223,11 @@ pub async fn get_posts_by_tag(
 ) -> Result<impl IntoResponse> {
     let page = query.page.unwrap_or(1);
     let limit = query.limit.unwrap_or(20);
-    
-    let posts = state.database.get_posts(
-        page,
-        limit,
-        query.status,
-        query.author,
-        Some(tag.clone()),
-        query.sort,
-    ).await?;
-    
-    let total = state.database.count_posts(Some(&tag)).await?;
+    let posts = state
+        .db_get_posts(page, limit, query.status, query.author, Some(tag.clone()), query.sort)
+        .await?;
+    let total = state.db_count_posts(Some(&tag)).await?;
     let total_pages = (total as f32 / limit as f32).ceil() as u32;
-    
     let response = PostsResponse {
         posts: posts.iter().map(PostResponse::from).collect(),
         total,
@@ -262,7 +235,6 @@ pub async fn get_posts_by_tag(
         limit,
         total_pages,
     };
-
     Ok(Json(response))
 }
 
@@ -285,13 +257,14 @@ pub async fn publish_post(
         status: Some(crate::models::PostStatus::Published),
         published_at: Some(chrono::Utc::now()),
     };
-
-    let post = state.database.update_post(id, update_request).await?;
-    
-    // Update search index
+    let post = state.db_update_post(id, update_request).await?;
+    #[cfg(feature = "search")]
     if let Err(e) = state.search.index_post(&post).await {
         eprintln!("Failed to update post in search index: {}", e);
     }
-
     Ok(Json(PostResponse::from(&post)))
 }
+ 
+
+
+

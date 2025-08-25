@@ -1,5 +1,5 @@
-use cms_backend::{AppState, config::Config};
 use cms_backend::handlers::admin;
+use cms_backend::{config::Config, AppState};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -11,7 +11,10 @@ async fn main() -> anyhow::Result<()> {
     let headers = axum::http::HeaderMap::new();
     // Should return Unauthorized without ADMIN_TOKEN
     match admin::list_posts(axum::extract::State(state.clone()), headers).await {
-        Ok(json) => println!("OK: {} posts", json.0.len()),
+        Ok(json) => {
+            let count = json.0.data.as_ref().map(|v| v.len()).unwrap_or(0);
+            println!("OK: {} posts", count)
+        }
         Err(e) => println!("Expected error (no token): {}", e),
     }
 

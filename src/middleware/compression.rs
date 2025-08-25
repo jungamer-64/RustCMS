@@ -1,15 +1,11 @@
-use axum::{
-    extract::Request,
-    http::StatusCode,
-    middleware::Next,
-    response::Response,
-};
+use axum::{extract::Request, http::StatusCode, middleware::Next, response::Response};
 
 pub async fn compression_middleware(
     req: Request,
     next: Next,
 ) -> std::result::Result<Response, StatusCode> {
-    let accepts_gzip = req.headers()
+    let accepts_gzip = req
+        .headers()
         .get("accept-encoding")
         .and_then(|h| h.to_str().ok())
         .map(|s| s.contains("gzip"))
@@ -22,7 +18,8 @@ pub async fn compression_middleware(
     }
 
     // Only compress text-based content types
-    let content_type = response.headers()
+    let content_type = response
+        .headers()
         .get("content-type")
         .and_then(|h| h.to_str().ok())
         .unwrap_or("");
@@ -37,8 +34,8 @@ pub async fn compression_middleware(
 }
 
 fn should_compress(content_type: &str) -> bool {
-    content_type.starts_with("text/") ||
-    content_type.starts_with("application/json") ||
-    content_type.starts_with("application/javascript") ||
-    content_type.starts_with("application/xml")
+    content_type.starts_with("text/")
+        || content_type.starts_with("application/json")
+        || content_type.starts_with("application/javascript")
+        || content_type.starts_with("application/xml")
 }

@@ -1,38 +1,26 @@
 //! Minimal server entrypoint adjusted to current Config and AppState implementations
 
-use std::{net::SocketAddr, sync::Arc};
-use tracing::{info, error};
 use axum::Router as AxumRouter;
+use std::net::SocketAddr;
+use tracing::info;
 
-use cms_backend::{AppState, routes::create_router, config::Config};
+use cms_backend::routes::create_router;
 
+/// Minimal server entrypoint using shared init helpers
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize telemetry/logging (best-effort)
-    let _ = cms_backend::telemetry::init_telemetry();
+    // Initialize full AppState using shared helper
+    let state = cms_backend::utils::init::init_app_state().await?;
 
     info!("Starting CMS server (minimal entry)");
 
-    // Load configuration
-    let config = Arc::new(Config::from_env().map_err(|e| {
-        error!("Configuration error: {}", e);
-        format!("Failed to load configuration: {}", e)
-    })?);
+    // Compute address from config before moving state
+    let addr: SocketAddr =
+        format!("{}:{}", state.config.server.host, state.config.server.port).parse()?;
 
-    // Initialize application state
-    let state = AppState::from_env().await.map_err(|e| {
-        error!("Failed to initialize application: {}", e);
-        format!("Application initialization failed: {}", e)
-    })?;
-
-    // Build router and attach state
+    // Build router and attach state (state is moved into router)
     let _router: AxumRouter = create_router().with_state(state);
-
-    let addr: SocketAddr = format!("{}:{}", config.server.host, config.server.port).parse()?;
     info!("Initialized services; server binding skipped in minimal build (would listen on http://{}).", addr);
 
-    // Note: server start is intentionally skipped in this minimal entry so the
-    // binary can compile cleanly during migration and CI checks. Use full
-    // server entrypoint when running the real service.
     Ok(())
 }

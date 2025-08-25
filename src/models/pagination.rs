@@ -1,3 +1,4 @@
+use crate::utils::api_types::Pagination as ApiPagination;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -34,11 +35,34 @@ impl PaginationInfo {
     }
 }
 
+// Conversion to/from shared API Pagination type
+impl From<PaginationInfo> for ApiPagination {
+    fn from(p: PaginationInfo) -> Self {
+        ApiPagination {
+            page: p.page as u32,
+            per_page: p.limit as u32,
+            total: p.total as u64,
+            total_pages: p.total_pages as u32,
+        }
+    }
+}
+
+impl From<ApiPagination> for PaginationInfo {
+    fn from(p: ApiPagination) -> Self {
+        PaginationInfo {
+            page: p.page as usize,
+            limit: p.per_page as usize,
+            total: p.total as usize,
+            total_pages: p.total_pages as usize,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct PaginationQuery {
     #[serde(default = "default_page")]
     pub page: usize,
-    
+
     #[serde(default = "default_limit")]
     pub limit: usize,
 }

@@ -3,20 +3,21 @@
 //! Defines all HTTP routes and their corresponding handlers
 
 use axum::{
-    routing::{get, post, delete},
+    routing::{delete, get, post},
     Router,
 };
 
-use crate::{
-    AppState,
-    handlers,
-};
+use crate::{handlers, AppState};
 
 /// Create the main application router
 pub fn create_router() -> Router<AppState> {
     let mut router = Router::new()
         // Root API info
         .route("/api/v1", get(handlers::api_info))
+        // Serve interactive docs and OpenAPI JSON at /api/docs
+        .route("/api/docs", get(handlers::docs_ui))
+        .route("/api/docs/openapi.json", get(handlers::openapi_json))
+        // (legacy /docs removed)
         // Health check routes
         .nest("/api/v1/health", health_routes())
         // Build info endpoint
@@ -34,8 +35,8 @@ pub fn create_router() -> Router<AppState> {
     {
         router = router.nest("/api/v1/posts", post_routes());
         router = router.nest("/api/v1/users", user_routes());
-    // Admin-only management endpoints (simple token auth in handlers)
-    router = router.nest("/api/v1/admin", admin_routes());
+        // Admin-only management endpoints (simple token auth in handlers)
+        router = router.nest("/api/v1/admin", admin_routes());
     }
 
     #[cfg(feature = "search")]
@@ -65,9 +66,12 @@ fn post_routes() -> Router<AppState> {
     Router::new()
         // CRUD operations
         .route("/", get(posts::get_posts).post(posts::create_post))
-        .route("/:id", get(posts::get_post)
-                     .put(posts::update_post)
-                     .delete(posts::delete_post))
+        .route(
+            "/:id",
+            get(posts::get_post)
+                .put(posts::update_post)
+                .delete(posts::delete_post),
+        )
 }
 
 /// User routes
@@ -77,9 +81,12 @@ fn user_routes() -> Router<AppState> {
     Router::new()
         // User CRUD
         .route("/", get(users::get_users))
-        .route("/:id", get(users::get_user)
-                     .put(users::update_user)
-                     .delete(users::delete_user))
+        .route(
+            "/:id",
+            get(users::get_user)
+                .put(users::update_user)
+                .delete(users::delete_user),
+        )
 }
 
 #[cfg(feature = "database")]

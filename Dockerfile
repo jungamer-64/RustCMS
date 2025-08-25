@@ -1,45 +1,95 @@
-# Multi-stage Docker build for production
-FROM rust:1.75 as builder
+## Multi-stage Dockerfile for Rust CMS
+## Build-time args:
+## - FEATURES: features string to pass to `cargo build` (e.g. "dev-tools,auth,database")
+## - NO_DEFAULT_FEATURES: set to "true" to pass --no-default-features to cargo
+## - BINARY: which binary from target/release to copy/run (default: admin_server)
+
+ARG RUST_VERSION=1.75
+FROM rust:${RUST_VERSION} AS builder
+ARG FEATURES=""
+ARG NO_DEFAULT_FEATURES="false"
+ARG BINARY="admin_server"
 
 WORKDIR /app
 
-# Copy manifests
-COPY Cargo.toml Cargo.lock ./
-
-# Copy source code
-COPY src ./src
-COPY migrations ./migrations
-
-# Build for release
-RUN cargo build --release
-
-# Runtime stage
-FROM debian:bookworm-slim
-
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    libssl3 \
+# Install system deps commonly required by crates (OpenSSL, Postgres client libs, pkg-config)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       build-essential \
+       pkg-config \
+       libssl-dev \
+       libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Configure cargo paths so we can cache registry/git/target directories
+ENV CARGO_HOME=/usr/local/cargo
+ENV CARGO_TARGET_DIR=/usr/local/cargo/target
+RUN mkdir -p ${CARGO_HOME} ${CARGO_TARGET_DIR} && chown -R root:root ${CARGO_HOME} ${CARGO_TARGET_DIR}
+
+# Copy manifests first to leverage Docker cache for dependencies
+COPY Cargo.toml Cargo.lock ./
+# create a dummy src/main.rs to allow cargo to fetch deps before copying full source
+RUN mkdir -p src && echo 'fn main() { println!("placeholder"); }' > src/main.rs
+# Use BuildKit cache mounts to persist cargo registry/git/target between builds (faster incremental builds)
+# Note: requires Docker BuildKit (DOCKER_BUILDKIT=1) to be enabled when building.
+RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=cargo-index,target=/usr/local/cargo/git \
+    --mount=type=cache,id=cargo-target,target=/usr/local/cargo/target \
+    cargo fetch --locked
+
+# Copy the rest of the project
+COPY . .
+
+# Build release with optional features
+RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
+        --mount=type=cache,id=cargo-index,target=/usr/local/cargo/git \
+        --mount=type=cache,id=cargo-target,target=/usr/local/cargo/target \
+        if [ "$NO_DEFAULT_FEATURES" = "true" ]; then \
+            if [ -n "$FEATURES" ]; then \
+                sh -c "cargo build --release --no-default-features --features \"$FEATURES\" --locked"; \
+            else \
+                cargo build --release --no-default-features --locked; \
+            fi; \
+        else \
+            if [ -n "$FEATURES" ]; then \
+                sh -c "cargo build --release --features \"$FEATURES\" --locked"; \
+            else \
+                cargo build --release --locked; \
+            fi; \
+        fi
+
+## Runtime stage
+FROM debian:bookworm-slim AS runtime
+ARG BINARY="admin_server"
+
+# Minimal runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libssl3 \
+        curl \
+        && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Copy the binary from builder stage
-COPY --from=builder /app/target/release/cms-backend /usr/local/bin/cms-backend
+# Copy binary and migrations (if any)
+COPY --from=builder /app/target/release/${BINARY} /usr/local/bin/${BINARY}
 COPY --from=builder /app/migrations ./migrations
 
-# Create non-root user
-RUN useradd -r -s /bin/false cms && \
-    chown -R cms:cms /app
-
+# Create a non-root user and make app directory owned by it
+RUN useradd -r -s /bin/false cms && chown -R cms:cms /app /usr/local/bin/${BINARY}
 USER cms
 
-# Expose port
+# Default env placeholders (override at runtime)
+ENV CONFIG_FILE=/app/config/default.toml
+ENV CMS_ENVIRONMENT=production
+
+# Expose default port
 EXPOSE 3000
 
-# Health check
+# Lightweight healthcheck; endpoint should exist in the app
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:3000/health || exit 1
 
-# Start the application
-CMD ["cms-backend"]
+# Default command: run selected binary
+ENTRYPOINT ["/usr/local/bin/admin_server"]
+

@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, Utc, Datelike, TimeZone};
+use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
 /// 日付時刻のフォーマット定数
@@ -47,7 +47,7 @@ pub fn format_iso_datetime(datetime: &DateTime<Utc>) -> String {
 pub fn humanize_duration(datetime: &DateTime<Utc>) -> String {
     let now = Utc::now();
     let duration = now.signed_duration_since(*datetime);
-    
+
     if duration.num_seconds() < 60 {
         "just now".to_string()
     } else if duration.num_minutes() < 60 {
@@ -76,30 +76,30 @@ impl DateRange {
     pub fn new(start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
         Self { start, end }
     }
-    
+
     pub fn today() -> Self {
         let now = Utc::now();
         let start = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
         let end = now.date_naive().and_hms_opt(23, 59, 59).unwrap();
-        
+
         Self {
             start: Utc.from_utc_datetime(&start),
             end: Utc.from_utc_datetime(&end),
         }
     }
-    
+
     pub fn this_week() -> Self {
         let now = Utc::now();
         let days_since_monday = now.weekday().num_days_from_monday();
         let start_of_week = now.date_naive() - Duration::days(days_since_monday as i64);
         let end_of_week = start_of_week + Duration::days(6);
-        
+
         Self {
             start: Utc.from_utc_datetime(&start_of_week.and_hms_opt(0, 0, 0).unwrap()),
             end: Utc.from_utc_datetime(&end_of_week.and_hms_opt(23, 59, 59).unwrap()),
         }
     }
-    
+
     pub fn this_month() -> Self {
         let now = Utc::now();
         let start_of_month = NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap();
@@ -108,27 +108,24 @@ impl DateRange {
         } else {
             NaiveDate::from_ymd_opt(now.year(), now.month() + 1, 1).unwrap() - Duration::days(1)
         };
-        
+
         Self {
             start: Utc.from_utc_datetime(&start_of_month.and_hms_opt(0, 0, 0).unwrap()),
             end: Utc.from_utc_datetime(&end_of_month.and_hms_opt(23, 59, 59).unwrap()),
         }
     }
-    
+
     pub fn last_n_days(n: i64) -> Self {
         let now = Utc::now();
         let start = now - Duration::days(n);
-        
-        Self {
-            start,
-            end: now,
-        }
+
+        Self { start, end: now }
     }
-    
+
     pub fn contains(&self, datetime: &DateTime<Utc>) -> bool {
         datetime >= &self.start && datetime <= &self.end
     }
-    
+
     pub fn duration(&self) -> Duration {
         self.end.signed_duration_since(self.start)
     }
@@ -139,16 +136,16 @@ pub fn add_business_days(date: NaiveDate, days: i32) -> NaiveDate {
     let mut current = date;
     let mut remaining = days.abs();
     let direction = if days >= 0 { 1 } else { -1 };
-    
+
     while remaining > 0 {
-        current = current + Duration::days(direction);
-        
+        current += Duration::days(direction);
+
         // 土曜日(6)と日曜日(7)をスキップ
         if current.weekday().number_from_monday() <= 5 {
             remaining -= 1;
         }
     }
-    
+
     current
 }
 
@@ -156,17 +153,21 @@ pub fn add_business_days(date: NaiveDate, days: i32) -> NaiveDate {
 pub fn calculate_age(birth_date: NaiveDate) -> i32 {
     let today = Utc::now().date_naive();
     let mut age = today.year() - birth_date.year();
-    
-    if today.month() < birth_date.month() || 
-       (today.month() == birth_date.month() && today.day() < birth_date.day()) {
+
+    if today.month() < birth_date.month()
+        || (today.month() == birth_date.month() && today.day() < birth_date.day())
+    {
         age -= 1;
     }
-    
+
     age
 }
 
 /// タイムゾーン変換ヘルパー
-pub fn to_local_timezone(datetime: DateTime<Utc>, offset_hours: i32) -> DateTime<chrono::FixedOffset> {
+pub fn to_local_timezone(
+    datetime: DateTime<Utc>,
+    offset_hours: i32,
+) -> DateTime<chrono::FixedOffset> {
     let offset = chrono::FixedOffset::east_opt(offset_hours * 3600).unwrap();
     datetime.with_timezone(&offset)
 }
@@ -186,7 +187,9 @@ mod tests {
 
     #[test]
     fn test_datetime_formatting() {
-        let dt = DateTime::parse_from_rfc3339("2023-12-25T15:30:45Z").unwrap().with_timezone(&Utc);
+        let dt = DateTime::parse_from_rfc3339("2023-12-25T15:30:45Z")
+            .unwrap()
+            .with_timezone(&Utc);
         let formatted = format_datetime(&dt);
         assert_eq!(formatted, "2023-12-25 15:30:45");
     }
@@ -195,7 +198,7 @@ mod tests {
     fn test_date_range_today() {
         let today = DateRange::today();
         let now = Utc::now();
-        
+
         assert_eq!(today.start.date_naive(), now.date_naive());
         assert_eq!(today.end.date_naive(), now.date_naive());
     }

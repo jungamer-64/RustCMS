@@ -1,0 +1,11 @@
+# dependencies
+node_modules
+
+# production
+.next
+out
+
+# misc
+.env.local
+.env.*.local
+*.log

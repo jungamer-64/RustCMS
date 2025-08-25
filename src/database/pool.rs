@@ -16,10 +16,12 @@ impl DatabasePool {
         let pool = r2d2::Pool::builder()
             .max_size(max_connections)
             .build(manager)
-            .map_err(|e| crate::AppError::Database(diesel::result::Error::DatabaseError(
-                diesel::result::DatabaseErrorKind::UnableToSendCommand,
-                Box::new(e.to_string())
-            )))?;
+            .map_err(|e| {
+                crate::AppError::Database(diesel::result::Error::DatabaseError(
+                    diesel::result::DatabaseErrorKind::UnableToSendCommand,
+                    Box::new(e.to_string()),
+                ))
+            })?;
 
         Ok(Self {
             pool: Arc::new(pool),
@@ -30,7 +32,7 @@ impl DatabasePool {
         self.pool.get().map_err(|e| {
             crate::AppError::Database(diesel::result::Error::DatabaseError(
                 diesel::result::DatabaseErrorKind::UnableToSendCommand,
-                Box::new(e.to_string())
+                Box::new(e.to_string()),
             ))
         })
     }
@@ -38,7 +40,7 @@ impl DatabasePool {
     pub async fn health_check(&self) -> Result<(), crate::AppError> {
         use diesel::prelude::*;
         use diesel::sql_query;
-        
+
         let mut conn = self.get()?;
         sql_query("SELECT 1").execute(&mut conn)?;
         Ok(())

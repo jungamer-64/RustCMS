@@ -1,15 +1,13 @@
 //! Enterprise CMS Administration CLI Tool
-//! 
-//! Comprehensive command-line interface for managing users, content, 
+//!
+//! Comprehensive command-line interface for managing users, content,
 //! system settings, and performing administrative tasks.
 
-use cms_backend::{
-    config::Config,
-    database::Database,
-    models::{CreateUserRequest, UpdateUserRequest, UserRole},
-    Result,
-};
 use clap::{Parser, Subcommand};
+use cms_backend::{
+    models::{CreateUserRequest, UpdateUserRequest, UserRole},
+    AppState, Result,
+};
 use std::io::{self, Write};
 use tracing::{info, warn};
 
@@ -20,7 +18,7 @@ use tracing::{info, warn};
 struct Cli {
     #[command(subcommand)]
     command: Commands,
-    
+
     /// Enable verbose logging
     #[arg(short, long)]
     verbose: bool,
@@ -252,46 +250,48 @@ enum SecurityAction {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    
-    // Initialize logging
-    let log_level = if cli.verbose { "debug" } else { "info" };
-    tracing_subscriber::fmt()
-        .with_env_filter(format!("cms_admin={},cms_backend={}", log_level, log_level))
-        .init();
-    
-    info!("🔧 Enterprise CMS Administration Tool v{}", env!("CARGO_PKG_VERSION"));
-    
-    // Load configuration
-    let config = Config::from_env()?;
-    
-    // Connect to database
-    info!("🔗 Connecting to database...");
-    let database = Database::new(&config.database).await?;
-    
+
+    // Initialize full AppState (includes database when feature enabled)
+    let app_state = cms_backend::utils::init::init_app_state().await?;
+
+    // Apply CLI log level override (keep existing behavior)
+    if cli.verbose {
+        tracing::info!("Verbose logging enabled via CLI flag");
+    }
+
+    info!(
+        "🔧 Enterprise CMS Administration Tool v{}",
+        env!("CARGO_PKG_VERSION")
+    );
+
     // Execute command
     match cli.command {
-        Commands::User { action } => handle_user_action(action, &database).await?,
-        Commands::Content { action } => handle_content_action(action, &database).await?,
-        Commands::System { action } => handle_system_action(action, &database).await?,
-        Commands::Analytics { action } => handle_analytics_action(action, &database).await?,
-        Commands::Security { action } => handle_security_action(action, &database).await?,
+        Commands::User { action } => handle_user_action(action, &app_state).await?,
+        Commands::Content { action } => handle_content_action(action, &app_state).await?,
+        Commands::System { action } => handle_system_action(action, &app_state).await?,
+        Commands::Analytics { action } => handle_analytics_action(action, &app_state).await?,
+        Commands::Security { action } => handle_security_action(action, &app_state).await?,
     }
-    
+
     Ok(())
 }
 
-async fn handle_user_action(action: UserAction, database: &Database) -> Result<()> {
+async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> {
     match action {
         UserAction::List { role, active_only } => {
             info!("📊 Listing users...");
-            let users = database.list_users(role.as_deref(), Some(active_only)).await?;
-            
+            let users = state
+                .database
+                .list_users(role.as_deref(), Some(active_only))
+                .await?;
+
             println!("┌─────────────────────────────────────────┬──────────────┬─────────────────────────┬────────┬────────┐");
             println!("│ ID                                      │ Username     │ Email                   │ Role   │ Active │");
             println!("├─────────────────────────────────────────┼──────────────┼─────────────────────────┼────────┼────────┤");
-            
+
             for user in users {
-                println!("│ {:39} │ {:12} │ {:23} │ {:6} │ {:6} │",
+                println!(
+                    "│ {:39} │ {:12} │ {:23} │ {:6} │ {:6} │",
                     user.id,
                     truncate(&user.username, 12),
                     truncate(&user.email, 23),
@@ -299,18 +299,23 @@ async fn handle_user_action(action: UserAction, database: &Database) -> Result<(
                     if user.is_active { "Yes" } else { "No" }
                 );
             }
-            
+
             println!("└─────────────────────────────────────────┴──────────────┴─────────────────────────┴────────┴────────┘");
         }
-        
-        UserAction::Create { username, email, role, generate_password } => {
+
+        UserAction::Create {
+            username,
+            email,
+            role,
+            generate_password,
+        } => {
             let password = if generate_password {
                 generate_random_password()
             } else {
                 prompt_password("Enter password for new user: ")?
             };
-            
-            let role_enum = UserRole::from_str(&role)?;
+
+            let role_enum = UserRole::parse_str(&role)?;
 
             let user = CreateUserRequest {
                 username: username.clone(),
@@ -321,32 +326,37 @@ async fn handle_user_action(action: UserAction, database: &Database) -> Result<(
                 role: role_enum,
             };
 
-            let created_user = database.create_user(user).await?;
-            
+            let created_user = state.db_create_user(user).await?;
+
             info!("✅ User created successfully:");
             println!("  ID: {}", created_user.id);
             println!("  Username: {}", created_user.username);
             println!("  Email: {}", created_user.email);
             println!("  Role: {}", created_user.role);
-            
+
             if generate_password {
                 warn!("🔑 Generated password: {}", password);
                 warn!("⚠️  Please save this password securely - it will not be shown again!");
             }
         }
-        
-        UserAction::Update { user, email, role, active } => {
+
+        UserAction::Update {
+            user,
+            email,
+            role,
+            active,
+        } => {
             let existing_user = if user.parse::<uuid::Uuid>().is_ok() {
                 let id = uuid::Uuid::parse_str(&user)
                     .map_err(|e| cms_backend::AppError::BadRequest(e.to_string()))?;
-                database.get_user_by_id(id).await?
+                state.database.get_user_by_id(id).await?
             } else {
-                database.get_user_by_username(&user).await?
+                state.database.get_user_by_username(&user).await?
             };
-            
+
             // Convert Option<String> -> Option<UserRole>
             let role_enum_opt: Option<UserRole> = match role.clone() {
-                Some(r) => Some(UserRole::from_str(&r)?),
+                Some(r) => Some(UserRole::parse_str(&r)?),
                 None => None,
             };
 
@@ -359,8 +369,8 @@ async fn handle_user_action(action: UserAction, database: &Database) -> Result<(
                 is_active: active,
             };
 
-            let updated_user = database.update_user(existing_user.id, update).await?;
-            
+            let updated_user = state.database.update_user(existing_user.id, update).await?;
+
             info!("✅ User updated successfully:");
             println!("  ID: {}", updated_user.id);
             println!("  Username: {}", updated_user.username);
@@ -368,92 +378,114 @@ async fn handle_user_action(action: UserAction, database: &Database) -> Result<(
             println!("  Role: {}", updated_user.role);
             println!("  Active: {}", updated_user.is_active);
         }
-        
+
         UserAction::Delete { user, force } => {
             let existing_user = if user.parse::<uuid::Uuid>().is_ok() {
                 let id = uuid::Uuid::parse_str(&user)
                     .map_err(|e| cms_backend::AppError::BadRequest(e.to_string()))?;
-                database.get_user_by_id(id).await?
+                state.database.get_user_by_id(id).await?
             } else {
-                database.get_user_by_username(&user).await?
+                state.database.get_user_by_username(&user).await?
             };
-            
+
             if !force {
-                warn!("⚠️  You are about to delete user: {} ({})", existing_user.username, existing_user.email);
+                warn!(
+                    "⚠️  You are about to delete user: {} ({})",
+                    existing_user.username, existing_user.email
+                );
                 warn!("⚠️  This action cannot be undone!");
                 print!("Type 'DELETE' to confirm: ");
                 io::stdout().flush()?;
-                
+
                 let mut input = String::new();
                 io::stdin().read_line(&mut input)?;
-                
+
                 if input.trim() != "DELETE" {
                     info!("❌ User deletion cancelled");
                     return Ok(());
                 }
             }
-            
-            database.delete_user(existing_user.id).await?;
+
+            state.database.delete_user(existing_user.id).await?;
             info!("✅ User deleted successfully");
         }
-        
+
         UserAction::ResetPassword { user, password } => {
             let existing_user = if user.parse::<uuid::Uuid>().is_ok() {
                 let id = uuid::Uuid::parse_str(&user)
                     .map_err(|e| cms_backend::AppError::BadRequest(e.to_string()))?;
-                database.get_user_by_id(id).await?
+                state.database.get_user_by_id(id).await?
             } else {
-                database.get_user_by_username(&user).await?
+                state.database.get_user_by_username(&user).await?
             };
-            
+
             let new_password = password.clone().unwrap_or_else(|| {
-                prompt_password("Enter new password: ").unwrap_or_else(|_| generate_random_password())
+                prompt_password("Enter new password: ")
+                    .unwrap_or_else(|_| generate_random_password())
             });
-            
-            database.reset_user_password(existing_user.id, &new_password).await?;
-            
-            info!("✅ Password reset successfully for user: {}", existing_user.username);
+
+            state
+                .database
+                .reset_user_password(existing_user.id, &new_password)
+                .await?;
+
+            info!(
+                "✅ Password reset successfully for user: {}",
+                existing_user.username
+            );
             if password.is_none() {
                 warn!("🔑 New password: {}", new_password);
             }
         }
     }
-    
+
     Ok(())
 }
 
-async fn handle_content_action(action: ContentAction, _database: &Database) -> Result<()> {
+async fn handle_content_action(action: ContentAction, _state: &AppState) -> Result<()> {
     match action {
-        ContentAction::List { status, author, limit } => {
-            info!("📊 Listing posts (status: {:?}, author: {:?}, limit: {})", status, author, limit);
+        ContentAction::List {
+            status,
+            author,
+            limit,
+        } => {
+            info!(
+                "📊 Listing posts (status: {:?}, author: {:?}, limit: {})",
+                status, author, limit
+            );
             // Implementation would list posts with filters
         }
-        
-        ContentAction::Create { title, file: _file, author: _author, status: _status } => {
+
+        ContentAction::Create {
+            title,
+            file: _file,
+            author: _author,
+            status: _status,
+        } => {
             info!("📝 Creating post: {}", title);
             // Implementation would create post
         }
-        
+
         ContentAction::PublishScheduled => {
             info!("📅 Publishing scheduled posts...");
             // Implementation would publish scheduled posts
         }
-        
+
         ContentAction::ReindexSearch => {
             info!("🔍 Rebuilding search index...");
             // Implementation would rebuild search index
         }
-        
+
         ContentAction::CleanupMedia => {
             info!("🧹 Cleaning up orphaned media files...");
             // Implementation would clean up media
         }
     }
-    
+
     Ok(())
 }
 
-async fn handle_system_action(action: SystemAction, _database: &Database) -> Result<()> {
+async fn handle_system_action(action: SystemAction, _state: &AppState) -> Result<()> {
     match action {
         SystemAction::Status => {
             info!("📊 System Status:");
@@ -463,12 +495,12 @@ async fn handle_system_action(action: SystemAction, _database: &Database) -> Res
             println!("  🗄️  Cache: Active");
             println!("  🔍 Search: Indexed");
         }
-        
+
         SystemAction::Settings { key, value } => {
             info!("⚙️  Updating setting: {} = {}", key, value);
             // Implementation would update system setting
         }
-        
+
         SystemAction::Cache { action } => {
             match action {
                 CacheAction::Clear => {
@@ -485,7 +517,7 @@ async fn handle_system_action(action: SystemAction, _database: &Database) -> Res
                 }
             }
         }
-        
+
         SystemAction::Database { action } => {
             match action {
                 DatabaseAction::Stats => {
@@ -503,59 +535,66 @@ async fn handle_system_action(action: SystemAction, _database: &Database) -> Res
             }
         }
     }
-    
+
     Ok(())
 }
 
-async fn handle_analytics_action(action: AnalyticsAction, _database: &Database) -> Result<()> {
+async fn handle_analytics_action(action: AnalyticsAction, _state: &AppState) -> Result<()> {
     match action {
         AnalyticsAction::Users { period } => {
             info!("📊 User Analytics ({})", period);
             // Implementation would show user analytics
         }
-        
+
         AnalyticsAction::Content { period } => {
             info!("📊 Content Analytics ({})", period);
             // Implementation would show content analytics
         }
-        
+
         AnalyticsAction::Performance { period } => {
             info!("📊 Performance Metrics ({})", period);
             // Implementation would show performance metrics
         }
     }
-    
+
     Ok(())
 }
 
-async fn handle_security_action(action: SecurityAction, _database: &Database) -> Result<()> {
+async fn handle_security_action(action: SecurityAction, _state: &AppState) -> Result<()> {
     match action {
-        SecurityAction::AuditLog { limit, user, action } => {
-            info!("🔒 Security Audit Log (limit: {}, user: {:?}, action: {:?})", limit, user, action);
+        SecurityAction::AuditLog {
+            limit,
+            user,
+            action,
+        } => {
+            info!(
+                "🔒 Security Audit Log (limit: {}, user: {:?}, action: {:?})",
+                limit, user, action
+            );
             // Implementation would show audit log
         }
-        
+
         SecurityAction::Sessions => {
             info!("🔓 Active Sessions:");
             // Implementation would list active sessions
         }
-        
+
         SecurityAction::RevokeSessions { user } => {
             info!("🔒 Revoking sessions for user: {}", user);
             // Implementation would revoke sessions
         }
-        
+
         SecurityAction::ApiKeys { active_only } => {
             info!("🔑 API Keys (active only: {})", active_only);
             // Implementation would list API keys
         }
-        
+
         SecurityAction::RevokeApiKey { key } => {
             info!("🔒 Revoking API key: {}", key);
             // Implementation would revoke API key
         }
     }
-    
+
     Ok(())
 }
 
@@ -571,10 +610,11 @@ fn truncate(s: &str, max_len: usize) -> String {
 
 fn generate_random_password() -> String {
     use rand::prelude::*;
-    
-    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+
+    const CHARSET: &[u8] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
     let mut rng = thread_rng();
-    
+
     (0..16)
         .map(|_| {
             let idx = rng.gen_range(0..CHARSET.len());
@@ -591,7 +631,9 @@ fn prompt_password(prompt: &str) -> Result<String> {
 
     let password = password.trim().to_string();
     if password.is_empty() {
-        return Err(cms_backend::AppError::BadRequest("Password cannot be empty".to_string()));
+        return Err(cms_backend::AppError::BadRequest(
+            "Password cannot be empty".to_string(),
+        ));
     }
 
     Ok(password)

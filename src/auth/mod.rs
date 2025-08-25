@@ -1,5 +1,5 @@
 //! Authentication Service - biscuit-auth + WebAuthn + JWT
-//! 
+//!
 //! Provides comprehensive authentication and authorization:
 //! - biscuit-auth for cryptographic authorization tokens
 //! - WebAuthn for passwordless authentication  
@@ -7,23 +7,23 @@
 //! - Password-based authentication with Argon2
 //! - Role-based access control (RBAC)
 
-use std::sync::Arc;
-use std::collections::HashMap;
-use tokio::sync::RwLock;
-use biscuit_auth::{KeyPair, PrivateKey, PublicKey};
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
-use argon2::password_hash::{SaltString, rand_core::OsRng};
-use jsonwebtoken::{encode, decode, Header, Algorithm, Validation, EncodingKey, DecodingKey};
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use chrono::{DateTime, Utc, Duration as ChronoDuration};
-use thiserror::Error;
+use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use base64;
+use biscuit_auth::{KeyPair, PrivateKey, PublicKey};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use thiserror::Error;
+use tokio::sync::RwLock;
+use uuid::Uuid;
 
 use crate::{
     config::AuthConfig,
     database::Database,
-    models::{User, UserRole, CreateUserRequest},
+    models::{CreateUserRequest, User, UserRole},
+    utils::{common_types::UserInfo, password},
     Result,
 };
 
@@ -54,12 +54,13 @@ pub enum AuthError {
 impl From<AuthError> for crate::AppError {
     fn from(err: AuthError) -> Self {
         match err {
-            AuthError::InvalidCredentials | AuthError::UserNotFound => 
-                crate::AppError::Authentication(err.to_string()),
-            AuthError::TokenExpired | AuthError::InvalidToken => 
-                crate::AppError::Authentication(err.to_string()),
-            AuthError::InsufficientPermissions => 
-                crate::AppError::Authorization(err.to_string()),
+            AuthError::InvalidCredentials | AuthError::UserNotFound => {
+                crate::AppError::Authentication(err.to_string())
+            }
+            AuthError::TokenExpired | AuthError::InvalidToken => {
+                crate::AppError::Authentication(err.to_string())
+            }
+            AuthError::InsufficientPermissions => crate::AppError::Authorization(err.to_string()),
             _ => crate::AppError::Authentication(err.to_string()),
         }
     }
@@ -128,12 +129,12 @@ pub struct Claims {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JwtClaims {
-    pub sub: String,      // User ID
+    pub sub: String, // User ID
     pub username: String,
     pub role: String,
-    pub exp: usize,       // Expiration time
-    pub iat: usize,       // Issued at
-    pub jti: String,      // JWT ID (session ID)
+    pub exp: usize,  // Expiration time
+    pub iat: usize,  // Issued at
+    pub jti: String, // JWT ID (session ID)
 }
 
 /// Login request
@@ -155,34 +156,6 @@ pub struct AuthResponse {
     pub session_id: String,
 }
 
-/// User information
-#[derive(Debug, Serialize)]
-pub struct UserInfo {
-    pub id: String,
-    pub username: String,
-    pub email: String,
-    pub role: UserRole,
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub last_login: Option<DateTime<Utc>>,
-}
-
-impl From<User> for UserInfo {
-    fn from(user: User) -> Self {
-        Self {
-            id: user.id.to_string(),
-            username: user.username,
-            email: user.email,
-            role: UserRole::from_str(&user.role).unwrap_or(UserRole::Subscriber),
-            first_name: user.first_name,
-            last_name: user.last_name,
-            created_at: user.created_at,
-            last_login: user.last_login,
-        }
-    }
-}
-
 /// Authentication context
 #[derive(Debug, Clone)]
 pub struct AuthContext {
@@ -200,14 +173,14 @@ impl AuthService {
         let keypair = KeyPair::new();
         let biscuit_private_key = keypair.private();
         let biscuit_public_key = keypair.public();
-        
+
         // Create JWT keys
         let jwt_encoding_key = EncodingKey::from_secret(config.jwt_secret.as_bytes());
         let jwt_decoding_key = DecodingKey::from_secret(config.jwt_secret.as_bytes());
-        
+
         // Initialize Argon2
         let argon2 = Argon2::default();
-        
+
         Ok(Self {
             biscuit_private_key,
             biscuit_public_key,
@@ -219,55 +192,50 @@ impl AuthService {
             argon2,
         })
     }
-    
-    /// Authenticate user with username/password
-    pub async fn authenticate(&self, request: LoginRequest) -> Result<AuthResponse> {
-        // Find user by username
-        let mut conn = self.database.get_connection()
-            .map_err(|e| AuthError::Database(e.to_string()))?;
-            
-        let user = User::find_by_email(&mut conn, &request.email)
+
+    /// Authenticate user with username/password using AppState for DB access
+    pub async fn authenticate_user(&self, state: &crate::AppState, request: LoginRequest) -> Result<crate::models::User> {
+        // Lookup user via AppState DB wrapper
+        let user = state.db_get_user_by_email(request.email.as_str()).await
             .map_err(|_| AuthError::UserNotFound)?;
-        
-        // Check if user is active
+
         if !user.is_active {
             return Err(AuthError::InvalidCredentials.into());
         }
-        
+
         // Verify password
         if let Some(password_hash) = &user.password_hash {
             let parsed_hash = PasswordHash::new(password_hash)
                 .map_err(|e| AuthError::PasswordHash(e.to_string()))?;
-                
-            self.argon2.verify_password(request.password.as_bytes(), &parsed_hash)
+
+            self.argon2
+                .verify_password(request.password.as_bytes(), &parsed_hash)
                 .map_err(|_| AuthError::InvalidCredentials)?;
         } else {
-            // User has no password (passkey-only)
             return Err(AuthError::InvalidCredentials.into());
         }
-        
-        // Update last login
-        User::update_last_login(&mut conn, user.id)
-            .map_err(|e| AuthError::Database(e.to_string()))?;
-        
-        // Generate tokens and session
-        self.create_auth_response(user, request.remember_me.unwrap_or(false)).await
+
+        // Update last login via AppState wrapper
+        state.db_update_last_login(user.id).await.map_err(|e| AuthError::Database(e.to_string()))?;
+
+        // Return user (handlers will call create_session via AppState wrapper)
+        Ok(user)
     }
-    
+
     /// Create authentication response with tokens
     async fn create_auth_response(&self, user: User, remember_me: bool) -> Result<AuthResponse> {
         let session_id = Uuid::new_v4().to_string();
         let now = Utc::now();
-        
+
         // Determine expiration based on remember_me
         let expires_in = if remember_me {
             ChronoDuration::days(30).num_seconds()
         } else {
             ChronoDuration::hours(24).num_seconds()
         };
-        
+
         let expires_at = now + ChronoDuration::seconds(expires_in);
-        
+
         // Create JWT token
         let jwt_claims = JwtClaims {
             sub: user.id.to_string(),
@@ -277,10 +245,10 @@ impl AuthService {
             iat: now.timestamp() as usize,
             jti: session_id.clone(),
         };
-        
+
         let access_token = encode(&Header::default(), &jwt_claims, &self.jwt_encoding_key)
             .map_err(|e| AuthError::Jwt(e.to_string()))?;
-        
+
         // Create refresh token (longer expiration)
         let refresh_claims = JwtClaims {
             sub: user.id.to_string(),
@@ -290,25 +258,28 @@ impl AuthService {
             iat: now.timestamp() as usize,
             jti: format!("{}_refresh", session_id),
         };
-        
+
         let refresh_token = encode(&Header::default(), &refresh_claims, &self.jwt_encoding_key)
             .map_err(|e| AuthError::Jwt(e.to_string()))?;
-        
+
         // Create Biscuit token
         let biscuit_token = self.create_biscuit_token(&user)?;
-        
+
         // Store session
         let session_data = SessionData {
             user_id: user.id,
             username: user.username.clone(),
-            role: UserRole::from_str(&user.role).unwrap_or(UserRole::Subscriber),
+            role: UserRole::parse_str(&user.role).unwrap_or(UserRole::Subscriber),
             created_at: now,
             expires_at,
             last_accessed: now,
         };
-        
-        self.sessions.write().await.insert(session_id.clone(), session_data);
-        
+
+        self.sessions
+            .write()
+            .await
+            .insert(session_id.clone(), session_data);
+
         Ok(AuthResponse {
             user: UserInfo::from(user),
             access_token,
@@ -318,7 +289,7 @@ impl AuthService {
             session_id,
         })
     }
-    
+
     /// Create Biscuit authorization token
     fn create_biscuit_token(&self, user: &User) -> Result<String> {
         // For now, create a simple base64 encoded token
@@ -328,36 +299,34 @@ impl AuthService {
         let encoded = base64::engine::general_purpose::STANDARD.encode(token_data);
         Ok(encoded)
     }
-    
+
     /// Verify JWT token
     pub async fn verify_jwt(&self, token: &str) -> Result<AuthContext> {
         let validation = Validation::new(Algorithm::HS256);
-        
+
         let token_data = decode::<JwtClaims>(token, &self.jwt_decoding_key, &validation)
             .map_err(|e| AuthError::Jwt(e.to_string()))?;
-        
+
         let claims = token_data.claims;
-        
+
         // Check if session exists and is valid
         let sessions = self.sessions.read().await;
         if let Some(session) = sessions.get(&claims.jti) {
             if session.expires_at < Utc::now() {
                 return Err(AuthError::TokenExpired.into());
             }
-            
+
             // Update last accessed time
             drop(sessions);
             let mut sessions_write = self.sessions.write().await;
             if let Some(session) = sessions_write.get_mut(&claims.jti) {
                 session.last_accessed = Utc::now();
             }
-            
+
             Ok(AuthContext {
-                user_id: Uuid::parse_str(&claims.sub)
-                    .map_err(|_| AuthError::InvalidToken)?,
+                user_id: Uuid::parse_str(&claims.sub).map_err(|_| AuthError::InvalidToken)?,
                 username: claims.username,
-                role: UserRole::from_str(&claims.role)
-                    .map_err(|_| AuthError::InvalidToken)?,
+                role: UserRole::parse_str(&claims.role).map_err(|_| AuthError::InvalidToken)?,
                 session_id: claims.jti,
                 permissions: self.get_role_permissions(&claims.role),
             })
@@ -365,43 +334,39 @@ impl AuthService {
             Err(AuthError::InvalidToken.into())
         }
     }
-    
+
     /// Verify Biscuit token
     pub async fn verify_biscuit(&self, token: &str) -> Result<AuthContext> {
         use base64::Engine;
-        
+
         // Decode the simple base64 token
-        let decoded = base64::engine::general_purpose::STANDARD.decode(token)
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(token)
             .map_err(|_| AuthError::InvalidToken)?;
-            
-        let token_data = String::from_utf8(decoded)
-            .map_err(|_| AuthError::InvalidToken)?;
-            
+
+        let token_data = String::from_utf8(decoded).map_err(|_| AuthError::InvalidToken)?;
+
         let parts: Vec<&str> = token_data.split(':').collect();
         if parts.len() != 3 {
             return Err(AuthError::InvalidToken.into());
         }
-        
-        let user_id = Uuid::parse_str(parts[0])
-            .map_err(|_| AuthError::InvalidToken)?;
-            
+
+        let user_id = Uuid::parse_str(parts[0]).map_err(|_| AuthError::InvalidToken)?;
+
         let username = parts[1].to_string();
         let role_str = parts[2];
-        
-        let role = UserRole::from_str(role_str)
-            .map_err(|_| AuthError::InvalidToken)?;
-        
-        // Verify user still exists and is active
-        let mut conn = self.database.get_connection()
-            .map_err(|e| AuthError::Database(e.to_string()))?;
-            
-        let user = User::find_by_id(&mut conn, user_id)
-            .map_err(|_| AuthError::UserNotFound)?;
-            
+
+    let role = UserRole::parse_str(role_str).map_err(|_| AuthError::InvalidToken)?;
+
+    // Verify user still exists and is active
+    let mut conn = self.get_conn()?;
+
+        let user = User::find_by_id(&mut conn, user_id).map_err(|_| AuthError::UserNotFound)?;
+
         if !user.is_active {
             return Err(AuthError::InvalidCredentials.into());
         }
-        
+
         Ok(AuthContext {
             user_id,
             username,
@@ -410,7 +375,7 @@ impl AuthService {
             permissions: self.get_role_permissions(role_str),
         })
     }
-    
+
     /// Get permissions for a role
     fn get_role_permissions(&self, role: &str) -> Vec<String> {
         match role {
@@ -425,77 +390,94 @@ impl AuthService {
                 "write".to_string(),
                 "delete".to_string(),
             ],
-            "Editor" => vec![
-                "read".to_string(),
-                "write".to_string(),
-            ],
-            "Author" => vec![
-                "read".to_string(),
-                "write_own".to_string(),
-            ],
+            "Editor" => vec!["read".to_string(), "write".to_string()],
+            "Author" => vec!["read".to_string(), "write_own".to_string()],
             _ => vec!["read".to_string()],
         }
     }
-    
+
     /// Hash password using Argon2
     pub fn hash_password(&self, password: &str) -> Result<String> {
-        let salt = SaltString::generate(&mut OsRng);
-        let password_hash = self.argon2.hash_password(password.as_bytes(), &salt)
-            .map_err(|e| AuthError::PasswordHash(e.to_string()))?;
-        
-        Ok(password_hash.to_string())
+        password::hash_password(password)
     }
-    
+
     /// Verify password against hash
     pub fn verify_password(&self, password: &str, hash: &str) -> Result<bool> {
-        let parsed_hash = PasswordHash::new(hash)
-            .map_err(|e| AuthError::PasswordHash(e.to_string()))?;
-            
-        Ok(self.argon2.verify_password(password.as_bytes(), &parsed_hash).is_ok())
+        password::verify_password(password, hash)
     }
-    
+
     /// Logout user (invalidate session)
     pub async fn logout(&self, session_id: &str) -> Result<()> {
         self.sessions.write().await.remove(session_id);
         Ok(())
     }
-    
+
     /// Clean expired sessions
     pub async fn cleanup_expired_sessions(&self) {
         let now = Utc::now();
         let mut sessions = self.sessions.write().await;
-        
+
         sessions.retain(|_, session| session.expires_at > now);
     }
-    
+
     /// Get active session count
     pub async fn get_active_session_count(&self) -> usize {
         self.sessions.read().await.len()
     }
-    
+
     /// Health check for auth service
     pub async fn health_check(&self) -> Result<()> {
         // Check database connection
-        let _conn = self.database.get_connection()
-            .map_err(|e| AuthError::Database(e.to_string()))?;
+        let _conn = self.get_conn()?;
         Ok(())
     }
 
-    /// Create user (wrapper for database call)
-    pub async fn create_user(&self, request: CreateUserRequest) -> Result<User> {
-        self.database.create_user(request).await
+    /// Convenience helper to get a pooled DB connection and map errors to AuthError
+    fn get_conn(&self) -> std::result::Result<crate::database::PooledConnection, AuthError> {
+        self.database
+            .get_connection()
+            .map_err(|e| AuthError::Database(e.to_string()))
     }
 
-    /// Authenticate user (simplified version for handlers)
-    pub async fn authenticate_user(&self, _request: LoginRequest) -> Result<User> {
-        // Placeholder - would use database to verify credentials
-        Err(AuthError::InvalidCredentials.into())
+    /// Create user using AppState so metrics are recorded centrally
+    pub async fn create_user(&self, state: &crate::AppState, request: CreateUserRequest) -> Result<User> {
+        state.db_create_user(request).await
     }
 
-    /// Validate JWT token and return user if valid
-    pub async fn validate_token(&self, _token: &str) -> Result<User> {
-        // Placeholder - would validate JWT token and return user
-        Err(AuthError::InvalidCredentials.into())
+    /// Backwards-compatible wrapper kept for call sites that used the old helper
+    pub async fn create_user_with_state(&self, state: &crate::AppState, request: CreateUserRequest) -> Result<User> {
+        self.create_user(state, request).await
+    }
+
+    /// Validate JWT token and return user if valid (uses AppState to fetch user)
+    pub async fn validate_token(&self, state: &crate::AppState, token: &str) -> Result<crate::models::User> {
+        // Verify JWT and extract claims
+        let validation = Validation::new(Algorithm::HS256);
+
+        let token_data = decode::<JwtClaims>(token, &self.jwt_decoding_key, &validation)
+            .map_err(|e| AuthError::Jwt(e.to_string()))?;
+
+        let claims = token_data.claims;
+
+        // Ensure session exists
+        let sessions = self.sessions.read().await;
+        if let Some(session) = sessions.get(&claims.jti) {
+            if session.expires_at < Utc::now() {
+                return Err(AuthError::TokenExpired.into());
+            }
+        } else {
+            return Err(AuthError::InvalidToken.into());
+        }
+
+        // Lookup user via AppState DB wrapper
+        let user_id = Uuid::parse_str(&claims.sub).map_err(|_| AuthError::InvalidToken)?;
+        let user = state.db_get_user_by_id(user_id).await.map_err(|_| AuthError::UserNotFound)?;
+
+        if !user.is_active {
+            return Err(AuthError::InvalidCredentials.into());
+        }
+
+        Ok(user)
     }
 
     /// Create session token
@@ -503,7 +485,7 @@ impl AuthService {
         let session_id = Uuid::new_v4().to_string();
         let now = Utc::now();
         let expires_at = now + ChronoDuration::hours(24);
-        
+
         let session_data = SessionData {
             user_id,
             username: "user".to_string(), // Would get from database
@@ -512,9 +494,12 @@ impl AuthService {
             expires_at,
             last_accessed: now,
         };
-        
-        self.sessions.write().await.insert(session_id.clone(), session_data);
-        
+
+        self.sessions
+            .write()
+            .await
+            .insert(session_id.clone(), session_data);
+
         // Generate JWT token
         let claims = Claims {
             sub: user_id.to_string(),
@@ -528,7 +513,7 @@ impl AuthService {
 
         let token = encode(&Header::default(), &claims, &self.jwt_encoding_key)
             .map_err(|e| AuthError::Jwt(e.to_string()))?;
-            
+
         Ok(token)
     }
 }

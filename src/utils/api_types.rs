@@ -1,6 +1,6 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
-use chrono::{DateTime, Utc};
 
 /// 標準的なAPIレスポンス構造
 #[derive(Debug, Serialize, ToSchema)]
@@ -65,8 +65,12 @@ pub struct PaginationQuery {
     pub per_page: u32,
 }
 
-fn default_page() -> u32 { 1 }
-fn default_per_page() -> u32 { 20 }
+fn default_page() -> u32 {
+    1
+}
+fn default_per_page() -> u32 {
+    20
+}
 
 impl Default for PaginationQuery {
     fn default() -> Self {
@@ -79,9 +83,15 @@ impl Default for PaginationQuery {
 
 impl PaginationQuery {
     pub fn validate(&mut self) {
-        if self.page == 0 { self.page = 1; }
-        if self.per_page == 0 { self.per_page = 20; }
-        if self.per_page > 100 { self.per_page = 100; }
+        if self.page == 0 {
+            self.page = 1;
+        }
+        if self.per_page == 0 {
+            self.per_page = 20;
+        }
+        if self.per_page > 100 {
+            self.per_page = 100;
+        }
     }
 
     pub fn offset(&self) -> u64 {
@@ -98,17 +108,12 @@ pub struct SortQuery {
     pub order: SortOrder,
 }
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Debug, Deserialize, Serialize, ToSchema, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SortOrder {
     Asc,
+    #[default]
     Desc,
-}
-
-impl Default for SortOrder {
-    fn default() -> Self {
-        SortOrder::Desc
-    }
 }
 
 /// フィルタークエリパラメータ

@@ -1,8 +1,4 @@
-use axum::{
-    response::Json,
-    routing::get,
-    Router,
-};
+use axum::{response::Json, routing::get, Router};
 use serde_json::json;
 use std::net::SocketAddr;
 
@@ -18,7 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3001));
     println!("🚀 Simple server starting on http://{}", addr);
-    
+
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
 

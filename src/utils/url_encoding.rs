@@ -1,40 +1,40 @@
-use percent_encoding::{utf8_percent_encode, percent_decode_str, AsciiSet, CONTROLS};
-use urlencoding::{encode, decode};
 use crate::utils::error::{AppError, AppResult};
+use percent_encoding::{percent_decode_str, utf8_percent_encode, AsciiSet, CONTROLS};
+use urlencoding::{decode, encode};
 
 /// URL-safe文字セット定義（RFC 3986準拠）
 /// CONTROLS（制御文字）+ 特定の文字を追加
 const URL_SAFE: &AsciiSet = &CONTROLS
-    .add(b' ')   // スペース
-    .add(b'"')   // ダブルクォート
-    .add(b'<')   // 小なり
-    .add(b'>')   // 大なり
-    .add(b'`')   // バッククォート
-    .add(b'#')   // ハッシュ
-    .add(b'?')   // クエスチョン
-    .add(b'{')   // 左中括弧
-    .add(b'}')   // 右中括弧
-    .add(b'%')   // パーセント（二重エンコード防止）
-    .add(b'/')   // スラッシュ
+    .add(b' ') // スペース
+    .add(b'"') // ダブルクォート
+    .add(b'<') // 小なり
+    .add(b'>') // 大なり
+    .add(b'`') // バッククォート
+    .add(b'#') // ハッシュ
+    .add(b'?') // クエスチョン
+    .add(b'{') // 左中括弧
+    .add(b'}') // 右中括弧
+    .add(b'%') // パーセント（二重エンコード防止）
+    .add(b'/') // スラッシュ
     .add(b'\\'); // バックスラッシュ
 
 /// スラッグ用文字セット（より厳密）
 const SLUG_SAFE: &AsciiSet = &URL_SAFE
-    .add(b'!')   // 感嘆符
-    .add(b'*')   // アスタリスク
-    .add(b'\'')  // シングルクォート
-    .add(b'(')   // 左括弧
-    .add(b')')   // 右括弧
-    .add(b';')   // セミコロン
-    .add(b':')   // コロン
-    .add(b'@')   // アットマーク
-    .add(b'&')   // アンパサンド
-    .add(b'=')   // イコール
-    .add(b'+')   // プラス
-    .add(b'$')   // ドル
-    .add(b',')   // カンマ
-    .add(b'[')   // 左角括弧
-    .add(b']');  // 右角括弧
+    .add(b'!') // 感嘆符
+    .add(b'*') // アスタリスク
+    .add(b'\'') // シングルクォート
+    .add(b'(') // 左括弧
+    .add(b')') // 右括弧
+    .add(b';') // セミコロン
+    .add(b':') // コロン
+    .add(b'@') // アットマーク
+    .add(b'&') // アンパサンド
+    .add(b'=') // イコール
+    .add(b'+') // プラス
+    .add(b'$') // ドル
+    .add(b',') // カンマ
+    .add(b'[') // 左角括弧
+    .add(b']'); // 右角括弧
 
 /// URLパラメータの安全なエンコード
 pub fn encode_url_param(input: &str) -> String {
@@ -118,21 +118,21 @@ pub fn generate_safe_slug(title: &str) -> String {
     let normalized = title
         .trim()
         .to_lowercase()
-        .replace([' ', '\t', '\n', '\r'], "-")  // 空白文字をハイフンに
-        .replace(['/', '\\', '?', '#', '&'], "-")  // 危険な文字をハイフンに
+        .replace([' ', '\t', '\n', '\r'], "-") // 空白文字をハイフンに
+        .replace(['/', '\\', '?', '#', '&'], "-") // 危険な文字をハイフンに
         .chars()
-        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_' || !c.is_ascii())  // 日本語文字は保持
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_' || !c.is_ascii()) // 日本語文字は保持
         .collect::<String>();
-    
+
     // 2. 連続するハイフンを単一に
     let cleaned = normalized
         .split('-')
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>()
         .join("-");
-    
+
     // 3. URLエンコード（非ASCII文字のみ）
-    if cleaned.chars().any(|c| !c.is_ascii()) {
+    if !cleaned.is_ascii() {
         encode_slug(&cleaned)
     } else {
         cleaned
@@ -145,15 +145,17 @@ pub fn validate_url_param(input: &str) -> AppResult<()> {
     if input.len() > 2048 {
         return Err(AppError::BadRequest("URL parameter too long".to_string()));
     }
-    
+
     // 無効な文字パターンチェック
     if input.contains('\0') || input.contains('\u{FFFF}') {
-        return Err(AppError::BadRequest("Invalid characters in URL parameter".to_string()));
+        return Err(AppError::BadRequest(
+            "Invalid characters in URL parameter".to_string(),
+        ));
     }
-    
+
     // デコードテスト
     decode_url_param(input)?;
-    
+
     Ok(())
 }
 
@@ -163,20 +165,22 @@ pub fn validate_slug(input: &str) -> AppResult<()> {
     if input.len() > 255 {
         return Err(AppError::BadRequest("Slug too long".to_string()));
     }
-    
+
     // 空文字チェック
     if input.trim().is_empty() {
         return Err(AppError::BadRequest("Slug cannot be empty".to_string()));
     }
-    
+
     // 無効な文字パターンチェック
     if input.contains('\0') || input.contains('\u{FFFF}') {
-        return Err(AppError::BadRequest("Invalid characters in slug".to_string()));
+        return Err(AppError::BadRequest(
+            "Invalid characters in slug".to_string(),
+        ));
     }
-    
+
     // デコードテスト
     decode_slug(input)?;
-    
+
     Ok(())
 }
 
@@ -201,7 +205,10 @@ mod tests {
     #[test]
     fn test_slug_generation() {
         assert_eq!(generate_safe_slug("Hello World!"), "hello-world");
-        assert_eq!(generate_safe_slug("こんにちは 世界"), encode_slug("こんにちは-世界"));
+        assert_eq!(
+            generate_safe_slug("こんにちは 世界"),
+            encode_slug("こんにちは-世界")
+        );
     }
 
     #[test]

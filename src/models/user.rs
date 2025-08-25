@@ -6,6 +6,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::database::schema::users;
+use crate::utils::password;
 use crate::AppError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Queryable, Insertable)]
@@ -40,7 +41,7 @@ impl UserRole {
     pub fn as_str(&self) -> &'static str {
         match self {
             UserRole::SuperAdmin => "super_admin",
-            UserRole::Admin => "admin", 
+            UserRole::Admin => "admin",
             UserRole::Editor => "editor",
             UserRole::Author => "author",
             UserRole::Contributor => "contributor",
@@ -48,7 +49,7 @@ impl UserRole {
         }
     }
 
-    pub fn from_str(s: &str) -> Result<Self, AppError> {
+    pub fn parse_str(s: &str) -> Result<Self, AppError> {
         match s {
             "super_admin" => Ok(UserRole::SuperAdmin),
             "admin" => Ok(UserRole::Admin),
@@ -84,39 +85,6 @@ pub struct UpdateUserRequest {
     pub last_name: Option<String>,
     pub role: Option<UserRole>,
     pub is_active: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct UserResponse {
-    pub id: Uuid,
-    pub username: String,
-    pub email: String,
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
-    pub role: String,
-    pub is_active: bool,
-    pub email_verified: bool,
-    pub last_login: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-impl From<User> for UserResponse {
-    fn from(user: User) -> Self {
-        Self {
-            id: user.id,
-            username: user.username,
-            email: user.email,
-            first_name: user.first_name,
-            last_name: user.last_name,
-            role: user.role,
-            is_active: user.is_active,
-            email_verified: user.email_verified,
-            last_login: user.last_login,
-            created_at: user.created_at,
-            updated_at: user.updated_at,
-        }
-    }
 }
 
 impl User {
@@ -163,17 +131,8 @@ impl User {
         last_name: Option<String>,
         role: UserRole,
     ) -> Result<Self, crate::AppError> {
-        use argon2::{Argon2, PasswordHasher};
-        use argon2::password_hash::{rand_core::OsRng, SaltString};
-        
-        let salt = SaltString::generate(&mut OsRng);
-        let argon2 = Argon2::default();
-        
-        let password_hash = argon2
-            .hash_password(password.as_bytes(), &salt)
-            .map_err(|e| AppError::Internal(e.to_string()))?
-            .to_string();
-            
+        let password_hash = password::hash_password(password)?;
+
         Ok(Self::new(
             username,
             email,
@@ -231,10 +190,10 @@ impl User {
         updates: &UpdateUserRequest,
     ) -> Result<User, AppError> {
         use crate::database::schema::users::dsl::*;
-        
+
         // Build a tuple of all possible updates
         let mut update_sets = Vec::new();
-        
+
         if let Some(ref new_username) = updates.username {
             update_sets.push(format!("username = '{}'", new_username));
         }
@@ -253,10 +212,10 @@ impl User {
         if let Some(new_is_active) = updates.is_active {
             update_sets.push(format!("is_active = {}", new_is_active));
         }
-        
+
         // Always update the timestamp
         update_sets.push("updated_at = NOW()".to_string());
-        
+
         // Use conditional updates based on what fields are provided
         if updates.username.is_some() {
             diesel::update(users.find(user_id))
@@ -288,12 +247,12 @@ impl User {
                 .set(is_active.eq(updates.is_active.unwrap()))
                 .execute(conn)?;
         }
-        
+
         // Always update timestamp
         diesel::update(users.find(user_id))
             .set(updated_at.eq(Utc::now()))
             .execute(conn)?;
-        
+
         // Return the updated user
         User::find_by_id(conn, user_id)
     }
@@ -310,16 +269,7 @@ impl User {
 
     pub fn verify_password(&self, password: &str) -> Result<bool, AppError> {
         match &self.password_hash {
-            Some(hash) => {
-                use argon2::{Argon2, PasswordHash, PasswordVerifier};
-                
-                let parsed_hash = PasswordHash::new(hash)
-                    .map_err(|e| AppError::Authentication(format!("Invalid hash format: {}", e)))?;
-                
-                Ok(Argon2::default()
-                    .verify_password(password.as_bytes(), &parsed_hash)
-                    .is_ok())
-            }
+            Some(hash) => password::verify_password(password, hash),
             None => Ok(false), // Passkey-only user
         }
     }

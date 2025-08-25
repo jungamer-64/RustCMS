@@ -1,0 +1,43 @@
+[package]
+name = "cms-lightweight"
+version = "1.0.0"
+edition = "2021"
+authors = ["CMS Development Team"]
+description = "Lightweight CMS backend with minimal dependencies"
+license = "MIT"
+
+[[bin]]
+name = "cms-simple"
+path = "src/bin/cms-simple.rs"
+
+[dependencies]
+# Core web framework (minimal)
+axum = { version = "0.7", features = ["macros"], default-features = false }
+tokio = { version = "1.47", features = ["rt-multi-thread", "net", "macros"], default-features = false }
+tower = { version = "0.4", default-features = false }
+tower-http = { version = "0.5", features = ["cors"], default-features = false }
+
+# Serialization (minimal)
+serde = { version = "1.0", features = ["derive"], default-features = false }
+serde_json = { version = "1.0", default-features = false }
+
+# UUID for IDs
+uuid = { version = "1.18.0", features = ["v4"], default-features = false }
+
+# Basic utilities
+chrono = { version = "0.4", features = ["serde"], default-features = false }
+
+[features]
+default = []
+
+[profile.release]
+opt-level = 3
+debug = false
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+debug = true

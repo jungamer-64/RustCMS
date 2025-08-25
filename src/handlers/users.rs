@@ -1,21 +1,19 @@
 //! User Handlers
-//! 
+//!
+//!
 //! Handles user management operations
 
 use axum::{
+    extract::{Path, Query, State},
     response::{IntoResponse, Json},
-    extract::{State, Path, Query},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::time::Duration;
 use uuid::Uuid;
 
-use crate::{
-    AppState, Result,
-    models::UpdateUserRequest,
-    handlers::auth::UserInfo,
-};
+use crate::utils::{api_types::ApiResponse, common_types::UserInfo};
+use crate::{models::UpdateUserRequest, AppState, Result};
 
 /// User query parameters
 #[derive(Debug, Deserialize)]
@@ -44,34 +42,36 @@ pub async fn get_users(
 ) -> Result<impl IntoResponse> {
     let page = query.page.unwrap_or(1);
     let limit = query.limit.unwrap_or(20);
-    
+
     // Build cache key
     let cache_key = format!(
-        "users:page:{}:limit:{}:role:{}:active:{}:sort:{}", 
+        "users:page:{}:limit:{}:role:{}:active:{}:sort:{}",
         page,
         limit,
         query.role.as_deref().unwrap_or("all"),
-        query.active.map(|a| a.to_string()).unwrap_or_else(|| "all".to_string()),
+        query
+            .active
+            .map(|a| a.to_string())
+            .unwrap_or_else(|| "all".to_string()),
         query.sort.as_deref().unwrap_or("created_at")
     );
 
     // Try cache first
-    if let Ok(Some(cached)) = state.cache.get::<UsersResponse>(&cache_key).await {
-        return Ok(Json(cached));
+    #[cfg(feature = "cache")]
+    {
+        if let Ok(Some(cached)) = state.cache.get::<UsersResponse>(&cache_key).await {
+            return Ok(Json(ApiResponse::success(cached)));
+        }
     }
 
-    // Get from database
-    let users = state.database.get_users(
-        page,
-        limit,
-        query.role,
-        query.active,
-        query.sort,
-    ).await?;
-    
-    let total = state.database.count_users().await?;
+    // Get from database (record DB timing)
+    let users = state
+        .db_get_users(page, limit, query.role, query.active, query.sort)
+        .await?;
+
+    let total = state.db_count_users().await?;
     let total_pages = (total as f32 / limit as f32).ceil() as u32;
-    
+
     let response = UsersResponse {
         users: users.iter().map(UserInfo::from).collect(),
         total,
@@ -79,13 +79,18 @@ pub async fn get_users(
         limit,
         total_pages,
     };
-    
+
     // Cache for 5 minutes
-    if let Err(e) = state.cache.set(cache_key, &response, Some(Duration::from_secs(300))).await {
+    #[cfg(feature = "cache")]
+    if let Err(e) = state
+        .cache
+        .set(cache_key, &response, Some(Duration::from_secs(300)))
+        .await
+    {
         eprintln!("Failed to cache users: {}", e);
     }
 
-    Ok(Json(response))
+    Ok(Json(ApiResponse::success(response)))
 }
 
 /// Get user by ID
@@ -95,20 +100,30 @@ pub async fn get_user(
 ) -> Result<impl IntoResponse> {
     // Try cache first
     let cache_key = format!("user:{}", id);
-    if let Ok(Some(cached)) = state.cache.get::<UserInfo>(&cache_key).await {
-        return Ok(Json(cached));
+    #[cfg(feature = "cache")]
+    {
+        if let Ok(Some(cached)) = state.cache.get::<UserInfo>(&cache_key).await {
+            return Ok(Json(ApiResponse::success(cached)));
+        }
     }
 
-    // Get from database
-    let user = state.database.get_user_by_id(id).await?;
+    // Get from database (record DB timing)
+    let user = state.db_get_user_by_id(id).await?;
     let response = UserInfo::from(&user);
-    
+
     // Cache for 10 minutes
-    if let Err(e) = state.cache.set(cache_key, &response, Some(Duration::from_secs(600))).await {
-        eprintln!("Failed to cache user: {}", e);
+    #[cfg(feature = "cache")]
+    {
+        if let Err(e) = state
+            .cache
+            .set(cache_key, &response, Some(Duration::from_secs(600)))
+            .await
+        {
+            eprintln!("Failed to cache user: {}", e);
+        }
     }
 
-    Ok(Json(response))
+    Ok(Json(ApiResponse::success(response)))
 }
 
 /// Update user
@@ -117,26 +132,29 @@ pub async fn update_user(
     Path(id): Path<Uuid>,
     Json(request): Json<UpdateUserRequest>,
 ) -> Result<impl IntoResponse> {
-    // Update in database
+    // Update in database (record DB timing)
     let user = state.database.update_user(id, request).await?;
-    
+
     // Update search index
+    #[cfg(feature = "search")]
     if let Err(e) = state.search.index_user(&user).await {
         eprintln!("Failed to update user in search index: {}", e);
     }
 
     // Clear cache
     let cache_key = format!("user:{}", id);
+    #[cfg(feature = "cache")]
     if let Err(e) = state.cache.delete(&cache_key).await {
         eprintln!("Failed to clear user cache: {}", e);
     }
-    
+
     // Clear users list cache
+    #[cfg(feature = "cache")]
     if let Err(e) = state.cache.delete("users:*").await {
         eprintln!("Failed to clear users cache: {}", e);
     }
 
-    Ok(Json(UserInfo::from(&user)))
+    Ok(Json(ApiResponse::success(UserInfo::from(&user))))
 }
 
 /// Delete user (soft delete by deactivating)
@@ -155,22 +173,24 @@ pub async fn delete_user(
     };
 
     let _user = state.database.update_user(id, update_request).await?;
-    
+
     // Remove from search index
+    #[cfg(feature = "search")]
     if let Err(e) = state.search.remove_document(&id.to_string()).await {
         eprintln!("Failed to remove user from search index: {}", e);
     }
 
     // Clear cache
     let cache_key = format!("user:{}", id);
+    #[cfg(feature = "cache")]
     if let Err(e) = state.cache.delete(&cache_key).await {
         eprintln!("Failed to clear user cache: {}", e);
     }
 
-    Ok(Json(json!({
+    Ok(Json(ApiResponse::success(json!({
         "success": true,
         "message": "User deactivated successfully"
-    })))
+    }))))
 }
 
 /// Get user's posts
@@ -181,29 +201,34 @@ pub async fn get_user_posts(
 ) -> Result<impl IntoResponse> {
     let page = query.page.unwrap_or(1);
     let limit = query.limit.unwrap_or(20);
-    
-    // Get posts by author
-    let posts = state.database.get_posts(
-        page,
-        limit,
-        query.status,
-        Some(id), // author_id
-        query.tag,
-        query.sort,
-    ).await?;
-    
+
+    // Get posts by author (record DB timing for query and count)
+    let posts = state
+        .db_get_posts(
+            page,
+            limit,
+            query.status,
+            Some(id), // author_id
+            query.tag,
+            query.sort,
+        )
+        .await?;
+
     let total = state.database.count_posts_by_author(id).await?;
     let total_pages = (total as f32 / limit as f32).ceil() as u32;
-    
+
     let response = crate::handlers::posts::PostsResponse {
-        posts: posts.iter().map(crate::handlers::posts::PostResponse::from).collect(),
+        posts: posts
+            .iter()
+            .map(crate::handlers::posts::PostResponse::from)
+            .collect(),
         total,
         page,
         limit,
         total_pages,
     };
 
-    Ok(Json(response))
+    Ok(Json(ApiResponse::success(response)))
 }
 
 /// Change user role (admin only)
@@ -215,7 +240,7 @@ pub async fn change_user_role(
     let new_role = request["role"]
         .as_str()
         .ok_or_else(|| crate::AppError::BadRequest("Missing role field".to_string()))?;
-    
+
     let role_enum = match new_role {
         "admin" => crate::models::UserRole::Admin,
         "editor" => crate::models::UserRole::Editor,
@@ -233,12 +258,13 @@ pub async fn change_user_role(
     };
 
     let user = state.database.update_user(id, update_request).await?;
-    
+
     // Clear cache
     let cache_key = format!("user:{}", id);
+    #[cfg(feature = "cache")]
     if let Err(e) = state.cache.delete(&cache_key).await {
         eprintln!("Failed to clear user cache: {}", e);
     }
 
-    Ok(Json(UserInfo::from(&user)))
+    Ok(Json(ApiResponse::success(UserInfo::from(&user))))
 }

@@ -2,17 +2,18 @@
 //! 最小限の依存関係で動作するバージョン
 
 use axum::{
-    routing::{get, post, put, delete},
-    Json, Router, extract::{Path, State, Query},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::Html,
+    routing::{delete, get, post, put},
+    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
-use tower_http::cors::CorsLayer;
 use std::sync::{Arc, Mutex};
 use tokio;
+use tower_http::cors::CorsLayer;
 
 // インメモリデータストア（プロトタイプ用）
 #[derive(Clone)]
@@ -26,26 +27,32 @@ impl InMemoryStore {
     fn new() -> Self {
         let mut posts = HashMap::new();
         let mut users = HashMap::new();
-        
+
         // サンプルデータ
-        posts.insert("1".to_string(), Post {
-            id: "1".to_string(),
-            title: "Welcome to Rust CMS".to_string(),
-            content: "This is a high-performance CMS built with Rust and Axum.".to_string(),
-            status: PostStatus::Published,
-            author_id: "admin".to_string(),
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        });
-        
-        users.insert("admin".to_string(), User {
-            id: "admin".to_string(),
-            username: "admin".to_string(),
-            email: "admin@example.com".to_string(),
-            role: UserRole::Admin,
-            is_active: true,
-            created_at: chrono::Utc::now(),
-        });
+        posts.insert(
+            "1".to_string(),
+            Post {
+                id: "1".to_string(),
+                title: "Welcome to Rust CMS".to_string(),
+                content: "This is a high-performance CMS built with Rust and Axum.".to_string(),
+                status: PostStatus::Published,
+                author_id: "admin".to_string(),
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+            },
+        );
+
+        users.insert(
+            "admin".to_string(),
+            User {
+                id: "admin".to_string(),
+                username: "admin".to_string(),
+                email: "admin@example.com".to_string(),
+                role: UserRole::Admin,
+                is_active: true,
+                created_at: chrono::Utc::now(),
+            },
+        );
 
         Self {
             posts: Arc::new(Mutex::new(posts)),
@@ -125,34 +132,7 @@ struct PaginationQuery {
     per_page: Option<u32>,
 }
 
-#[derive(Serialize)]
-struct ApiResponse<T> {
-    success: bool,
-    data: Option<T>,
-    error: Option<String>,
-    timestamp: chrono::DateTime<chrono::Utc>,
-}
-
-impl<T> ApiResponse<T> {
-    fn success(data: T) -> Self {
-        Self {
-            success: true,
-            data: Some(data),
-            error: None,
-            timestamp: chrono::Utc::now(),
-        }
-    }
-    
-    #[allow(dead_code)]
-    fn error(message: &str) -> Self {
-        Self {
-            success: false,
-            data: None,
-            error: Some(message.to_string()),
-            timestamp: chrono::Utc::now(),
-        }
-    }
-}
+use cms_backend::utils::api_types::ApiResponse;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -170,24 +150,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/", get(home))
         .route("/health", get(health_check))
         .route("/api/docs", get(api_docs))
-        
         // 投稿管理
         .route("/api/posts", get(get_posts))
         .route("/api/posts", post(create_post))
         .route("/api/posts/:id", get(get_post))
         .route("/api/posts/:id", put(update_post))
         .route("/api/posts/:id", delete(delete_post))
-        
         // ユーザー管理
         .route("/api/users", get(get_users))
         .route("/api/users/:id", get(get_user))
-        
         // 設定
         .route("/api/settings", get(get_settings))
-        
         // 管理情報
         .route("/api/admin/stats", get(admin_stats))
-        
         .layer(CorsLayer::permissive())
         .with_state(store);
 
@@ -197,17 +172,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|_| "3001".to_string())
         .parse::<u16>()
         .unwrap_or(3001);
-    
+
     let addr = format!("{}:{}", host, port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    
+
     println!("🚀 シンプルCMS Backend starting on http://{}", addr);
     println!("📚 Health check: http://{}/health", addr);
     println!("📖 API Documentation: http://{}/api/docs", addr);
     println!("🏠 Home page: http://{}/", addr);
 
     axum::serve(listener, app).await?;
-    
+
     Ok(())
 }
 
@@ -256,7 +231,7 @@ async fn home() -> Html<String> {
 async fn health_check(State(store): State<InMemoryStore>) -> Json<ApiResponse<serde_json::Value>> {
     let posts_count = store.posts.lock().unwrap().len();
     let users_count = store.users.lock().unwrap().len();
-    
+
     Json(ApiResponse::success(json!({
         "status": "healthy",
         "message": "Rust CMS Backend is running",
@@ -278,24 +253,24 @@ async fn health_check(State(store): State<InMemoryStore>) -> Json<ApiResponse<se
 
 async fn get_posts(
     State(store): State<InMemoryStore>,
-    Query(pagination): Query<PaginationQuery>
+    Query(pagination): Query<PaginationQuery>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     let posts = store.posts.lock().unwrap();
     let page = pagination.page.unwrap_or(1);
     let per_page = pagination.per_page.unwrap_or(10);
-    
+
     let all_posts: Vec<_> = posts.values().cloned().collect();
     let total = all_posts.len();
-    
+
     let start = ((page - 1) * per_page) as usize;
     let end = std::cmp::min(start + per_page as usize, total);
-    
+
     let paginated_posts = if start < total {
         all_posts[start..end].to_vec()
     } else {
         Vec::new()
     };
-    
+
     Json(ApiResponse::success(json!({
         "posts": paginated_posts,
         "pagination": {
@@ -311,10 +286,10 @@ async fn get_posts(
 
 async fn get_post(
     State(store): State<InMemoryStore>,
-    Path(id): Path<String>
+    Path(id): Path<String>,
 ) -> Result<Json<ApiResponse<Post>>, StatusCode> {
     let posts = store.posts.lock().unwrap();
-    
+
     match posts.get(&id) {
         Some(post) => Ok(Json(ApiResponse::success(post.clone()))),
         None => Err(StatusCode::NOT_FOUND),
@@ -323,11 +298,11 @@ async fn get_post(
 
 async fn create_post(
     State(store): State<InMemoryStore>,
-    Json(request): Json<CreatePostRequest>
+    Json(request): Json<CreatePostRequest>,
 ) -> Json<ApiResponse<Post>> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now();
-    
+
     let post = Post {
         id: id.clone(),
         title: request.title,
@@ -337,19 +312,19 @@ async fn create_post(
         created_at: now,
         updated_at: now,
     };
-    
+
     store.posts.lock().unwrap().insert(id, post.clone());
-    
+
     Json(ApiResponse::success(post))
 }
 
 async fn update_post(
     State(store): State<InMemoryStore>,
     Path(id): Path<String>,
-    Json(request): Json<UpdatePostRequest>
+    Json(request): Json<UpdatePostRequest>,
 ) -> Result<Json<ApiResponse<Post>>, StatusCode> {
     let mut posts = store.posts.lock().unwrap();
-    
+
     match posts.get_mut(&id) {
         Some(post) => {
             if let Some(title) = request.title {
@@ -362,7 +337,7 @@ async fn update_post(
                 post.status = status;
             }
             post.updated_at = chrono::Utc::now();
-            
+
             Ok(Json(ApiResponse::success(post.clone())))
         }
         None => Err(StatusCode::NOT_FOUND),
@@ -371,10 +346,10 @@ async fn update_post(
 
 async fn delete_post(
     State(store): State<InMemoryStore>,
-    Path(id): Path<String>
+    Path(id): Path<String>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
     let mut posts = store.posts.lock().unwrap();
-    
+
     match posts.remove(&id) {
         Some(_) => Ok(Json(ApiResponse::success(json!({
             "message": "Post deleted successfully",
@@ -387,16 +362,16 @@ async fn delete_post(
 async fn get_users(State(store): State<InMemoryStore>) -> Json<ApiResponse<Vec<User>>> {
     let users = store.users.lock().unwrap();
     let users_list: Vec<_> = users.values().cloned().collect();
-    
+
     Json(ApiResponse::success(users_list))
 }
 
 async fn get_user(
     State(store): State<InMemoryStore>,
-    Path(id): Path<String>
+    Path(id): Path<String>,
 ) -> Result<Json<ApiResponse<User>>, StatusCode> {
     let users = store.users.lock().unwrap();
-    
+
     match users.get(&id) {
         Some(user) => Ok(Json(ApiResponse::success(user.clone()))),
         None => Err(StatusCode::NOT_FOUND),
@@ -411,7 +386,7 @@ async fn get_settings(State(store): State<InMemoryStore>) -> Json<ApiResponse<Se
 async fn admin_stats(State(store): State<InMemoryStore>) -> Json<ApiResponse<serde_json::Value>> {
     let posts_count = store.posts.lock().unwrap().len();
     let users_count = store.users.lock().unwrap().len();
-    
+
     Json(ApiResponse::success(json!({
         "system_stats": {
             "total_posts": posts_count,
@@ -435,7 +410,8 @@ async fn admin_stats(State(store): State<InMemoryStore>) -> Json<ApiResponse<ser
 }
 
 async fn api_docs() -> Html<String> {
-    Html(format!(r#"
+    Html(format!(
+        r#"
 <!DOCTYPE html>
 <html>
 <head>
@@ -559,5 +535,7 @@ async fn api_docs() -> Html<String> {
     </div>
 </body>
 </html>
-    "#, env!("CARGO_PKG_VERSION")))
+    "#,
+        env!("CARGO_PKG_VERSION")
+    ))
 }

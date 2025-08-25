@@ -3,13 +3,15 @@ pub mod schema;
 
 pub use pool::{DatabasePool, Pool, PooledConnection};
 
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use uuid::Uuid;
 use crate::{
     config::DatabaseConfig,
-    models::{User, Post, CreateUserRequest, UpdateUserRequest, CreatePostRequest, UpdatePostRequest},
+    models::{
+        CreatePostRequest, CreateUserRequest, Post, UpdatePostRequest, UpdateUserRequest, User,
+    },
     Result,
 };
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use uuid::Uuid;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
 
@@ -21,7 +23,7 @@ pub struct Database {
 impl Database {
     pub async fn new(config: &DatabaseConfig) -> Result<Self> {
         let pool = DatabasePool::new(&config.url, config.max_connections)?;
-        
+
         if config.enable_migrations {
             Self::run_migrations(&pool)?;
         }
@@ -47,8 +49,6 @@ impl Database {
 
     // User CRUD operations
     pub async fn create_user(&self, request: CreateUserRequest) -> Result<User> {
-        
-
         // Build user with hashed password (this returns crate::AppError on failure)
         let user = User::new_with_password(
             request.username,
@@ -59,15 +59,20 @@ impl Database {
             request.role,
         )?;
 
-        let mut conn = self.get_connection()?;
+    let mut conn = self.get_connection()?;
 
-        // Insert and return the created user
-        let created: User = User::create(&mut conn, &user)?;
-        Ok(created)
+    // Insert and return the created user
+    let created: User = User::create(&mut conn, &user)?;
+
+    Ok(created)
     }
 
     /// List users helper used by admin CLI (stub)
-    pub async fn list_users(&self, _role: Option<&str>, _active_only: Option<bool>) -> Result<Vec<User>> {
+    pub async fn list_users(
+        &self,
+        _role: Option<&str>,
+        _active_only: Option<bool>,
+    ) -> Result<Vec<User>> {
         // Placeholder: return empty list
         Ok(vec![])
     }
@@ -83,7 +88,31 @@ impl Database {
         Err(crate::AppError::NotFound("User not found".to_string()))
     }
 
-    pub async fn get_users(&self, _page: u32, _limit: u32, _role: Option<String>, _active: Option<bool>, _sort: Option<String>) -> Result<Vec<User>> {
+    /// Find a user by email
+    pub async fn get_user_by_email(&self, email: &str) -> Result<User> {
+        let mut conn = self.get_connection()?;
+        let user =
+            crate::models::User::find_by_email(&mut conn, email)
+                .map_err(|e| crate::AppError::Internal(format!("DB error finding user by email: {}", e)))?;
+        Ok(user)
+    }
+
+    /// Update user's last login timestamp
+    pub async fn update_last_login(&self, id: Uuid) -> Result<()> {
+        let mut conn = self.get_connection()?;
+        crate::models::User::update_last_login(&mut conn, id)
+            .map_err(|e| crate::AppError::Internal(format!("DB error updating last_login: {}", e)))?;
+        Ok(())
+    }
+
+    pub async fn get_users(
+        &self,
+        _page: u32,
+        _limit: u32,
+        _role: Option<String>,
+        _active: Option<bool>,
+        _sort: Option<String>,
+    ) -> Result<Vec<User>> {
         // Placeholder implementation
         Ok(vec![])
     }
@@ -102,7 +131,7 @@ impl Database {
     pub async fn create_post(&self, request: CreatePostRequest) -> Result<Post> {
         use diesel::prelude::*;
 
-        let mut conn = self.get_connection()?;
+    let mut conn = self.get_connection()?;
 
         // Try to choose an author: prefer a user with role = 'admin', otherwise use the first user
         use crate::database::schema::users::dsl as users_dsl;
@@ -126,7 +155,7 @@ impl Database {
             .get_result(&mut conn)
             .map_err(|e| crate::AppError::Internal(format!("Failed to create post: {}", e)))?;
 
-        Ok(inserted)
+    Ok(inserted)
     }
 
     pub async fn get_post_by_id(&self, _id: Uuid) -> Result<Post> {
@@ -134,7 +163,15 @@ impl Database {
         Err(crate::AppError::NotFound("Post not found".to_string()))
     }
 
-    pub async fn get_posts(&self, _page: u32, _limit: u32, _status: Option<String>, _author: Option<Uuid>, _tag: Option<String>, _sort: Option<String>) -> Result<Vec<Post>> {
+    pub async fn get_posts(
+        &self,
+        _page: u32,
+        _limit: u32,
+        _status: Option<String>,
+        _author: Option<Uuid>,
+        _tag: Option<String>,
+        _sort: Option<String>,
+    ) -> Result<Vec<Post>> {
         // Placeholder implementation
         Ok(vec![])
     }
@@ -172,12 +209,10 @@ impl Database {
     }
 
     fn run_migrations(pool: &DatabasePool) -> Result<()> {
-        
-        
         let mut conn = pool.get()?;
         conn.run_pending_migrations(MIGRATIONS)
             .map_err(|e| crate::AppError::Internal(format!("Migration error: {}", e)))?;
-        
+
         Ok(())
     }
 }

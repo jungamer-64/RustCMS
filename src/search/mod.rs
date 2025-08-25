@@ -1,5 +1,5 @@
 //! Search Service - Full-text search with Tantivy
-//! 
+//!
 //! Provides high-performance search capabilities using Tantivy (Pure Rust):
 //! - Full-text search across posts and users
 //! - Faceted search with filters
@@ -7,13 +7,13 @@
 //! - Fuzzy search and autocomplete
 //! - Search analytics and suggestions
 
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tantivy::{
-    schema::{Schema, Field, STORED, STRING},
+    schema::{Field, Schema, STORED, STRING},
     Index, IndexReader, IndexWriter, TantivyError,
 };
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
 
 use crate::{
     config::SearchConfig,
@@ -139,17 +139,17 @@ impl SearchService {
             doc_type: Field::from_field_id(5),
             created_at: Field::from_field_id(6),
         };
-        
+
         // Create schema with minimum required fields
         let mut schema_builder = Schema::builder();
         let _id = schema_builder.add_text_field("id", STRING | STORED);
         let schema = schema_builder.build();
-        
+
         // Create index in memory for now
         let index = Index::create_in_ram(schema);
         let reader = index.reader()?;
         let writer = index.writer(50_000_000)?;
-        
+
         Ok(Self {
             index,
             reader,
@@ -158,27 +158,30 @@ impl SearchService {
             config,
         })
     }
-    
+
     /// Index a post
     pub async fn index_post(&self, _post: &Post) -> Result<()> {
         // Simplified implementation for now
         Ok(())
     }
-    
+
     /// Index a user
     pub async fn index_user(&self, _user: &User) -> Result<()> {
         // Simplified implementation for now
         Ok(())
     }
-    
+
     /// Remove document from index
     pub async fn remove_document(&self, _id: &str) -> Result<()> {
         // Simplified implementation for now
         Ok(())
     }
-    
+
     /// Search documents
-    pub async fn search(&self, _request: SearchRequest) -> Result<SearchResults<serde_json::Value>> {
+    pub async fn search(
+        &self,
+        _request: SearchRequest,
+    ) -> Result<SearchResults<serde_json::Value>> {
         // Simplified implementation for now
         Ok(SearchResults {
             hits: vec![],
@@ -187,33 +190,33 @@ impl SearchService {
             facets: vec![],
         })
     }
-    
+
     /// Get search suggestions
     pub async fn suggest(&self, _prefix: &str, _limit: usize) -> Result<Vec<String>> {
         // Simplified implementation for now
         Ok(vec![])
     }
-    
+
     /// Health check for search service
     pub async fn health_check(&self) -> Result<()> {
         // Simple check - try to get a searcher
         let _searcher = self.reader.searcher();
         Ok(())
     }
-    
+
     /// Get search statistics
     pub async fn get_stats(&self) -> Result<SearchStats> {
         let searcher = self.reader.searcher();
         let num_docs = searcher.num_docs() as usize;
-        
+
         Ok(SearchStats {
             total_documents: num_docs,
             post_count: 0, // Would require more complex querying
-            user_count: 0, // Would require more complex querying  
+            user_count: 0, // Would require more complex querying
             index_size_bytes: self.get_index_size()?,
         })
     }
-    
+
     /// Get index size in bytes
     fn get_index_size(&self) -> Result<u64> {
         let mut total_size = 0;

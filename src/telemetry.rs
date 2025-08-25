@@ -1,13 +1,12 @@
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
-use tracing_opentelemetry::OpenTelemetryLayer;
 use opentelemetry_jaeger::new_agent_pipeline;
+use tracing_opentelemetry::OpenTelemetryLayer;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 /// Initialize comprehensive telemetry for enterprise monitoring
 pub fn init_telemetry() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize OpenTelemetry tracer for distributed tracing
     let tracer = new_agent_pipeline()
-        .with_service_name("enterprise-cms")
-        .with_service_name(&format!("enterprise-cms-{}", env!("CARGO_PKG_VERSION")))
+    .with_service_name(format!("enterprise-cms-{}", env!("CARGO_PKG_VERSION")))
         .with_auto_split_batch(true)
         .with_max_packet_size(9216)
         .install_batch(opentelemetry::runtime::Tokio)?;
@@ -28,7 +27,7 @@ pub fn init_telemetry() -> Result<(), Box<dyn std::error::Error>> {
                 .with_thread_ids(true)
                 .with_file(true)
                 .with_line_number(true)
-                .json()  // Structured logging for production
+                .json(), // Structured logging for production
         )
         .with(opentelemetry_layer)
         .init();
@@ -50,7 +49,6 @@ fn init_metrics() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(feature = "monitoring")]
-
 
 /// Gracefully shutdown telemetry systems
 pub fn shutdown_telemetry() {

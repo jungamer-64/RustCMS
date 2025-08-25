@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::env;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -87,7 +87,7 @@ pub struct MediaConfig {
     pub cdn_url: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NotificationConfig {
     pub email: EmailConfig,
     pub webhooks: WebhookConfig,
@@ -238,14 +238,7 @@ impl Default for MediaConfig {
     }
 }
 
-impl Default for NotificationConfig {
-    fn default() -> Self {
-        Self {
-            email: EmailConfig::default(),
-            webhooks: WebhookConfig::default(),
-        }
-    }
-}
+// NotificationConfig derives Default
 
 impl Default for EmailConfig {
     fn default() -> Self {
@@ -270,11 +263,10 @@ impl Default for WebhookConfig {
     }
 }
 
-
 impl Config {
     pub fn from_env() -> Result<Self, crate::AppError> {
         dotenvy::dotenv().ok();
-        
+
         let config = config::Config::builder()
             .add_source(config::File::with_name("config/default").required(false))
             .add_source(config::File::with_name("config/local").required(false))
@@ -299,7 +291,9 @@ impl Config {
                 }
             } else if cfg.database.url.contains("${DATABASE_URL}") {
                 // If the config explicitly references the placeholder, fail if env var is missing.
-                return Err(crate::AppError::Config("DATABASE_URL must be set when referenced in config".to_string()));
+                return Err(crate::AppError::Config(
+                    "DATABASE_URL must be set when referenced in config".to_string(),
+                ));
             }
         }
 

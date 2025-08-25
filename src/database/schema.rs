@@ -100,11 +100,4 @@ diesel::joinable!(pages -> users (author_id));
 diesel::joinable!(media_files -> users (uploaded_by));
 diesel::joinable!(posts -> media_files (featured_image_id));
 
-diesel::allow_tables_to_appear_in_same_query!(
-    api_keys,
-    posts,
-    users,
-    pages,
-    media_files,
-    settings,
-);
+diesel::allow_tables_to_appear_in_same_query!(api_keys, posts, users, pages, media_files, settings,);

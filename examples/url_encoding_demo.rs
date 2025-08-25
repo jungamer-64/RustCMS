@@ -18,7 +18,7 @@ fn main() {
         "こんにちは世界",
         "Rust is awesome 🦀",
         "C++からRustへの移行",
-        "API設計のベストプラクティス"
+        "API設計のベストプラクティス",
     ];
 
     for title in titles {
@@ -39,8 +39,23 @@ fn main() {
 
     for param in test_params {
         match validate_url_param(param) {
-            Ok(_) => println!("✅ '{}' は有効です", if param.len() > 50 { &param[..50] } else { param }),
-            Err(e) => println!("❌ '{}' は無効です: {}", if param.len() > 50 { &param[..50] } else { param }, e),
+            Ok(_) => println!(
+                "✅ '{}' は有効です",
+                if param.len() > 50 {
+                    &param[..50]
+                } else {
+                    param
+                }
+            ),
+            Err(e) => println!(
+                "❌ '{}' は無効です: {}",
+                if param.len() > 50 {
+                    &param[..50]
+                } else {
+                    param
+                },
+                e
+            ),
         }
     }
     println!();
@@ -50,7 +65,7 @@ fn main() {
     let japanese_slug = "プログラミング-言語-比較";
     let encoded_slug = encode_slug(japanese_slug);
     let decoded_slug = decode_slug(&encoded_slug).unwrap();
-    
+
     println!("原文スラッグ: {}", japanese_slug);
     println!("エンコード: {}", encoded_slug);
     println!("デコード: {}", decoded_slug);

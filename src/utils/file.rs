@@ -1,11 +1,11 @@
-use std::path::{Path, PathBuf};
-use std::fs::{self, File};
-use std::io::{self, Read};
 use chrono::Datelike;
 use sha2::{Digest, Sha256};
-use uuid::Uuid;
+use std::fs::{self, File};
+use std::io::{self, Read};
+use std::path::{Path, PathBuf};
 use tokio::fs as async_fs;
 use tokio::io::AsyncReadExt;
+use uuid::Uuid;
 
 #[derive(Debug)]
 pub enum FileError {
@@ -84,7 +84,7 @@ pub fn calculate_file_hash(file_path: &Path) -> Result<String, FileError> {
     let mut file = File::open(file_path)?;
     let mut hasher = Sha256::new();
     let mut buffer = [0; 8192];
-    
+
     loop {
         let bytes_read = file.read(&mut buffer)?;
         if bytes_read == 0 {
@@ -92,7 +92,7 @@ pub fn calculate_file_hash(file_path: &Path) -> Result<String, FileError> {
         }
         hasher.update(&buffer[..bytes_read]);
     }
-    
+
     Ok(format!("{:x}", hasher.finalize()))
 }
 
@@ -101,7 +101,7 @@ pub async fn calculate_file_hash_async(file_path: &Path) -> Result<String, FileE
     let mut file = async_fs::File::open(file_path).await?;
     let mut hasher = Sha256::new();
     let mut buffer = [0; 8192];
-    
+
     loop {
         let bytes_read = file.read(&mut buffer).await?;
         if bytes_read == 0 {
@@ -109,7 +109,7 @@ pub async fn calculate_file_hash_async(file_path: &Path) -> Result<String, FileE
         }
         hasher.update(&buffer[..bytes_read]);
     }
-    
+
     Ok(format!("{:x}", hasher.finalize()))
 }
 
@@ -117,7 +117,7 @@ pub async fn calculate_file_hash_async(file_path: &Path) -> Result<String, FileE
 pub fn generate_safe_filename(original_name: &str) -> String {
     let uuid = Uuid::new_v4();
     let extension = get_file_extension(original_name).unwrap_or_default();
-    
+
     if extension.is_empty() {
         uuid.to_string()
     } else {
@@ -196,14 +196,15 @@ pub async fn delete_file_async(path: &Path) -> Result<(), FileError> {
 /// ファイル情報を取得
 pub fn get_file_info(path: &Path) -> Result<FileInfo, FileError> {
     let metadata = fs::metadata(path)?;
-    let filename = path.file_name()
+    let filename = path
+        .file_name()
         .and_then(|name| name.to_str())
         .ok_or(FileError::InvalidPath)?;
-    
+
     let extension = get_file_extension(filename).unwrap_or_default();
     let mime_type = get_mime_type(&extension);
     let hash = calculate_file_hash(path)?;
-    
+
     Ok(FileInfo {
         name: filename.to_string(),
         extension,
@@ -216,14 +217,15 @@ pub fn get_file_info(path: &Path) -> Result<FileInfo, FileError> {
 /// 非同期でファイル情報を取得
 pub async fn get_file_info_async(path: &Path) -> Result<FileInfo, FileError> {
     let metadata = async_fs::metadata(path).await?;
-    let filename = path.file_name()
+    let filename = path
+        .file_name()
         .and_then(|name| name.to_str())
         .ok_or(FileError::InvalidPath)?;
-    
+
     let extension = get_file_extension(filename).unwrap_or_default();
     let mime_type = get_mime_type(&extension);
     let hash = calculate_file_hash_async(path).await?;
-    
+
     Ok(FileInfo {
         name: filename.to_string(),
         extension,
@@ -249,7 +251,8 @@ pub fn get_mime_type(extension: &str) -> String {
         "webm" => "video/webm",
         "ogg" => "video/ogg",
         _ => "application/octet-stream",
-    }.to_string()
+    }
+    .to_string()
 }
 
 /// ファイルサイズを人間が読みやすい形式に変換
@@ -257,12 +260,12 @@ pub fn format_file_size(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
     let mut size = bytes as f64;
     let mut unit_index = 0;
-    
+
     while size >= 1024.0 && unit_index < UNITS.len() - 1 {
         size /= 1024.0;
         unit_index += 1;
     }
-    
+
     if unit_index == 0 {
         format!("{} {}", bytes, UNITS[unit_index])
     } else {
@@ -276,7 +279,7 @@ pub fn generate_upload_path(base_dir: &Path, category: &str, filename: &str) -> 
     let date = chrono::Utc::now();
     let year = date.year();
     let month = date.month();
-    
+
     base_dir
         .join(category)
         .join(year.to_string())
@@ -334,7 +337,7 @@ mod tests {
     fn test_calculate_file_hash() {
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "test content").unwrap();
-        
+
         let hash = calculate_file_hash(temp_file.path()).unwrap();
         assert_eq!(hash.len(), 64); // SHA256は64文字
     }

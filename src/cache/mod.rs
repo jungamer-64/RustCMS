@@ -1,5 +1,5 @@
 //! Cache Service - Redis + In-memory caching
-//! 
+//!
 //! Provides high-performance caching with:
 //! - Redis for distributed caching
 //! - In-memory cache for ultra-fast access
@@ -7,19 +7,16 @@
 //! - Cache warming and prefetching
 //! - Cache statistics and monitoring
 
+use redis::{AsyncCommands, Client};
+use serde::{de::DeserializeOwned, Serialize};
+use serde_json;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::collections::HashMap;
-use tokio::sync::RwLock;
-use redis::{Client, AsyncCommands};
-use serde::{Serialize, de::DeserializeOwned};
-use serde_json;
 use thiserror::Error;
+use tokio::sync::RwLock;
 
-use crate::{
-    config::RedisConfig,
-    Result,
-};
+use crate::{config::RedisConfig, Result};
 
 #[derive(Debug, Error)]
 pub enum CacheError {
@@ -81,12 +78,12 @@ impl CacheService {
     /// Create new cache service
     pub async fn new(config: &RedisConfig) -> Result<Self> {
         let redis_client = Client::open(config.url.as_str())?;
-        
-    // Test connection (use multiplexed connection API)
-    let mut conn = redis_client.get_multiplexed_async_connection().await?;
-    let _: String = conn.set("test", "test").await?;
-    let _: bool = conn.del("test").await?;
-        
+
+        // Test connection (use multiplexed connection API)
+        let mut conn = redis_client.get_multiplexed_async_connection().await?;
+        let _: String = conn.set("test", "test").await?;
+        let _: bool = conn.del("test").await?;
+
         Ok(Self {
             redis_client,
             memory_cache: Arc::new(RwLock::new(HashMap::new())),
@@ -95,7 +92,7 @@ impl CacheService {
             max_memory_size: 1000, // Max 1000 items in memory
         })
     }
-    
+
     /// Set value in cache with TTL
     pub async fn set<T>(&self, key: String, value: &T, ttl: Option<Duration>) -> Result<()>
     where
@@ -103,15 +100,15 @@ impl CacheService {
     {
         let serialized = serde_json::to_vec(value)?;
         let full_key = format!("{}{}", self.config.key_prefix, key);
-        
-    // Set in Redis (multiplexed)
-    let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+
+        // Set in Redis (multiplexed)
+        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         if let Some(ttl) = ttl {
             let _: () = conn.set_ex(&full_key, &serialized, ttl.as_secs()).await?;
         } else {
             let _: () = conn.set(&full_key, &serialized).await?;
         }
-        
+
         // Set in memory cache
         let expires_at = ttl.map(|t| Instant::now() + t);
         let entry = CacheEntry {
@@ -120,30 +117,30 @@ impl CacheService {
             expires_at,
             hits: 0,
         };
-        
+
         let mut memory_cache = self.memory_cache.write().await;
-        
+
         // Evict old entries if cache is full
         if memory_cache.len() >= self.max_memory_size {
             self.evict_lru(&mut memory_cache).await;
         }
-        
+
         memory_cache.insert(full_key, entry);
-        
+
         // Update stats
         let mut stats = self.stats.write().await;
         stats.total_operations += 1;
-        
+
         Ok(())
     }
-    
+
     /// Get value from cache
     pub async fn get<T>(&self, key: &str) -> Result<Option<T>>
     where
         T: DeserializeOwned,
     {
         let full_key = format!("{}{}", self.config.key_prefix, key);
-        
+
         // Try memory cache first
         {
             let mut memory_cache = self.memory_cache.write().await;
@@ -160,24 +157,24 @@ impl CacheService {
                         // Cache hit
                         entry.hits += 1;
                         let value: T = serde_json::from_slice(&entry.value)?;
-                        
+
                         // Update stats
                         let mut stats = self.stats.write().await;
                         stats.memory_hits += 1;
                         stats.total_operations += 1;
-                        
+
                         return Ok(Some(value));
                     }
                 } else {
                     // No expiration, cache hit
                     entry.hits += 1;
                     let value: T = serde_json::from_slice(&entry.value)?;
-                    
+
                     // Update stats
                     let mut stats = self.stats.write().await;
                     stats.memory_hits += 1;
                     stats.total_operations += 1;
-                    
+
                     return Ok(Some(value));
                 }
             } else {
@@ -187,14 +184,14 @@ impl CacheService {
                 stats.total_operations += 1;
             }
         }
-        
+
         // Try Redis cache
-    let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         let result: Option<Vec<u8>> = conn.get(&full_key).await?;
-        
+
         if let Some(data) = result {
             let value: T = serde_json::from_slice(&data)?;
-            
+
             // Store in memory cache for next time
             let entry = CacheEntry {
                 value: data,
@@ -202,45 +199,45 @@ impl CacheService {
                 expires_at: None, // Redis handles TTL
                 hits: 1,
             };
-            
+
             let mut memory_cache = self.memory_cache.write().await;
             if memory_cache.len() >= self.max_memory_size {
                 self.evict_lru(&mut memory_cache).await;
             }
             memory_cache.insert(full_key, entry);
-            
+
             // Update stats
             let mut stats = self.stats.write().await;
             stats.redis_hits += 1;
-            
+
             Ok(Some(value))
         } else {
             // Cache miss
             let mut stats = self.stats.write().await;
             stats.redis_misses += 1;
-            
+
             Ok(None)
         }
     }
-    
+
     /// Delete value from cache
     pub async fn delete(&self, key: &str) -> Result<()> {
         let full_key = format!("{}{}", self.config.key_prefix, key);
-        
+
         // Remove from Redis
-    let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         let _: () = conn.del(&full_key).await?;
-        
+
         // Remove from memory cache
         self.memory_cache.write().await.remove(&full_key);
-        
+
         Ok(())
     }
-    
+
     /// Check if key exists in cache
     pub async fn exists(&self, key: &str) -> Result<bool> {
         let full_key = format!("{}{}", self.config.key_prefix, key);
-        
+
         // Check memory cache first
         {
             let memory_cache = self.memory_cache.read().await;
@@ -254,53 +251,53 @@ impl CacheService {
                 }
             }
         }
-        
+
         // Check Redis
-    let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         let exists: bool = conn.exists(&full_key).await?;
-        
+
         Ok(exists)
     }
-    
+
     /// Set TTL for existing key
     pub async fn expire(&self, key: &str, ttl: Duration) -> Result<()> {
         let full_key = format!("{}{}", self.config.key_prefix, key);
-        
+
         // Set TTL in Redis
-    let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         let _: () = conn.expire(&full_key, ttl.as_secs() as i64).await?;
-        
+
         // Update memory cache entry
         let mut memory_cache = self.memory_cache.write().await;
         if let Some(entry) = memory_cache.get_mut(&full_key) {
             entry.expires_at = Some(Instant::now() + ttl);
         }
-        
+
         Ok(())
     }
-    
+
     /// Clear all cache entries
     pub async fn clear(&self) -> Result<()> {
         // Clear Redis with pattern
         let pattern = format!("{}*", self.config.key_prefix);
-    let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
-        
+        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+
         let keys: Vec<String> = conn.keys(&pattern).await?;
         if !keys.is_empty() {
             let _: () = conn.del(&keys).await?;
         }
-        
+
         // Clear memory cache
         self.memory_cache.write().await.clear();
-        
+
         Ok(())
     }
-    
+
     /// Get cache statistics
     pub async fn get_stats(&self) -> CacheStats {
         let stats = self.stats.read().await;
         let cache_size = self.memory_cache.read().await.len();
-        
+
         let total_hits = stats.redis_hits + stats.memory_hits;
         let total_misses = stats.redis_misses + stats.memory_misses;
         let hit_ratio = if total_hits + total_misses > 0 {
@@ -308,7 +305,7 @@ impl CacheService {
         } else {
             0.0
         };
-        
+
         CacheStats {
             redis_hits: stats.redis_hits,
             redis_misses: stats.redis_misses,
@@ -319,41 +316,41 @@ impl CacheService {
             hit_ratio,
         }
     }
-    
+
     /// Health check
     pub async fn health_check(&self) -> Result<()> {
-    let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         let _: String = conn.set("health_check", "ok").await?;
         let _: bool = conn.del("health_check").await?;
         Ok(())
     }
-    
+
     /// Evict least recently used entries from memory cache
     async fn evict_lru(&self, memory_cache: &mut HashMap<String, CacheEntry<Vec<u8>>>) {
         if memory_cache.is_empty() {
             return;
         }
-        
+
         // Find entry with lowest hit count and oldest creation time
         let mut lru_key = String::new();
         let mut min_score = f64::MAX;
-        
+
         for (key, entry) in memory_cache.iter() {
             // Score based on hits and age (lower is more likely to be evicted)
             let age_seconds = entry.created_at.elapsed().as_secs_f64();
             let score = entry.hits as f64 / (age_seconds + 1.0);
-            
+
             if score < min_score {
                 min_score = score;
                 lru_key = key.clone();
             }
         }
-        
+
         if !lru_key.is_empty() {
             memory_cache.remove(&lru_key);
         }
     }
-    
+
     /// Warm cache with frequently accessed data
     pub async fn warm_cache(&self, keys: Vec<String>) -> Result<()> {
         for key in keys {
@@ -363,7 +360,7 @@ impl CacheService {
         }
         Ok(())
     }
-    
+
     /// Get cache memory usage
     pub async fn get_memory_usage(&self) -> usize {
         let memory_cache = self.memory_cache.read().await;
@@ -392,19 +389,19 @@ impl CacheKey {
     pub fn user(id: &str) -> String {
         format!("user:{}", id)
     }
-    
+
     pub fn post(id: &str) -> String {
         format!("post:{}", id)
     }
-    
+
     pub fn session(id: &str) -> String {
         format!("session:{}", id)
     }
-    
+
     pub fn search_results(query: &str, page: u32) -> String {
         format!("search:{}:{}", query, page)
     }
-    
+
     pub fn api_response(endpoint: &str, params: &str) -> String {
         format!("api:{}:{}", endpoint, params)
     }

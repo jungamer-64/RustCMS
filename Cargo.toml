@@ -8,6 +8,8 @@ license = "MIT"
 repository = "https://github.com/jungamer-64/Rust-CMS"
 keywords = ["cms", "backend", "postgresql", "tantivy", "biscuit-auth", "webauthn", "enterprise"]
 categories = ["web-programming", "database"]
+autobins = false
+default-run = "cms-server"
 
 [lib]
 name = "cms_backend"
@@ -29,16 +31,16 @@ path = "src/bin/admin.rs"
 # ===== WEB FRAMEWORK =====
 axum = { version = "0.7", features = ["multipart", "ws", "macros", "form"] }
 axum-extra = { version = "0.9", features = ["typed-header", "cookie", "query", "form"] }
-tower = { version = "0.4", features = ["full"] }
-tower-http = { version = "0.5", features = ["cors", "trace", "fs", "limit", "timeout", "request-id", "auth", "sensitive-headers", "compression-gzip", "normalize-path"], default-features = false }
 hyper = { version = "1.6", features = ["full"] }
 hyper-rustls = { version = "0.27", features = ["http2"], default-features = false }
+tower = { version = "0.4", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "fs", "limit", "timeout", "request-id", "auth", "sensitive-headers", "compression-gzip", "normalize-path"], default-features = false }
 
 # ===== ASYNC RUNTIME =====
-tokio = { version = "1.47", features = ["full"] }
-tokio-stream = { version = "0.1", features = ["full"] }
 futures = "0.3"
 futures-util = "0.3"
+tokio = { version = "1.47", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["full"] }
 
 # ===== SERIALIZATION =====
 serde = { version = "1.0", features = ["derive", "rc"] }
@@ -47,79 +49,72 @@ serde_yaml = "0.9"
 toml = "0.8"
 
 # ===== DATABASE & ORM (PostgreSQL + Diesel) =====
-diesel = { version = "2.1", features = ["postgres", "uuid", "chrono", "serde_json", "r2d2", "numeric", "network-address", "time"], optional = true }
-diesel_migrations = { version = "2.1", optional = true }
-diesel-derive-enum = { version = "2.1", optional = true }
-r2d2 = { version = "0.8", optional = true }
 deadpool-diesel = { version = "0.5", features = ["postgres", "rt_tokio_1"], optional = true }
+diesel = { version = "2.1", features = ["postgres", "uuid", "chrono", "serde_json", "r2d2", "numeric", "network-address", "time"], optional = true }
+diesel-derive-enum = { version = "2.1", optional = true }
+diesel_migrations = { version = "2.1", optional = true }
+r2d2 = { version = "0.8", optional = true }
 
 # ===== SEARCH ENGINE =====
 # Using Tantivy with ruzstd for pure Rust implementation
 tantivy = { version = "0.24", features = ["mmap"], default-features = false, optional = true }
 
 # ===== AUTHENTICATION & SECURITY =====
-# Modern token-based authentication with biscuit (Pure Rust)
-biscuit-auth = { version = "4.1", optional = true }
-# WebAuthn for passwordless authentication (Pure Rust)
-# Note: Temporarily disabled due to OpenSSL dependency conflict
-# webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation"], optional = true }
-# Password hashing (Pure Rust)
 argon2 = { version = "0.5", optional = true }
-# JWT tokens for compatibility (rustls only)
+biscuit-auth = { version = "4.1", optional = true }
 jsonwebtoken = { version = "9.2", default-features = false, features = ["use_pem"], optional = true }
-# OAuth2 support (rustls only)
 oauth2 = "5.0.0-rc.1"
 
 # ===== CACHING (Redis + In-Memory) =====
-redis = { version = "0.32.5", features = ["tokio-rustls-comp", "cluster", "streams"], default-features = false, optional = true }
 deadpool-redis = { version = "0.22.0", optional = true }
 moka = { version = "0.12", features = ["future"] }
+redis = { version = "0.32.5", features = ["tokio-rustls-comp", "cluster", "streams"], default-features = false, optional = true }
 
 # ===== TLS & CRYPTOGRAPHY (rustls only, no OpenSSL) =====
+aes-gcm = "0.10"
+hmac = "0.12"
+ring = "0.17"
 rustls = { version = "0.23", features = ["ring"] }
 rustls-pemfile = "2.0"
 rustls-webpki = "0.102"
-ring = "0.17"
 sha2 = "0.10"
-hmac = "0.12"
-aes-gcm = "0.10"
 
 # ===== UTILITIES =====
-uuid = { version = "1.18.0", features = ["v4", "v7", "serde", "fast-rng"] }
 chrono = { version = "0.4", features = ["serde", "clock"] }
-time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
-url = { version = "2.5", features = ["serde"] }
-percent-encoding = "2.3"
-urlencoding = "2.1"
-regex = "1.10"
 lazy_static = "1.4"
 once_cell = "1.19"
 parking_lot = "0.12"
+percent-encoding = "2.3"
+regex = "1.10"
+time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
+url = { version = "2.5", features = ["serde"] }
+urlencoding = "2.1"
+uuid = { version = "1.18.0", features = ["v4", "v7", "serde", "fast-rng"] }
 
 # ===== ERROR HANDLING =====
 anyhow = "1.0"
-thiserror = "1.0"
 color-eyre = "0.6"
+thiserror = "1.0"
 
 # ===== LOGGING & MONITORING (Comprehensive) =====
-tracing = { version = "0.1", features = ["log"] }
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "registry", "fmt"] }
-tracing-opentelemetry = { version = "0.21" }
-opentelemetry = { version = "0.20", features = ["rt-tokio"] }
-opentelemetry-jaeger = { version = "0.19", features = ["rt-tokio"] }
 metrics = { version = "0.22.4", optional = true }
 metrics-exporter-prometheus = { version = "0.17", optional = true }
-prometheus = { version = "0.13", optional = true }
 metrics-prometheus = { version = "0.6", optional = true }
+opentelemetry = { version = "0.20", features = ["rt-tokio"] }
+opentelemetry-jaeger = { version = "0.19", features = ["rt-tokio"] }
+prometheus = { version = "0.13", optional = true }
+tracing = { version = "0.1", features = ["log"] }
+tracing-opentelemetry = { version = "0.21" }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "registry", "fmt"] }
 
 # ===== CONFIGURATION =====
+clap = { version = "4.4", features = ["derive", "env"] }
 config = { version = "0.14", features = ["yaml", "toml", "json"] }
 dotenvy = "0.15"
-clap = { version = "4.4", features = ["derive", "env"] }
 
 # ===== VALIDATION =====
-validator = { version = "0.18", features = ["derive", "unic"] }
 garde = { version = "0.18", features = ["derive"] }
+validator = { version = "0.18", features = ["derive", "unic"] }
 
 # ===== MEDIA PROCESSING (Production) =====
 image = { version = "0.24", features = ["jpeg", "png", "webp", "avif"], default-features = false }
@@ -131,8 +126,8 @@ tempfile = "3.8"
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream", "multipart"], default-features = false }
 
 # ===== COMPRESSION (Pure Rust implementations) =====
-flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
 brotli = { version = "3.5", default-features = false }
+flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
 ruzstd = "0.5"
 
 # ===== RATE LIMITING & SECURITY =====
@@ -149,9 +144,9 @@ rand_chacha = "0.3"
 
 # ===== OPENAPI DOCUMENTATION (Complete) =====
 utoipa = { version = "4.2", features = ["axum_extras", "chrono", "uuid", "preserve_order", "openapi_extensions"] }
-utoipa-swagger-ui = { version = "6.0", features = ["axum"] }
-utoipa-redoc = { version = "3.0", features = ["axum"] }
 utoipa-rapidoc = { version = "3.0", features = ["axum"] }
+utoipa-redoc = { version = "3.0", features = ["axum"] }
+utoipa-swagger-ui = { version = "6.0", features = ["axum"] }
 
 # ===== EMAIL (Production with rustls) =====
 lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport", "builder"], default-features = false, optional = true }
@@ -160,85 +155,41 @@ lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport", 
 tokio-tungstenite = { version = "0.20", features = ["rustls-tls-native-roots"], default-features = false }
  
 [dev-dependencies]
-tokio-test = "0.4"
-testcontainers = "0.15"
+# Development and test helpers (alphabetical)
+assert_cmd = "2.0"
 criterion = { version = "0.5", features = ["html_reports"] }
+insta = "1.34"
+mockall = "0.12"
+predicates = "2.1"
+pretty_assertions = "1.4"
 proptest = "1.4"
 rstest = "0.18"
 serial_test = "3.0"
-pretty_assertions = "1.4"
-insta = "1.34"
-mockall = "0.12"
+testcontainers = "0.15"
+tokio-test = "0.4"
 wiremock = "0.6"
 
-# CLI integration test helpers
-assert_cmd = "2.0"
-predicates = "2.1"
-
 # ===== CLI DEPENDENCIES =====
-clap = { version = "4.4", features = ["derive"] }
-rpassword = "7.3"
+# Runtime CLI-only dependencies (alphabetical)
 num_cpus = "1.16"
-rand = "0.8"
+rpassword = "7.3"
 
 # ===== FEATURES (Enterprise Production) =====
 [features]
-# Default production features - core functionality without WebAuthn for now
-default = ["database", "search", "cache", "auth", "email", "compression"]
-
-# Core database functionality with PostgreSQL and Diesel
-database = [
-    "dep:diesel", 
-    "dep:diesel_migrations", 
-    "dep:diesel-derive-enum", 
-    "dep:deadpool-diesel",
-    "dep:r2d2"
-]
-
-# Full-text search functionality with Tantivy (Pure Rust)
-search = ["dep:tantivy"]
-
-# Distributed caching with Redis
-cache = ["dep:redis", "dep:deadpool-redis"]
-
-# Advanced authentication system
-auth = [
-    "dep:biscuit-auth", 
-    "dep:jsonwebtoken", 
-    "dep:argon2"
-]
-
-# WebAuthn passwordless authentication (Pure Rust)
-# Note: Temporarily disabled due to OpenSSL dependency
-# webauthn = [
-#     "auth",
-#     "dep:webauthn-rs"
-# ]
-
-# Email functionality
-email = ["dep:lettre"]
-
-# Monitoring and metrics
-monitoring = [
-    "dep:prometheus", 
-    "dep:metrics", 
-    "dep:metrics-prometheus"
-]
-
-# HTTP compression
+# Feature list (alphabetical keys). Arrays are sorted for consistency.
+auth = ["dep:argon2", "dep:biscuit-auth", "dep:jsonwebtoken"]
+cache = ["dep:deadpool-redis", "dep:redis"]
+dev-tools = []
 compression = []
-
-# Development features
-dev = ["database", "auth"]
-
-# Minimal features for testing
+database = ["dep:deadpool-diesel", "dep:diesel", "dep:diesel-derive-enum", "dep:diesel_migrations", "dep:r2d2"]
+default = ["auth", "cache", "compression", "database", "email", "search"]
+development = ["monitoring", "search"]
+dev = ["auth", "database"]
+email = ["dep:lettre"]
 minimal = []
-
-# Full production setup
+monitoring = ["dep:metrics", "dep:metrics-prometheus", "dep:prometheus"]
 production = ["default"]
-
-# Development and testing
-development = ["search", "monitoring"]
+search = ["dep:tantivy"]
 
 # ===== BUILD PROFILES (Optimized) =====
 [profile.dev]
@@ -261,9 +212,6 @@ codegen-units = 1
 panic = "abort"
 overflow-checks = false
 
-[profile.release.package."*"]
-opt-level = 3
-debug = false
 
 # ===== CARGO CONFIGURATION =====
 [workspace]
@@ -274,6 +222,83 @@ resolver = "2"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
-# ===== PATCH: unify metrics version =====
-[patch.crates-io]
+[package.metadata.deprecated_cargo_variants]
+files = ["Cargo_core.toml", "Cargo_minimal.toml", "Cargo_minimal_ssl.toml", "Cargo_production.toml", "Cargo-minimal.toml"]
+
+
+
+
+# ===== OPTIONAL BINARIES (DEV TOOLS) =====
+[[bin]]
+name = "run_docs"
+path = "src/bin/run_docs.rs"
+required-features = ["dev-tools"]
+
+[[bin]]
+name = "dump_openapi"
+path = "src/bin/dump_openapi.rs"
+required-features = ["dev-tools"]
+
+[[bin]]
+name = "dump_docs"
+path = "src/bin/dump_docs.rs"
+required-features = ["dev-tools"]
+
+[[bin]]
+name = "db_check"
+path = "src/bin/db_check.rs"
+required-features = ["dev-tools"]
+
+[[bin]]
+name = "setup"
+path = "src/bin/setup.rs"
+required-features = ["dev-tools"]
+
+[[bin]]
+name = "env-check"
+path = "src/bin/env-check.rs"
+required-features = ["dev-tools"]
+
+[[bin]]
+name = "add_sample_post"
+path = "src/bin/add_sample_post.rs"
+required-features = ["dev-tools"]
+
+[[bin]]
+name = "admin_cli_test"
+path = "src/bin/admin_cli_test.rs"
+required-features = ["dev-tools"]
+
+[[bin]]
+name = "admin_server"
+path = "src/bin/admin_server.rs"
+required-features = ["dev-tools"]
+
+[[bin]]
+name = "cms-lightweight"
+path = "src/bin/cms-lightweight.rs"
+required-features = ["dev-tools"]
+
+[[bin]]
+name = "cms-simple"
+path = "src/bin/cms-simple.rs"
+required-features = ["dev-tools"]
+
+[[bin]]
+name = "run_with_router"
+path = "src/bin/run_with_router.rs"
+required-features = ["dev-tools"]
+
+[[bin]]
+name = "simple-server"
+path = "src/bin/simple-server.rs"
+required-features = ["dev-tools"]
+
+
+[[bin]]
+name = "dev-tools"
+path = "src/bin/dev_tools.rs"
+required-features = ["dev-tools"]
+
+
 

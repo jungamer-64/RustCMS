@@ -1,12 +1,12 @@
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use diesel::prelude::*;
-use uuid::Uuid;
-use validator::Validate;
-use utoipa::ToSchema;
-use regex::Regex;
 use crate::database::schema::posts;
 use crate::error::{AppError, Result};
+use chrono::{DateTime, Utc};
+use diesel::prelude::*;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+use uuid::Uuid;
+use validator::Validate;
 
 lazy_static::lazy_static! {
     static ref SLUG_REGEX: Regex = Regex::new(r"^[a-z0-9-]+$").unwrap();
@@ -20,20 +20,12 @@ pub enum PostStatus {
 }
 
 impl PostStatus {
-    pub fn from_str(s: &str) -> Result<Self> {
+    pub fn parse_str(s: &str) -> Result<Self> {
         match s {
             "draft" => Ok(PostStatus::Draft),
             "published" => Ok(PostStatus::Published),
             "archived" => Ok(PostStatus::Archived),
             _ => Err(AppError::BadRequest(format!("Invalid post status: {}", s))),
-        }
-    }
-
-    pub fn to_string(&self) -> String {
-        match self {
-            PostStatus::Draft => "draft".to_string(),
-            PostStatus::Published => "published".to_string(),
-            PostStatus::Archived => "archived".to_string(),
         }
     }
 }
@@ -67,7 +59,7 @@ pub struct Post {
     pub status: String, // This matches the schema varchar field
     #[serde(skip_serializing_if = "Option::is_none")]
     pub featured_image_id: Option<Uuid>,
-    pub tags: Vec<String>, // This matches the schema array field
+    pub tags: Vec<String>,       // This matches the schema array field
     pub categories: Vec<String>, // This matches the schema array field
     #[serde(skip_serializing_if = "Option::is_none")]
     pub meta_title: Option<String>,
@@ -100,73 +92,87 @@ pub struct NewPost {
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreatePostRequest {
-    #[validate(length(min = 1, max = 255, message = "Title must be between 1 and 255 characters"))]
+    #[validate(length(
+        min = 1,
+        max = 255,
+        message = "Title must be between 1 and 255 characters"
+    ))]
     pub title: String,
-    
+
     #[validate(length(min = 1, message = "Content cannot be empty"))]
     pub content: String,
-    
+
     #[validate(length(max = 500, message = "Excerpt must be less than 500 characters"))]
     pub excerpt: Option<String>,
-    
+
     #[validate(length(max = 255, message = "Slug must be less than 255 characters"))]
     pub slug: Option<String>,
-    
+
     pub published: Option<bool>,
-    
+
     #[validate(length(max = 20, message = "Too many tags"))]
     pub tags: Option<Vec<String>>,
-    
+
     #[validate(length(max = 100, message = "Category name too long"))]
     pub category: Option<String>,
-    
+
     #[validate(url(message = "Featured image must be a valid URL"))]
     pub featured_image: Option<String>,
-    
+
     #[validate(length(max = 60, message = "Meta title must be less than 60 characters"))]
     pub meta_title: Option<String>,
-    
-    #[validate(length(max = 160, message = "Meta description must be less than 160 characters"))]
+
+    #[validate(length(
+        max = 160,
+        message = "Meta description must be less than 160 characters"
+    ))]
     pub meta_description: Option<String>,
-    
+
     pub published_at: Option<DateTime<Utc>>,
-    
+
     pub status: Option<PostStatus>,
 }
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdatePostRequest {
-    #[validate(length(min = 1, max = 255, message = "Title must be between 1 and 255 characters"))]
+    #[validate(length(
+        min = 1,
+        max = 255,
+        message = "Title must be between 1 and 255 characters"
+    ))]
     pub title: Option<String>,
-    
+
     #[validate(length(min = 1, message = "Content cannot be empty"))]
     pub content: Option<String>,
-    
+
     #[validate(length(max = 500, message = "Excerpt must be less than 500 characters"))]
     pub excerpt: Option<String>,
-    
+
     #[validate(length(max = 255, message = "Slug must be less than 255 characters"))]
     pub slug: Option<String>,
-    
+
     pub published: Option<bool>,
-    
+
     #[validate(length(max = 20, message = "Too many tags"))]
     pub tags: Option<Vec<String>>,
-    
+
     #[validate(length(max = 100, message = "Category name too long"))]
     pub category: Option<String>,
-    
+
     #[validate(url(message = "Featured image must be a valid URL"))]
     pub featured_image: Option<String>,
-    
+
     #[validate(length(max = 60, message = "Meta title must be less than 60 characters"))]
     pub meta_title: Option<String>,
-    
-    #[validate(length(max = 160, message = "Meta description must be less than 160 characters"))]
+
+    #[validate(length(
+        max = 160,
+        message = "Meta description must be less than 160 characters"
+    ))]
     pub meta_description: Option<String>,
-    
+
     pub published_at: Option<DateTime<Utc>>,
-    
+
     pub status: Option<PostStatus>,
 }
 
@@ -174,10 +180,10 @@ pub struct UpdatePostRequest {
 pub struct PostFilter {
     #[serde(default = "default_page")]
     pub page: usize,
-    
+
     #[serde(default = "default_limit")]
     pub limit: usize,
-    
+
     pub published: Option<bool>,
     pub author_id: Option<Uuid>,
     pub search: Option<String>,
@@ -286,8 +292,10 @@ impl Post {
 
     /// Check if post is published and publication date has passed
     pub fn is_publicly_visible(&self) -> bool {
-        self.status == "published" && self.published_at
-            .map_or(true, |pub_date| pub_date <= Utc::now())
+        self.status == "published"
+            && self
+                .published_at
+                .is_none_or(|pub_date| pub_date <= Utc::now())
     }
 
     /// Check if post is published
@@ -303,7 +311,7 @@ impl Post {
 
     /// Get post status enum for compatibility
     pub fn get_status(&self) -> Result<PostStatus> {
-        PostStatus::from_str(&self.status)
+    PostStatus::parse_str(&self.status)
     }
 
     /// Get author ID as string (for compatibility with existing code)
@@ -455,7 +463,8 @@ pub fn generate_slug(title: &str) -> String {
 fn strip_html(content: &str) -> String {
     // Basic HTML tag removal - in production you'd use a proper HTML parser
     let tag_regex = regex::Regex::new(r"<[^>]*>").unwrap();
-    tag_regex.replace_all(content, " ")
+    tag_regex
+        .replace_all(content, " ")
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")

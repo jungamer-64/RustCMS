@@ -86,22 +86,8 @@ pub struct QueryParams {
     pub published: Option<bool>,
 }
 
-// レスポンス構造体
-#[derive(Debug, Serialize)]
-pub struct ApiResponse<T> {
-    pub success: bool,
-    pub data: Option<T>,
-    pub message: Option<String>,
-    pub pagination: Option<PaginationInfo>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PaginationInfo {
-    pub page: usize,
-    pub limit: usize,
-    pub total: usize,
-    pub total_pages: usize,
-}
+// Use shared API types
+use crate::utils::api_types::{ApiResponse, Pagination};
 
 // インメモリストレージ
 #[derive(Debug, Clone)]
@@ -175,23 +161,23 @@ fn generate_slug(title: &str) -> String {
         .join("-")
 }
 
-fn paginate<T: Clone>(items: &[T], page: usize, limit: usize) -> (Vec<T>, PaginationInfo) {
+fn paginate<T: Clone>(items: &[T], page: usize, per_page: usize) -> (Vec<T>, Pagination) {
     let total = items.len();
-    let total_pages = (total as f64 / limit as f64).ceil() as usize;
-    let start = (page - 1) * limit;
-    let end = std::cmp::min(start + limit, total);
-    
+    let total_pages = (total as f64 / per_page as f64).ceil() as usize;
+    let start = (page - 1) * per_page;
+    let end = std::cmp::min(start + per_page, total);
+
     let paginated_items = if start < total {
         items[start..end].to_vec()
     } else {
         vec![]
     };
 
-    let pagination = PaginationInfo {
-        page,
-        limit,
-        total,
-        total_pages,
+    let pagination = Pagination {
+        page: page as u32,
+        per_page: per_page as u32,
+        total: total as u64,
+        total_pages: total_pages as u32,
     };
 
     (paginated_items, pagination)
@@ -201,17 +187,12 @@ fn paginate<T: Clone>(items: &[T], page: usize, limit: usize) -> (Vec<T>, Pagina
 
 // ヘルスチェック
 async fn health_check() -> impl IntoResponse {
-    Json(ApiResponse {
-        success: true,
-        data: Some(serde_json::json!({
-            "status": "healthy",
-            "service": "Simple CMS",
-            "version": "1.0.0",
-            "timestamp": chrono::Utc::now().to_rfc3339()
-        })),
-        message: Some("Service is running".to_string()),
-        pagination: None,
-    })
+    Json(ApiResponse::success(serde_json::json!({
+        "status": "healthy",
+        "service": "Simple CMS",
+        "version": "1.0.0",
+        "timestamp": chrono::Utc::now().to_rfc3339()
+    })))
 }
 
 // 投稿関連のハンドラー
@@ -235,12 +216,7 @@ async fn get_posts(
     let limit = params.limit.unwrap_or(10).min(100);
     let (paginated_posts, pagination) = paginate(&post_list, page, limit);
 
-    Json(ApiResponse {
-        success: true,
-        data: Some(paginated_posts),
-        message: None,
-        pagination: Some(pagination),
-    })
+    Json(ApiResponse::success(crate::utils::api_types::PaginatedResponse { data: paginated_posts, pagination }))
 }
 
 async fn get_post(
@@ -250,21 +226,11 @@ async fn get_post(
     let posts = store.posts.read().unwrap();
     
     if let Some(post) = posts.get(&id) {
-        Json(ApiResponse {
-            success: true,
-            data: Some(post.clone()),
-            message: None,
-            pagination: None,
-        })
+    Json(ApiResponse::success(post.clone()))
     } else {
         (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<Post> {
-                success: false,
-                data: None,
-                message: Some("Post not found".to_string()),
-                pagination: None,
-            }),
+            Json(ApiResponse::error("Post not found".to_string())),
         )
     }
 }
@@ -291,12 +257,7 @@ async fn create_post(
 
     (
         StatusCode::CREATED,
-        Json(ApiResponse {
-            success: true,
-            data: Some(post),
-            message: Some("Post created successfully".to_string()),
-            pagination: None,
-        }),
+        Json(ApiResponse::success(post)),
     )
 }
 
@@ -322,21 +283,11 @@ async fn update_post(
         }
         post.updated_at = chrono::Utc::now().to_rfc3339();
 
-        Json(ApiResponse {
-            success: true,
-            data: Some(post.clone()),
-            message: Some("Post updated successfully".to_string()),
-            pagination: None,
-        })
+    Json(ApiResponse::success(post.clone()))
     } else {
         (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<Post> {
-                success: false,
-                data: None,
-                message: Some("Post not found".to_string()),
-                pagination: None,
-            }),
+            Json(ApiResponse::error("Post not found".to_string())),
         ).into_response()
     }
 }
@@ -348,21 +299,11 @@ async fn delete_post(
     let mut posts = store.posts.write().unwrap();
     
     if posts.remove(&id).is_some() {
-        Json(ApiResponse::<()> {
-            success: true,
-            data: None,
-            message: Some("Post deleted successfully".to_string()),
-            pagination: None,
-        })
+        Json(ApiResponse::success_with_message((), "Post deleted successfully".to_string()))
     } else {
         (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()> {
-                success: false,
-                data: None,
-                message: Some("Post not found".to_string()),
-                pagination: None,
-            }),
+            Json(ApiResponse::error("Post not found".to_string())),
         )
     }
 }
@@ -383,12 +324,7 @@ async fn get_users(
     let limit = params.limit.unwrap_or(10).min(100);
     let (paginated_users, pagination) = paginate(&user_list, page, limit);
 
-    Json(ApiResponse {
-        success: true,
-        data: Some(paginated_users),
-        message: None,
-        pagination: Some(pagination),
-    })
+    Json(ApiResponse::success(crate::utils::api_types::PaginatedResponse { data: paginated_users, pagination }))
 }
 
 async fn create_user(
@@ -409,12 +345,7 @@ async fn create_user(
 
     (
         StatusCode::CREATED,
-        Json(ApiResponse {
-            success: true,
-            data: Some(user),
-            message: Some("User created successfully".to_string()),
-            pagination: None,
-        }),
+        Json(ApiResponse::success_with_message(user, "User created successfully".to_string())),
     )
 }
 
@@ -439,12 +370,7 @@ async fn get_pages(
     let limit = params.limit.unwrap_or(10).min(100);
     let (paginated_pages, pagination) = paginate(&page_list, page, limit);
 
-    Json(ApiResponse {
-        success: true,
-        data: Some(paginated_pages),
-        message: None,
-        pagination: Some(pagination),
-    })
+    Json(ApiResponse::success(crate::utils::api_types::PaginatedResponse { data: paginated_pages, pagination }))
 }
 
 async fn create_page(
@@ -469,16 +395,10 @@ async fn create_page(
 
     (
         StatusCode::CREATED,
-        Json(ApiResponse {
-            success: true,
-            data: Some(page),
-            message: Some("Page created successfully".to_string()),
-            pagination: None,
-        }),
-    )
-}
+        Json(ApiResponse::success_with_message(page, "Page created successfully".to_string())),
+    );
 
-// 統計情報
+// 統計ハンドラー
 async fn get_stats(State(store): State<InMemoryStore>) -> impl IntoResponse {
     let posts = store.posts.read().unwrap();
     let users = store.users.read().unwrap();
@@ -487,20 +407,15 @@ async fn get_stats(State(store): State<InMemoryStore>) -> impl IntoResponse {
     let published_posts = posts.values().filter(|p| p.published).count();
     let published_pages = pages.values().filter(|p| p.published).count();
 
-    Json(ApiResponse {
-        success: true,
-        data: Some(serde_json::json!({
-            "total_posts": posts.len(),
-            "published_posts": published_posts,
-            "draft_posts": posts.len() - published_posts,
-            "total_users": users.len(),
-            "total_pages": pages.len(),
-            "published_pages": published_pages,
-            "draft_pages": pages.len() - published_pages,
-        })),
-        message: None,
-        pagination: None,
-    })
+    Json(ApiResponse::success(serde_json::json!({
+        "total_posts": posts.len(),
+        "published_posts": published_posts,
+        "draft_posts": posts.len() - published_posts,
+        "total_users": users.len(),
+        "total_pages": pages.len(),
+        "published_pages": published_pages,
+        "draft_pages": pages.len() - published_pages,
+    })))
 }
 
 // ドキュメンテーション
@@ -651,19 +566,14 @@ curl "http://localhost:3000/api/posts?published=true&page=1&limit=5"
     Html(html)
 }
 
-#[tokio::main]
-async fn main() {
-    // ストレージを初期化
-    let store = InMemoryStore::new();
-
-    // ルーターを構築
+// ルーターを構築
     let app = Router::new()
         // ヘルスチェック
         .route("/health", get(health_check))
         
         // ドキュメンテーション
-        .route("/", get(api_docs))
-        .route("/docs", get(api_docs))
+    .route("/", get(api_docs))
+    .route("/api/docs", get(api_docs))
         
         // 投稿関連
         .route("/api/posts", get(get_posts).post(create_post))
@@ -689,7 +599,7 @@ async fn main() {
     
     println!("🚀 Simple CMS Server starting...");
     println!("📍 Server running on: http://127.0.0.1:3000");
-    println!("📚 API Documentation: http://127.0.0.1:3000/docs");
+    println!("📚 API Documentation: http://127.0.0.1:3000/api/docs");
     println!("🔍 Health Check: http://127.0.0.1:3000/health");
     println!("📊 Statistics: http://127.0.0.1:3000/api/stats");
     println!();

@@ -1,34 +1,24 @@
-use axum::{extract::State, Json, http::StatusCode};
-use serde::{Deserialize, Serialize};
-use diesel::{RunQueryDsl, QueryDsl, ExpressionMethods};
+use axum::{extract::State, http::StatusCode, Json};
+use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
+use serde::Deserialize;
 
+use crate::utils::{api_types::ApiResponse, auth_utils, common_types::PostSummary};
 use crate::{AppState, Result};
 
-fn check_token(req_token: &str) -> bool {
-    std::env::var("ADMIN_TOKEN").map(|t| t == req_token).unwrap_or(false)
-}
-
-#[derive(Serialize)]
-pub struct PostSummary {
-    pub id: String,
-    pub title: String,
-    pub author_id: String,
-    pub status: String,
-    pub created_at: String,
-}
-
-pub async fn list_posts(State(state): State<AppState>, headers: axum::http::HeaderMap) -> Result<Json<Vec<PostSummary>>> {
+pub async fn list_posts(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> Result<Json<ApiResponse<Vec<PostSummary>>>> {
     // Simple header auth
     if let Some(val) = headers.get("x-admin-token") {
-        if !check_token(val.to_str().unwrap_or("")) {
+        if !auth_utils::check_admin_token(val.to_str().unwrap_or("")) {
             return Err(crate::AppError::Authentication("invalid token".to_string()));
         }
     } else {
         return Err(crate::AppError::Authentication("missing token".to_string()));
     }
 
-    let db = &state.database;
-    let mut conn = db.get_connection()?;
+    let mut conn = state.get_conn()?;
 
     #[derive(diesel::QueryableByName, Debug)]
     struct PostRow {
@@ -46,7 +36,7 @@ pub async fn list_posts(State(state): State<AppState>, headers: axum::http::Head
 
     let rows: Vec<PostRow> = diesel::sql_query("SELECT id, title, author_id, status, created_at FROM posts ORDER BY created_at DESC LIMIT 100")
         .load(&mut conn)
-        .map_err(|e| crate::AppError::Database(e))?;
+    .map_err(crate::AppError::Database)?;
 
     let out = rows
         .into_iter()
@@ -59,7 +49,7 @@ pub async fn list_posts(State(state): State<AppState>, headers: axum::http::Head
         })
         .collect();
 
-    Ok(Json(out))
+    Ok(Json(ApiResponse::success(out)))
 }
 
 #[derive(Deserialize)]
@@ -69,9 +59,13 @@ pub struct CreatePostBody {
     pub published: Option<bool>,
 }
 
-pub async fn create_post(State(state): State<AppState>, headers: axum::http::HeaderMap, Json(payload): Json<CreatePostBody>) -> Result<(StatusCode, Json<PostSummary>)> {
+pub async fn create_post(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Json(payload): Json<CreatePostBody>,
+) -> Result<(StatusCode, Json<ApiResponse<PostSummary>>)> {
     if let Some(val) = headers.get("x-admin-token") {
-        if !check_token(val.to_str().unwrap_or("")) {
+        if !auth_utils::check_admin_token(val.to_str().unwrap_or("")) {
             return Err(crate::AppError::Authentication("invalid token".to_string()));
         }
     } else {
@@ -94,8 +88,7 @@ pub async fn create_post(State(state): State<AppState>, headers: axum::http::Hea
         status: None,
     };
 
-    let db = &state.database;
-    let post = db.create_post(req).await?;
+    let post = state.db_create_post(req).await?;
 
     let out = PostSummary {
         id: post.id.to_string(),
@@ -105,26 +98,30 @@ pub async fn create_post(State(state): State<AppState>, headers: axum::http::Hea
         created_at: post.created_at.to_rfc3339(),
     };
 
-    Ok((StatusCode::CREATED, Json(out)))
+    Ok((StatusCode::CREATED, Json(ApiResponse::success(out))))
 }
 
-pub async fn delete_post(State(state): State<AppState>, headers: axum::http::HeaderMap, axum::extract::Path(id): axum::extract::Path<String>) -> Result<StatusCode> {
+pub async fn delete_post(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Result<StatusCode> {
     if let Some(val) = headers.get("x-admin-token") {
-        if !check_token(val.to_str().unwrap_or("")) {
+        if !auth_utils::check_admin_token(val.to_str().unwrap_or("")) {
             return Err(crate::AppError::Authentication("invalid token".to_string()));
         }
     } else {
         return Err(crate::AppError::Authentication("missing token".to_string()));
     }
 
-    let uuid = uuid::Uuid::parse_str(&id).map_err(|_| crate::AppError::BadRequest("invalid uuid".to_string()))?;
-    let db = &state.database;
-    let mut conn = db.get_connection()?;
+    let uuid = uuid::Uuid::parse_str(&id)
+        .map_err(|_| crate::AppError::BadRequest("invalid uuid".to_string()))?;
+    let mut conn = state.get_conn()?;
 
     use crate::database::schema::posts::dsl as posts_dsl;
     let deleted = diesel::delete(posts_dsl::posts.filter(posts_dsl::id.eq(uuid)))
         .execute(&mut conn)
-        .map_err(|e| crate::AppError::Database(e))?;
+    .map_err(crate::AppError::Database)?;
 
     if deleted == 0 {
         return Err(crate::AppError::NotFound("post not found".to_string()));

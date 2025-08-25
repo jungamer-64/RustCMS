@@ -1,8 +1,4 @@
-use axum::{
-    extract::Request,
-    http::HeaderValue,
-    response::Response,
-};
+use axum::{extract::Request, http::HeaderValue, response::Response};
 use tower::{Layer, Service};
 use uuid::Uuid;
 
@@ -13,6 +9,12 @@ pub struct RequestIdLayer;
 impl RequestIdLayer {
     pub fn new() -> Self {
         Self
+    }
+}
+
+impl Default for RequestIdLayer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -37,31 +39,34 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+    type Future = std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>,
+    >;
 
-    fn poll_ready(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
         self.service.poll_ready(cx)
     }
 
     fn call(&mut self, mut request: Request<B>) -> Self::Future {
         let request_id = Uuid::new_v4().to_string();
-        
+
         // Add request ID to headers
-        request.headers_mut().insert(
-            "X-Request-ID",
-            HeaderValue::from_str(&request_id).unwrap(),
-        );
+        request
+            .headers_mut()
+            .insert("X-Request-ID", HeaderValue::from_str(&request_id).unwrap());
 
         let mut service = self.service.clone();
         Box::pin(async move {
             let mut response = service.call(request).await?;
-            
+
             // Add request ID to response headers
-            response.headers_mut().insert(
-                "X-Request-ID",
-                HeaderValue::from_str(&request_id).unwrap(),
-            );
-            
+            response
+                .headers_mut()
+                .insert("X-Request-ID", HeaderValue::from_str(&request_id).unwrap());
+
             Ok(response)
         })
     }

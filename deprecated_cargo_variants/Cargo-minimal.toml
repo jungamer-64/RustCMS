@@ -8,53 +8,27 @@ name = "cms_backend"
 path = "src/lib.rs"
 
 [[bin]]
-name = "simple-server"
-path = "src/bin/simple-server.rs"
+name = "cms-backend"
+path = "src/main.rs"
 
 [dependencies]
-# Web Framework with rustls
 axum = { version = "0.7", features = ["multipart"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace", "fs", "compression-gzip", "limit", "timeout"], default-features = false }
 hyper = { version = "1.0", features = ["full"] }
 
-# Async Runtime
 tokio = { version = "1.35", features = ["full"] }
 
-# Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# Database - PostgreSQL with Diesel
 diesel = { version = "2.1", features = ["postgres", "uuid", "chrono", "serde_json", "r2d2"] }
 diesel_migrations = "2.1"
-
-# Authentication
 argon2 = "0.5"
 
-# Utilities
 uuid = { version = "1.7", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
 thiserror = "1.0"
-regex = "1.10"
-sha2 = "0.10"
-lazy_static = "1.4"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-rand = "0.8"
-base64 = "0.22"
-url = "2.5"
-percent-encoding = "2.3"
-urlencoding = "2.1"
-mime = "0.3"
 
-# Configuration
-dotenv = "0.15"
-
-# Validation
-validator = { version = "0.18", features = ["derive"] }
-
-# OpenAPI Documentation
-utoipa = { version = "4.2", features = ["axum_extras", "chrono", "uuid"] }
-utoipa-swagger-ui = { version = "6.0", features = ["axum"] }
+# trimmed

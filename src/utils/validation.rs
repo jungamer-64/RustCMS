@@ -1,10 +1,10 @@
-use validator::ValidationErrors;
-use std::collections::HashMap;
 use crate::AppError;
+use std::collections::HashMap;
+use validator::ValidationErrors;
 
 pub fn format_validation_errors(errors: &ValidationErrors) -> HashMap<String, Vec<String>> {
     let mut formatted = HashMap::new();
-    
+
     for (field, field_errors) in errors.field_errors() {
         let mut messages = Vec::new();
         for error in field_errors {
@@ -16,7 +16,7 @@ pub fn format_validation_errors(errors: &ValidationErrors) -> HashMap<String, Ve
         }
         formatted.insert(field.to_string(), messages);
     }
-    
+
     formatted
 }
 
@@ -30,12 +30,14 @@ pub fn validate_user_input(email: &str, password: Option<&str>) -> Result<(), Ap
     if !validate_email(email) {
         return Err(AppError::BadRequest("Invalid email format".to_string()));
     }
-    
+
     if let Some(pwd) = password {
         if pwd.len() < 6 {
-            return Err(AppError::BadRequest("Password must be at least 6 characters".to_string()));
+            return Err(AppError::BadRequest(
+                "Password must be at least 6 characters".to_string(),
+            ));
         }
     }
-    
+
     Ok(())
 }

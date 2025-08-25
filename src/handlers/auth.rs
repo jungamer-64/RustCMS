@@ -1,21 +1,17 @@
 //! Authentication Handlers
-//! 
+//!
 //! Handles user authentication, registration, and session management
 
 use axum::{
-    response::{IntoResponse, Json},
     extract::State,
     http::StatusCode,
+    response::{IntoResponse, Json},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use uuid::Uuid;
 
-use crate::{
-    AppState, Result,
-    models::{User, CreateUserRequest},
-    auth::LoginRequest,
-};
+use crate::utils::{api_types::ApiResponse, common_types::UserInfo};
+use crate::{auth::LoginRequest, models::CreateUserRequest, AppState, Result};
 
 /// Registration request
 #[derive(Debug, Deserialize)]
@@ -36,32 +32,6 @@ pub struct LoginResponse {
     pub expires_in: i64,
 }
 
-/// User info for responses
-#[derive(Debug, Serialize, Deserialize)]
-pub struct UserInfo {
-    pub id: Uuid,
-    pub username: String,
-    pub email: String,
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
-    pub role: String,
-    pub is_active: bool,
-}
-
-impl From<&User> for UserInfo {
-    fn from(user: &User) -> Self {
-        Self {
-            id: user.id,
-            username: user.username.clone(),
-            email: user.email.clone(),
-            first_name: user.first_name.clone(),
-            last_name: user.last_name.clone(),
-            role: user.role.clone(),
-            is_active: user.is_active,
-        }
-    }
-}
-
 /// Register a new user
 pub async fn register(
     State(state): State<AppState>,
@@ -77,9 +47,9 @@ pub async fn register(
         role: crate::models::UserRole::Subscriber, // Default role
     };
 
-    // Create user through auth service
-    let user = state.auth.create_user(create_request).await?;
-    
+    // Create user through AppState auth wrapper (records auth & DB metrics centrally)
+    let user = state.auth_create_user(create_request).await?;
+
     // Index user for search (optional feature)
     #[cfg(feature = "search")]
     if let Err(e) = state.search.index_user(&user).await {
@@ -87,8 +57,8 @@ pub async fn register(
         eprintln!("Failed to index user for search: {}", e);
     }
 
-    // Generate session token
-    let token = state.auth.create_session(user.id).await?;
+    // Generate session token via AppState wrapper (records metrics centrally)
+    let token = state.auth_create_session(user.id).await?;
 
     let response = LoginResponse {
         success: true,
@@ -97,7 +67,7 @@ pub async fn register(
         expires_in: 3600, // 1 hour
     };
 
-    Ok((StatusCode::CREATED, Json(response)))
+    Ok((StatusCode::CREATED, Json(ApiResponse::success(response))))
 }
 
 /// Login user
@@ -105,11 +75,11 @@ pub async fn login(
     State(state): State<AppState>,
     Json(request): Json<LoginRequest>,
 ) -> Result<impl IntoResponse> {
-    // Authenticate user
-    let user = state.auth.authenticate_user(request).await?;
-    
-    // Generate session token
-    let token = state.auth.create_session(user.id).await?;
+    // Authenticate user via AppState wrapper (records auth & DB metrics centrally)
+    let user = state.auth_authenticate(request).await?;
+
+    // Generate session token (recording handled in AppState wrapper)
+    let token = state.auth_create_session(user.id).await?;
 
     let response = LoginResponse {
         success: true,
@@ -118,7 +88,7 @@ pub async fn login(
         expires_in: 3600, // 1 hour
     };
 
-    Ok(Json(response))
+    Ok(Json(ApiResponse::success(response)))
 }
 
 /// Logout user
@@ -128,11 +98,11 @@ pub async fn logout(
 ) -> Result<impl IntoResponse> {
     // In a real implementation, you'd extract the token from the Authorization header
     // and invalidate it in the auth service
-    
-    Ok(Json(json!({
+
+    Ok(Json(ApiResponse::success(json!({
         "success": true,
         "message": "Successfully logged out"
-    })))
+    }))))
 }
 
 /// Get current user profile
@@ -141,19 +111,17 @@ pub async fn profile(
     // User would be extracted from middleware after token validation
 ) -> Result<impl IntoResponse> {
     // Placeholder - in real implementation, user ID would come from validated token
-    Ok(Json(json!({
+    Ok(Json(ApiResponse::success(json!({
         "success": true,
         "message": "Profile endpoint - requires authentication middleware"
-    })))
+    }))))
 }
 
 /// Refresh token
-pub async fn refresh_token(
-    State(_state): State<AppState>,
-) -> Result<impl IntoResponse> {
+pub async fn refresh_token(State(_state): State<AppState>) -> Result<impl IntoResponse> {
     // Placeholder for token refresh logic
-    Ok(Json(json!({
+    Ok(Json(ApiResponse::success(json!({
         "success": true,
         "message": "Token refresh endpoint"
-    })))
+    }))))
 }

@@ -49,7 +49,7 @@ cp .env.example .env
 
 ### 3. Access the Application
 - **Main Application**: http://localhost:3000
-- **API Documentation**: http://localhost:3000/docs
+- **API Documentation**: http://localhost:3000/api/docs
 - **Health Check**: http://localhost:3000/health
 - **pgAdmin**: http://localhost:5050 (admin@example.com / admin123)
 - **Elasticsearch Head**: http://localhost:9100

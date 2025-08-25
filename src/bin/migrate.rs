@@ -1,31 +1,27 @@
 //! Database migration utility for Enterprise CMS
-//! 
+//!
 //! Handles database schema migrations, data migrations, and database maintenance tasks.
 
-use cms_backend::{
-    config::Config,
-    database::Database,
-    Result,
-};
+use clap::{Parser, Subcommand};
+use cms_backend::{AppState, Result};
+use diesel::pg::PgConnection;
+use diesel::RunQueryDsl;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use std::env;
-use tracing::{info, error, warn};
-use clap::{Parser, Subcommand};
-use diesel::RunQueryDsl;
-use diesel::pg::PgConnection;
+use tracing::{error, info, warn};
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize logging
-    tracing_subscriber::fmt::init();
-    
-    info!("🔧 Enterprise CMS Database Migration Tool v{}", env!("CARGO_PKG_VERSION"));
-    
-    // Load configuration
-    let config = Config::from_env()?;
-    
+    // Initialize logging (config will be loaded by init_app_state)
+    let _config = cms_backend::utils::init::init_logging_and_config().await?;
+
+    info!(
+        "🔧 Enterprise CMS Database Migration Tool v{}",
+        env!("CARGO_PKG_VERSION")
+    );
+
     // Parse CLI using clap
     #[derive(Parser)]
     #[command(name = "cms-migrate", version = env!("CARGO_PKG_VERSION"), about = "Enterprise CMS Database Migration Tool")]
@@ -67,28 +63,29 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    // Connect to database
-    info!("🔗 Connecting to database...");
-    let database = Database::new(&config.database).await?;
+    // Initialize full AppState (includes database when feature enabled)
+    let app_state = cms_backend::utils::init::init_app_state().await?;
+    // Use AppState (contains database when feature enabled)
+    let state = &app_state;
 
     match cli.command {
         Commands::Migrate { no_seed } => {
             info!("📊 Running database migrations...");
-            run_migrations(&database).await?;
+            run_migrations(state).await?;
             info!("✅ Database migrations completed successfully");
 
             if no_seed {
                 info!("🔕 Skipping seeding because --no-seed was passed");
             } else {
                 info!("🌱 Seeding database with initial data (default)...");
-                seed_database(&database).await?;
+                seed_database(state).await?;
                 info!("✅ Database seeding completed");
             }
         }
         Commands::Rollback { steps } => {
             let steps = steps.unwrap_or(1);
             warn!("⚠️  Rolling back {} migration(s)...", steps);
-            rollback_migrations(&database, steps).await?;
+            rollback_migrations(state, steps).await?;
             info!("✅ Migration rollback completed");
         }
         Commands::Reset => {
@@ -99,7 +96,7 @@ async fn main() -> Result<()> {
             std::io::stdin().read_line(&mut input)?;
 
             if input.trim() == "YES" {
-                reset_database(&database).await?;
+                reset_database(state).await?;
                 info!("✅ Database reset completed");
             } else {
                 info!("❌ Database reset cancelled");
@@ -107,44 +104,44 @@ async fn main() -> Result<()> {
         }
         Commands::Seed => {
             info!("🌱 Seeding database with initial data...");
-            seed_database(&database).await?;
+            seed_database(state).await?;
             info!("✅ Database seeding completed");
         }
         Commands::Status => {
             info!("📊 Checking migration status...");
-            check_migration_status(&database).await?;
+            check_migration_status(state).await?;
         }
         Commands::Backup { path } => {
             let backup_path = path.as_deref().unwrap_or("./backups");
             info!("💾 Creating database backup to {}...", backup_path);
-            create_backup(&database, backup_path).await?;
+            create_backup(state, backup_path).await?;
             info!("✅ Database backup completed");
         }
         Commands::Restore { path } => {
             let backup_path = path;
             warn!("🔄 Restoring database from {}...", backup_path);
-            restore_backup(&database, &backup_path).await?;
+            restore_backup(state, &backup_path).await?;
             info!("✅ Database restore completed");
         }
     }
-    
+
     Ok(())
 }
 
 // `print_usage` was removed in favor of Clap-based automatic help generation.
 
-async fn run_migrations(database: &Database) -> Result<()> {
-    let mut conn = database.get_connection()?;
+async fn run_migrations(state: &AppState) -> Result<()> {
+    let mut conn = state.get_conn()?;
     conn.run_pending_migrations(MIGRATIONS)
         .map_err(|e| cms_backend::AppError::Internal(e.to_string()))?;
     Ok(())
 }
 
-async fn rollback_migrations(database: &Database, steps: usize) -> Result<()> {
-    let mut conn = database.get_connection()?;
-    
+async fn rollback_migrations(state: &AppState, steps: usize) -> Result<()> {
+    let mut conn = state.get_conn()?;
+
     for _ in 0..steps {
-    match conn.revert_last_migration(MIGRATIONS) {
+        match conn.revert_last_migration(MIGRATIONS) {
             Ok(_) => info!("✅ Reverted migration"),
             Err(e) => {
                 error!("❌ Failed to revert migration: {}", e);
@@ -152,20 +149,20 @@ async fn rollback_migrations(database: &Database, steps: usize) -> Result<()> {
             }
         }
     }
-    
+
     Ok(())
 }
 
-async fn reset_database(database: &Database) -> Result<()> {
+async fn reset_database(state: &AppState) -> Result<()> {
     info!("🗑️  Dropping all tables...");
-    
+
     // This is a simplified version - in production you'd want more sophisticated schema dropping
-    let mut conn = database.get_connection()?;
-    
+    let mut conn = state.get_conn()?;
+
     // Drop all tables (order matters due to foreign keys)
     let drop_statements = vec![
         "DROP TABLE IF EXISTS audit_logs CASCADE",
-        "DROP TABLE IF EXISTS api_keys CASCADE", 
+        "DROP TABLE IF EXISTS api_keys CASCADE",
         "DROP TABLE IF EXISTS user_sessions CASCADE",
         "DROP TABLE IF EXISTS comments CASCADE",
         "DROP TABLE IF EXISTS media_files CASCADE",
@@ -174,50 +171,52 @@ async fn reset_database(database: &Database) -> Result<()> {
         "DROP TABLE IF EXISTS tags CASCADE",
         "DROP TABLE IF EXISTS categories CASCADE",
         "DROP TABLE IF EXISTS posts CASCADE",
-    "DROP TABLE IF EXISTS webauthn_credentials CASCADE",
-    "DROP TABLE IF EXISTS users CASCADE",
-    "DROP TABLE IF EXISTS settings CASCADE",
-    // Drop both possible diesel migration tables to ensure clean reset
-    "DROP TABLE IF EXISTS __diesel_schema_migrations CASCADE",
-    "DROP TABLE IF EXISTS schema_migrations CASCADE",
+        "DROP TABLE IF EXISTS webauthn_credentials CASCADE",
+        "DROP TABLE IF EXISTS users CASCADE",
+        "DROP TABLE IF EXISTS settings CASCADE",
+        // Drop both possible diesel migration tables to ensure clean reset
+        "DROP TABLE IF EXISTS __diesel_schema_migrations CASCADE",
+        "DROP TABLE IF EXISTS schema_migrations CASCADE",
     ];
-    
+
     for statement in drop_statements {
         if let Err(e) = diesel::sql_query(statement).execute(&mut conn) {
             warn!("Failed to execute: {} - {}", statement, e);
         }
     }
-    
+
     info!("🔄 Recreating schema...");
-    run_migrations(database).await?;
-    
+    run_migrations(state).await?;
+
     // Ensure compatibility between possible diesel migration table names
     {
-        let mut conn = database.get_connection()?;
+    let mut conn = state.get_conn()?;
         ensure_schema_migrations_compat(&mut conn)?;
     }
-    
+
     Ok(())
 }
 
-async fn seed_database(database: &Database) -> Result<()> {
+async fn seed_database(state: &AppState) -> Result<()> {
     // Create initial admin user and default settings
-    let mut conn = database.get_connection()?;
-    
+    let mut conn = state.get_conn()?;
+
     // Check if already seeded
     use cms_backend::database::schema::users::dsl::*;
     use diesel::prelude::*;
-    
-    let existing_users: i64 = users.count().get_result(&mut conn)
-        .map_err(|e| cms_backend::AppError::Database(e))?;
-    
+
+    let existing_users: i64 = users
+        .count()
+        .get_result(&mut conn)
+    .map_err(cms_backend::AppError::Database)?;
+
     if existing_users > 0 {
         info!("📊 Database already contains data, skipping seeding");
         return Ok(());
     }
-    
+
     info!("👤 Creating admin user...");
-    
+
     // Create admin user (password: admin123)
     let admin_user = cms_backend::models::CreateUserRequest {
         username: "admin".to_string(),
@@ -228,15 +227,15 @@ async fn seed_database(database: &Database) -> Result<()> {
         last_name: Some("".to_string()),
     };
 
-    let _admin = database.create_user(admin_user).await?;
-    
+    let _admin = state.db_create_user(admin_user).await?;
+
     info!("⚙️  Creating default settings...");
-    
+
     // Insert default settings would go here
     // This is a simplified version
-    
+
     info!("📝 Creating sample content...");
-    
+
     // Create sample post
     let sample_post = cms_backend::models::CreatePostRequest {
         title: "Welcome to Enterprise CMS".to_string(),
@@ -254,8 +253,8 @@ async fn seed_database(database: &Database) -> Result<()> {
     };
 
     // Create the post using the created admin user's id
-    database.create_post(sample_post).await?;
-    
+    state.db_create_post(sample_post).await?;
+
     Ok(())
 }
 
@@ -269,12 +268,17 @@ fn fetch_applied_versions(conn: &mut PgConnection) -> Result<Vec<String>> {
         version: String,
     }
 
-    let rows: Vec<MigrationVersion> = match diesel::sql_query("SELECT version FROM schema_migrations ORDER BY version ASC").load(conn) {
-        Ok(r) => r,
-        Err(_) => diesel::sql_query("SELECT version FROM __diesel_schema_migrations ORDER BY version ASC")
+    let rows: Vec<MigrationVersion> =
+        match diesel::sql_query("SELECT version FROM schema_migrations ORDER BY version ASC")
+            .load(conn)
+        {
+            Ok(r) => r,
+            Err(_) => diesel::sql_query(
+                "SELECT version FROM __diesel_schema_migrations ORDER BY version ASC",
+            )
             .load(conn)
             .map_err(|e| cms_backend::AppError::Internal(e.to_string()))?,
-    };
+        };
 
     Ok(rows.into_iter().map(|r| r.version).collect())
 }
@@ -296,22 +300,23 @@ fn ensure_schema_migrations_compat(conn: &mut PgConnection) -> Result<()> {
     Ok(())
 }
 
-async fn check_migration_status(database: &Database) -> Result<()> {
-    let mut conn = database.get_connection()?;
+async fn check_migration_status(state: &AppState) -> Result<()> {
+    let mut conn = state.get_conn()?;
     // Use helper to fetch applied migration versions (handles both table names)
     let applied = fetch_applied_versions(&mut conn)?;
-    
+
     info!("📊 Migration Status:");
     info!("  Applied migrations: {}", applied.len());
-    
+
     for migration in applied {
         info!("  ✅ {}", migration);
     }
-    
+
     // Check for pending migrations
-    let pending = conn.pending_migrations(MIGRATIONS)
+    let pending = conn
+        .pending_migrations(MIGRATIONS)
         .map_err(|e| cms_backend::AppError::Internal(e.to_string()))?;
-    
+
     if pending.is_empty() {
         info!("  ✅ No pending migrations");
     } else {
@@ -320,42 +325,44 @@ async fn check_migration_status(database: &Database) -> Result<()> {
             info!("  ⏳ {}", migration.name());
         }
     }
-    
+
     Ok(())
 }
 
-async fn create_backup(_database: &Database, backup_path: &str) -> Result<()> {
+async fn create_backup(_state: &AppState, backup_path: &str) -> Result<()> {
     // This is a simplified version - in production you'd use pg_dump
     info!("💾 Creating backup at: {}", backup_path);
-    
+
     // Create backup directory if it doesn't exist
     if let Some(parent) = std::path::Path::new(backup_path).parent() {
         std::fs::create_dir_all(parent)?;
     }
-    
+
     // In a real implementation, you would:
     // 1. Use pg_dump to create a proper PostgreSQL backup
     // 2. Compress the backup file
     // 3. Upload to cloud storage (S3, etc.)
     // 4. Verify backup integrity
-    
+
     warn!("⚠️  Backup functionality not fully implemented - use pg_dump for production backups");
-    
+
     Ok(())
 }
 
-async fn restore_backup(_database: &Database, backup_path: &str) -> Result<()> {
+async fn restore_backup(_state: &AppState, backup_path: &str) -> Result<()> {
     // This is a simplified version - in production you'd use pg_restore
     info!("🔄 Restoring from backup: {}", backup_path);
-    
+
     // In a real implementation, you would:
     // 1. Validate backup file
     // 2. Create a new database or drop existing data
     // 3. Use pg_restore to restore the backup
     // 4. Run any necessary post-restore migrations
     // 5. Verify data integrity
-    
-    warn!("⚠️  Restore functionality not fully implemented - use pg_restore for production restores");
-    
+
+    warn!(
+        "⚠️  Restore functionality not fully implemented - use pg_restore for production restores"
+    );
+
     Ok(())
 }

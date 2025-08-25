@@ -37,10 +37,10 @@ impl RateLimitLayer {
     fn check_rate_limit(&self, ip: IpAddr) -> bool {
         let mut store = self.store.lock().unwrap();
         let now = Instant::now();
-        
+
         // Clean up expired entries
         store.retain(|_, info| now.duration_since(info.window_start) < self.window);
-        
+
         match store.get_mut(&ip) {
             Some(info) => {
                 if now.duration_since(info.window_start) >= self.window {
@@ -56,10 +56,13 @@ impl RateLimitLayer {
                 }
             }
             None => {
-                store.insert(ip, RateLimitInfo {
-                    requests: 1,
-                    window_start: now,
-                });
+                store.insert(
+                    ip,
+                    RateLimitInfo {
+                        requests: 1,
+                        window_start: now,
+                    },
+                );
                 true
             }
         }
@@ -91,24 +94,30 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+    type Future = std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>,
+    >;
 
-    fn poll_ready(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
         self.service.poll_ready(cx)
     }
 
     fn call(&mut self, request: Request<B>) -> Self::Future {
         // Extract IP address from request
         let ip = extract_ip_from_request(&request).unwrap_or(IpAddr::from([127, 0, 0, 1]));
-        
+
         if !self.rate_limiter.check_rate_limit(ip) {
             // Rate limit exceeded
             let response = (
                 StatusCode::TOO_MANY_REQUESTS,
                 [("Retry-After", "60")],
-                "Rate limit exceeded. Please try again later."
-            ).into_response();
-            
+                "Rate limit exceeded. Please try again later.",
+            )
+                .into_response();
+
             return Box::pin(async move { Ok(response) });
         }
 
@@ -128,7 +137,7 @@ fn extract_ip_from_request<B>(request: &Request<B>) -> Option<IpAddr> {
             }
         }
     }
-    
+
     // Try X-Real-IP header
     if let Some(real_ip) = request.headers().get("X-Real-IP") {
         if let Ok(ip_str) = real_ip.to_str() {
@@ -137,7 +146,7 @@ fn extract_ip_from_request<B>(request: &Request<B>) -> Option<IpAddr> {
             }
         }
     }
-    
+
     // Fall back to connection info (not available in this context)
     None
 }

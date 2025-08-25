@@ -1,9 +1,9 @@
-use std::{net::SocketAddr, sync::Arc};
-use tracing::{info, error};
 use axum::Router;
+use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
+use tracing::{error, info};
 
-use cms_backend::{AppState, routes::create_router, config::Config};
+use cms_backend::{config::Config, routes::create_router, AppState};
 
 async fn shutdown_signal() {
     // Wait for CTRL+C
@@ -16,29 +16,20 @@ async fn shutdown_signal() {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize telemetry/logging (best-effort)
-    let _ = cms_backend::telemetry::init_telemetry();
+    // Initialize full AppState and get config via AppState
+    let app_state = cms_backend::utils::init::init_app_state().await?;
+    let config = app_state.config.clone();
 
     info!("Starting admin server");
 
-    // Load configuration
-    let config = Arc::new(Config::from_env().map_err(|e| {
-        error!("Configuration error: {}", e);
-        format!("Failed to load configuration: {}", e)
-    })?);
-
-    // Initialize application state
-    let state = AppState::from_env().await.map_err(|e| {
-        error!("Failed to initialize application: {}", e);
-        format!("Application initialization failed: {}", e)
-    })?;
+    // Use the initialized state
+    let state = app_state;
 
     // Build router and attach state
     let app: Router = create_router().with_state(state);
 
     // Bind to configured address
-    let addr = format!("{}:{}", config.server.host, config.server.port)
-        .parse::<SocketAddr>()?;
+    let addr = format!("{}:{}", config.server.host, config.server.port).parse::<SocketAddr>()?;
 
     info!("Binding admin server to {}", addr);
 

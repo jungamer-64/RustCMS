@@ -1,5 +1,9 @@
 use chrono::Utc;
-use cms_backend::{Config, database::Database, models::post::{CreatePostRequest, PostStatus}};
+use cms_backend::{
+    database::Database,
+    models::post::{CreatePostRequest, PostStatus},
+    Config,
+};
 
 #[tokio::main]
 async fn main() {

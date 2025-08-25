@@ -5,7 +5,7 @@
 use cms_backend::{
     config::Config,
     database::Database,
-    models::{CreateUserRequest, CreatePostRequest, UserRole, PostStatus},
+    models::{CreatePostRequest, CreateUserRequest, PostStatus, UserRole},
     Result,
 };
 use tracing::{info, warn};
@@ -15,18 +15,17 @@ async fn main() -> Result<()> {
     // Initialize simple logging for CLI
     tracing_subscriber::fmt::init();
 
-    info!("🔧 Running Postgres setup CLI v{}", env!("CARGO_PKG_VERSION"));
+    info!(
+        "🔧 Running Postgres setup CLI v{}",
+        env!("CARGO_PKG_VERSION")
+    );
 
-    // Load configuration from environment
-    let config = Config::from_env()?;
-
-    // Connect to database
-    info!("🔗 Connecting to database...");
-    let database = Database::new(&config.database).await?;
+    // Initialize AppState (includes database)
+    let state = cms_backend::utils::init::init_app_state().await?;
 
     // Use the migrate/seed logic similar to the migration tool: if DB empty, seed it
     info!("🌱 Checking database for existing users...");
-    let mut conn = database.get_connection()?;
+    let mut conn = state.get_conn()?;
 
     use cms_backend::database::schema::users::dsl::*;
     use diesel::prelude::*;
@@ -37,7 +36,10 @@ async fn main() -> Result<()> {
         .map_err(|e| cms_backend::AppError::Database(e))?;
 
     if existing_users > 0 {
-        info!("✅ Database already contains users ({}), skipping seeding", existing_users);
+        info!(
+            "✅ Database already contains users ({}), skipping seeding",
+            existing_users
+        );
         return Ok(());
     }
 
@@ -52,16 +54,20 @@ async fn main() -> Result<()> {
         last_name: Some("".to_string()),
     };
 
-    let created_admin = database.create_user(admin_user).await?;
+    let created_admin = state.db_create_user(admin_user).await?;
 
-    info!("✅ Admin user created: {} ({})", created_admin.username, created_admin.id);
+    info!(
+        "✅ Admin user created: {} ({})",
+        created_admin.username, created_admin.id
+    );
 
     // Create a sample post
     info!("📝 Creating sample post...");
 
     let sample_post = CreatePostRequest {
         title: "Welcome to Enterprise CMS".to_string(),
-        content: "This is a high-performance, scalable CMS built with Rust and PostgreSQL.".to_string(),
+        content: "This is a high-performance, scalable CMS built with Rust and PostgreSQL."
+            .to_string(),
         excerpt: Some("Welcome to the future of content management.".to_string()),
         slug: None,
         published: Some(true),
@@ -74,7 +80,7 @@ async fn main() -> Result<()> {
         status: Some(PostStatus::Published),
     };
 
-    let _post = database.create_post(sample_post).await?;
+    let _post = state.db_create_post(sample_post).await?;
 
     info!("✅ Sample post created");
 

@@ -12,64 +12,64 @@ use crate::utils::api_types::{ApiResponse, ValidationError, ValidationErrorRespo
 pub enum AppError {
     #[error("Database error: {0}")]
     Database(String),
-    
+
     #[error("Configuration error: {0}")]
     Config(String),
-    
+
     #[error("Authentication failed: {0}")]
     Authentication(String),
-    
+
     #[error("Authorization failed: {0}")]
     Authorization(String),
-    
+
     #[error("Validation failed: {0}")]
     Validation(String),
-    
+
     #[error("Resource not found: {0}")]
     NotFound(String),
-    
+
     #[error("Resource conflict: {0}")]
     Conflict(String),
-    
+
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
-    
+
     #[error("Forbidden: {0}")]
     Forbidden(String),
-    
+
     #[error("Auth error: {0}")]
     Auth(String),
-    
+
     #[error("Biscuit token error: {0}")]
     BiscuitToken(String),
-    
+
     #[error("User not found")]
     UserNotFound,
-    
+
     #[error("User already exists")]
     UserAlreadyExists,
-    
+
     #[error("Invalid credentials")]
     InvalidCredentials,
-    
+
     #[error("Rate limit exceeded")]
     RateLimit,
-    
+
     #[error("Bad request: {0}")]
     BadRequest(String),
-    
+
     #[error("Internal server error: {0}")]
     InternalServer(String),
-    
+
     #[error("URL encoding error: {0}")]
     UrlEncoding(String),
-    
+
     #[error("Invalid URL parameter: {0}")]
     InvalidUrlParam(String),
-    
+
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
-    
+
     #[error("WebAuthn error: {0}")]
     WebAuthn(String),
 
@@ -81,16 +81,16 @@ pub enum AppError {
 
     #[error("URL parse error: {0}")]
     UrlParse(#[from] url::ParseError),
-    
+
     #[error("Internal error: {0}")]
     Internal(String),
-    
+
     #[error("JSON error: {0}")]
     Json(String),
-    
+
     #[error("IO error: {0}")]
     Io(String),
-    
+
     #[error("Validation errors")]
     ValidationErrors(Vec<ValidationError>),
 }
@@ -99,20 +99,28 @@ impl AppError {
     pub fn status_code(&self) -> StatusCode {
         match self {
             AppError::Config(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            AppError::Authentication(_) | AppError::Auth(_) | AppError::Unauthorized(_) | AppError::InvalidCredentials => StatusCode::UNAUTHORIZED,
+            AppError::Authentication(_)
+            | AppError::Auth(_)
+            | AppError::Unauthorized(_)
+            | AppError::InvalidCredentials => StatusCode::UNAUTHORIZED,
             AppError::Authorization(_) | AppError::Forbidden(_) => StatusCode::FORBIDDEN,
             AppError::Validation(_) | AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
             AppError::NotFound(_) | AppError::UserNotFound => StatusCode::NOT_FOUND,
             AppError::Conflict(_) | AppError::UserAlreadyExists => StatusCode::CONFLICT,
             AppError::RateLimit => StatusCode::TOO_MANY_REQUESTS,
             AppError::ValidationErrors(_) => StatusCode::UNPROCESSABLE_ENTITY,
-            AppError::UrlEncoding(_) | AppError::InvalidUrlParam(_) | AppError::UrlParse(_) => StatusCode::BAD_REQUEST,
+            AppError::UrlEncoding(_) | AppError::InvalidUrlParam(_) | AppError::UrlParse(_) => {
+                StatusCode::BAD_REQUEST
+            }
             AppError::WebAuthn(_) => StatusCode::BAD_REQUEST,
             AppError::Biscuit(_) | AppError::BiscuitToken(_) => StatusCode::UNAUTHORIZED,
             AppError::Redis(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            AppError::Database(_) | AppError::InternalServer(_) | AppError::Serialization(_) | AppError::Internal(_) | AppError::Json(_) | AppError::Io(_) => {
-                StatusCode::INTERNAL_SERVER_ERROR
-            }
+            AppError::Database(_)
+            | AppError::InternalServer(_)
+            | AppError::Serialization(_)
+            | AppError::Internal(_)
+            | AppError::Json(_)
+            | AppError::Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -152,20 +160,15 @@ impl AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let status = self.status_code();
-        
+
         let body = match self {
-            AppError::ValidationErrors(errors) => {
-                Json(ValidationErrorResponse {
-                    success: false,
-                    error: "Validation failed".to_string(),
-                    validation_errors: errors,
-                })
-                .into_response()
-            }
-            _ => {
-                Json(ApiResponse::<()>::error(self.error_message()))
-                    .into_response()
-            }
+            AppError::ValidationErrors(errors) => Json(ValidationErrorResponse {
+                success: false,
+                error: "Validation failed".to_string(),
+                validation_errors: errors,
+            })
+            .into_response(),
+            _ => Json(ApiResponse::<()>::error(self.error_message())).into_response(),
         };
 
         (status, body).into_response()

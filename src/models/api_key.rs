@@ -45,7 +45,7 @@ impl ApiKey {
         let now = Utc::now();
         let raw_key = Self::generate_key();
         let key_hash = Self::hash_key(&raw_key);
-        
+
         let api_key = Self {
             id: Uuid::new_v4(),
             name,
@@ -57,7 +57,7 @@ impl ApiKey {
             expires_at: None,
             last_used_at: None,
         };
-        
+
         (api_key, raw_key)
     }
 
@@ -77,7 +77,10 @@ impl ApiKey {
         api_key_id: Uuid,
     ) -> Result<ApiKey, AppError> {
         use crate::database::schema::api_keys::dsl::*;
-        api_keys.find(api_key_id).first(conn).map_err(AppError::from)
+        api_keys
+            .find(api_key_id)
+            .first(conn)
+            .map_err(AppError::from)
     }
 
     pub fn find_by_key_hash(
@@ -118,7 +121,7 @@ impl ApiKey {
                                 abcdefghijklmnopqrstuvwxyz\
                                 0123456789";
         let mut rng = rand::thread_rng();
-        
+
         (0..64)
             .map(|_| {
                 let idx = rng.gen_range(0..CHARSET.len());
@@ -128,12 +131,12 @@ impl ApiKey {
     }
 
     fn hash_key(key: &str) -> String {
-        use argon2::{Argon2, PasswordHasher};
         use argon2::password_hash::{rand_core::OsRng, SaltString};
-        
+        use argon2::{Argon2, PasswordHasher};
+
         let salt = SaltString::generate(&mut OsRng);
         let argon2 = Argon2::default();
-        
+
         argon2
             .hash_password(key.as_bytes(), &salt)
             .map(|hash| hash.to_string())
@@ -142,10 +145,10 @@ impl ApiKey {
 
     pub fn verify_key(&self, key: &str) -> Result<bool, AppError> {
         use argon2::{Argon2, PasswordHash, PasswordVerifier};
-        
+
         let parsed_hash = PasswordHash::new(&self.key_hash)
             .map_err(|e| AppError::Authentication(format!("Invalid hash format: {}", e)))?;
-        
+
         Ok(Argon2::default()
             .verify_password(key.as_bytes(), &parsed_hash)
             .is_ok())

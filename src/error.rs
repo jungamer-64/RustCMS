@@ -1,6 +1,7 @@
 use axum::{
+    http::StatusCode,
     response::{IntoResponse, Response},
-    Json, http::StatusCode,
+    Json,
 };
 use serde_json::json;
 use std::fmt;
@@ -127,59 +128,29 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_message) = match &self {
             #[cfg(feature = "database")]
-            AppError::Database(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Database error occurred",
-            ),
+            AppError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error occurred"),
             #[cfg(feature = "cache")]
-            AppError::Redis(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Cache error occurred",
-            ),
+            AppError::Redis(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Cache error occurred"),
             AppError::Validation(_) => (StatusCode::BAD_REQUEST, "Invalid input data"),
             AppError::Authentication(msg) => (StatusCode::UNAUTHORIZED, msg.as_str()),
             AppError::Authorization(msg) => (StatusCode::FORBIDDEN, msg.as_str()),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.as_str()),
             AppError::Conflict(msg) => (StatusCode::CONFLICT, msg.as_str()),
             AppError::RateLimit(msg) => (StatusCode::TOO_MANY_REQUESTS, msg.as_str()),
-            AppError::Internal(msg) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                msg.as_str(),
-            ),
+            AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str()),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.as_str()),
             #[cfg(feature = "auth")]
-            AppError::Argon2(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Password hashing error",
-            ),
+            AppError::Argon2(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Password hashing error"),
             #[cfg(feature = "auth")]
-            AppError::Jwt(_) => (
-                StatusCode::UNAUTHORIZED,
-                "Invalid authentication token",
-            ),
+            AppError::Jwt(_) => (StatusCode::UNAUTHORIZED, "Invalid authentication token"),
             AppError::Biscuit(msg) => (StatusCode::UNAUTHORIZED, msg.as_str()),
-            AppError::Search(msg) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                msg.as_str(),
-            ),
+            AppError::Search(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str()),
             AppError::Media(msg) => (StatusCode::BAD_REQUEST, msg.as_str()),
-            AppError::Config(msg) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                msg.as_str(),
-            ),
-            AppError::IO(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "IO error occurred",
-            ),
-            AppError::Serde(_) => (
-                StatusCode::BAD_REQUEST,
-                "Serialization error",
-            ),
+            AppError::Config(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str()),
+            AppError::IO(_) => (StatusCode::INTERNAL_SERVER_ERROR, "IO error occurred"),
+            AppError::Serde(_) => (StatusCode::BAD_REQUEST, "Serialization error"),
             #[cfg(feature = "search")]
-            AppError::Tantivy(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Search service error",
-            ),
+            AppError::Tantivy(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Search service error"),
         };
 
         let body = Json(json!({
