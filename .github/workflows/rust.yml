@@ -50,8 +50,8 @@ jobs:
       - name: Build workspace
         run: cargo build --workspace --all-targets --verbose
 
-      - name: Build gen_biscuit_keys binary
-        run: cargo build --bin gen_biscuit_keys --verbose
+      - name: Build all package binaries (ensure gen_biscuit_keys exists)
+        run: cargo build --package cms-backend --bins --verbose
 
       - name: Run tests
         env:
