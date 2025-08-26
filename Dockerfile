@@ -13,13 +13,15 @@ ARG BINARY="cms-server"
 WORKDIR /app
 
 # Install system deps commonly required by crates (OpenSSL, Postgres client libs, pkg-config)
+# Include nasm because some crates (eg. rav1e) build assembly via NASM during native build.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-       build-essential \
-       pkg-config \
-       libssl-dev \
-       libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+     && apt-get install -y --no-install-recommends \
+         build-essential \
+         pkg-config \
+         libssl-dev \
+         libpq-dev \
+         nasm \
+     && rm -rf /var/lib/apt/lists/*
 
 # Configure cargo paths so we can cache registry/git/target directories
 ENV CARGO_HOME=/usr/local/cargo
