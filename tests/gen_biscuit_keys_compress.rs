@@ -13,7 +13,7 @@ fn compress_creates_gz_backup() {
 
     // First run to create initial files via `cargo run --bin gen_biscuit_keys -- ...`
     let mut cmd = Command::new("cargo");
-    cmd.arg("run").arg("--package").arg("cms-backend").arg("--bin").arg("gen_biscuit_keys").arg("--")
+    cmd.arg("run").arg("--manifest-path").arg("Cargo.toml").arg("--bin").arg("gen_biscuit_keys").arg("--")
         .arg("--format").arg("files")
         .arg("--out-dir").arg(out_dir.to_string_lossy().as_ref())
         .arg("--backup")
@@ -23,7 +23,7 @@ fn compress_creates_gz_backup() {
 
     // run again with compress
     let mut cmd = Command::new("cargo");
-    cmd.arg("run").arg("--package").arg("cms-backend").arg("--bin").arg("gen_biscuit_keys").arg("--")
+    cmd.arg("run").arg("--manifest-path").arg("Cargo.toml").arg("--bin").arg("gen_biscuit_keys").arg("--")
         .arg("--format").arg("files")
         .arg("--out-dir").arg(out_dir.to_string_lossy().as_ref())
         .arg("--backup")
