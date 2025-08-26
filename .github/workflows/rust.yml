@@ -39,6 +39,11 @@ jobs:
           profile: minimal
           override: true
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm
+
       - name: Show Rust version
         run: rustc --version
 
@@ -48,6 +53,9 @@ jobs:
       - name: Run tests
         env:
           CARGO_TERM_COLOR: always
+          BISCUIT_PRIVATE_KEY_B64: ${{ secrets.BISCUIT_PRIVATE_KEY_B64 }}
+          BISCUIT_PUBLIC_KEY_B64: ${{ secrets.BISCUIT_PUBLIC_KEY_B64 }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           # Run all tests. Integration tests may require more resources; CI runners provide sufficient memory.
           cargo test --workspace --verbose
