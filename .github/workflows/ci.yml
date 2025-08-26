@@ -37,4 +37,8 @@ jobs:
         run: cargo build --workspace --all-targets -j1
 
       - name: Run tests
+        env:
+          BISCUIT_PRIVATE_KEY_B64: ${{ secrets.BISCUIT_PRIVATE_KEY_B64 }}
+          BISCUIT_PUBLIC_KEY_B64: ${{ secrets.BISCUIT_PUBLIC_KEY_B64 }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: cargo test --workspace -j1
