@@ -158,5 +158,3 @@ MIT
 
 - Issues: リポジトリの Issues
 - Documentation: `/api/docs`（実装されている場合）
-
----

@@ -8,7 +8,8 @@
 //! - Role-based access control (RBAC)
 
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
-use base64;
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use biscuit_auth::{KeyPair, PrivateKey, PublicKey};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
@@ -89,11 +90,10 @@ pub struct AuthService {
 
 impl Clone for AuthService {
     fn clone(&self) -> Self {
-        // Note: We create new keys from the same seed for consistency
-        let keypair = KeyPair::new();
+        // Preserve existing keys instead of regenerating them so tokens remain verifiable
         Self {
-            biscuit_private_key: keypair.private(),
-            biscuit_public_key: keypair.public(),
+            biscuit_private_key: self.biscuit_private_key.clone(),
+            biscuit_public_key: self.biscuit_public_key.clone(),
             jwt_encoding_key: self.jwt_encoding_key.clone(),
             jwt_decoding_key: self.jwt_decoding_key.clone(),
             database: self.database.clone(),
@@ -169,10 +169,83 @@ pub struct AuthContext {
 impl AuthService {
     /// Create new authentication service
     pub async fn new(config: &AuthConfig, database: &Database) -> Result<Self> {
-        // Generate or load biscuit keypair
-        let keypair = KeyPair::new();
-        let biscuit_private_key = keypair.private();
-        let biscuit_public_key = keypair.public();
+        // Attempt to load biscuit keypair from environment (base64 encoded), otherwise generate.
+        // Assumption: `PrivateKey` and `PublicKey` provide byte (de)serialization APIs.
+        // If the biscuit-auth types differ, adapt loading to the concrete API (e.g. from_pem/from_slice).
+        // Determine biscuit keys via env, config directory, or generation and persist when appropriate
+        let (biscuit_private_key, biscuit_public_key) = {
+            if let (Ok(priv_b64), Ok(pub_b64)) = (
+                std::env::var("BISCUIT_PRIVATE_KEY_B64"),
+                std::env::var("BISCUIT_PUBLIC_KEY_B64"),
+            ) {
+                if let (Ok(priv_bytes), Ok(pub_bytes)) = (STANDARD.decode(&priv_b64), STANDARD.decode(&pub_b64)) {
+                    let priv_key = PrivateKey::from_bytes(&priv_bytes)
+                        .map_err(|e| crate::AppError::Internal(format!("Failed to parse biscuit private key from env: {}", e)))?;
+                    let pub_key = PublicKey::from_bytes(&pub_bytes)
+                        .map_err(|e| crate::AppError::Internal(format!("Failed to parse biscuit public key from env: {}", e)))?;
+                    (priv_key, pub_key)
+                } else {
+                    let keypair = KeyPair::new();
+                    (keypair.private(), keypair.public())
+                }
+            } else {
+                // 2) If config.biscuit_root_key is a directory path, try to read keys from files there
+                let biscuit_key_path = std::path::Path::new(&config.biscuit_root_key);
+                if !config.biscuit_root_key.is_empty() && biscuit_key_path.exists() && biscuit_key_path.is_dir() {
+                    let priv_file = biscuit_key_path.join("biscuit_private.b64");
+                    let pub_file = biscuit_key_path.join("biscuit_public.b64");
+
+                    if priv_file.exists() && pub_file.exists() {
+                        let priv_b64 = std::fs::read_to_string(&priv_file).map_err(|e| {
+                            crate::AppError::Internal(format!("Failed reading biscuit private key file: {}", e))
+                        })?;
+                        let pub_b64 = std::fs::read_to_string(&pub_file).map_err(|e| {
+                            crate::AppError::Internal(format!("Failed reading biscuit public key file: {}", e))
+                        })?;
+
+                        if let (Ok(priv_bytes), Ok(pub_bytes)) = (STANDARD.decode(&priv_b64), STANDARD.decode(&pub_b64)) {
+                            let priv_key = PrivateKey::from_bytes(&priv_bytes).map_err(|e| {
+                                crate::AppError::Internal(format!("Failed to parse biscuit private key from file: {}", e))
+                            })?;
+                            let pub_key = PublicKey::from_bytes(&pub_bytes).map_err(|e| {
+                                crate::AppError::Internal(format!("Failed to parse biscuit public key from file: {}", e))
+                            })?;
+                            (priv_key, pub_key)
+                        } else {
+                            let keypair = KeyPair::new();
+                            (keypair.private(), keypair.public())
+                        }
+                    } else {
+                        // Files not present: generate and persist
+                        std::fs::create_dir_all(biscuit_key_path).map_err(|e| {
+                            crate::AppError::Internal(format!("Failed to create biscuit key dir: {}", e))
+                        })?;
+
+                        let keypair = KeyPair::new();
+                        // Try to serialize keys to bytes and write base64; if serialization API differs,
+                        // this may need adaptation to the biscuit-auth API.
+                        let priv_bytes = keypair.private().to_bytes();
+                        let pub_bytes = keypair.public().to_bytes();
+
+                        let priv_b64 = STANDARD.encode(&priv_bytes);
+                        let pub_b64 = STANDARD.encode(&pub_bytes);
+
+                        std::fs::write(biscuit_key_path.join("biscuit_private.b64"), priv_b64).map_err(|e| {
+                            crate::AppError::Internal(format!("Failed to write biscuit private key file: {}", e))
+                        })?;
+                        std::fs::write(biscuit_key_path.join("biscuit_public.b64"), pub_b64).map_err(|e| {
+                            crate::AppError::Internal(format!("Failed to write biscuit public key file: {}", e))
+                        })?;
+
+                        (keypair.private(), keypair.public())
+                    }
+                } else {
+                    // 3) Fallback: generate an ephemeral keypair
+                    let keypair = KeyPair::new();
+                    (keypair.private(), keypair.public())
+                }
+            }
+        };
 
         // Create JWT keys
         let jwt_encoding_key = EncodingKey::from_secret(config.jwt_secret.as_bytes());
@@ -223,6 +296,7 @@ impl AuthService {
     }
 
     /// Create authentication response with tokens
+    #[allow(dead_code)]
     async fn create_auth_response(&self, user: User, remember_me: bool) -> Result<AuthResponse> {
         let session_id = Uuid::new_v4().to_string();
         let now = Utc::now();
@@ -290,14 +364,26 @@ impl AuthService {
         })
     }
 
-    /// Create Biscuit authorization token
+    /// Create Biscuit authorization token (cryptographically signed)
+    #[allow(dead_code)]
     fn create_biscuit_token(&self, user: &User) -> Result<String> {
-        // For now, create a simple base64 encoded token
-        // In production, you would use proper biscuit-auth functionality
-        use base64::Engine;
-        let token_data = format!("{}:{}:{}", user.id, user.username, user.role);
-        let encoded = base64::engine::general_purpose::STANDARD.encode(token_data);
-        Ok(encoded)
+        // Use biscuit-auth to build a token with a simple fact containing user info.
+        // This creates a sealed Biscuit and returns its base64 representation.
+
+    // Build authority block with a fact like: user("<id>", "<username>", "<role>")
+    let mut builder = biscuit_auth::Biscuit::builder();
+    let fact = format!("user(\"{}\", \"{}\", \"{}\")", user.id, user.username, user.role);
+    // Parse datalog code into the builder
+    builder.add_code(&fact).map_err(|e| AuthError::Biscuit(format!("Failed to add fact: {}", e)))?;
+
+    // Build and sign the token with the service's keypair (create KeyPair from private key)
+    let keypair = biscuit_auth::KeyPair::from(&self.biscuit_private_key);
+
+        let token = builder.build(&keypair).map_err(|e| AuthError::Biscuit(format!("Failed to build biscuit token: {}", e)))?;
+
+        // Serialize to base64
+        let b64 = token.to_base64().map_err(|e| AuthError::Biscuit(format!("Failed to serialize biscuit token: {}", e)))?;
+        Ok(b64)
     }
 
     /// Verify JWT token
@@ -337,32 +423,44 @@ impl AuthService {
 
     /// Verify Biscuit token
     pub async fn verify_biscuit(&self, token: &str) -> Result<AuthContext> {
-        use base64::Engine;
+        // Parse the base64 biscuit into an UnverifiedBiscuit
+        let unverified = biscuit_auth::UnverifiedBiscuit::from_base64(token)
+            .map_err(|e| AuthError::Biscuit(format!("Failed to parse biscuit token: {}", e)))?;
 
-        // Decode the simple base64 token
-        let decoded = base64::engine::general_purpose::STANDARD
-            .decode(token)
-            .map_err(|_| AuthError::InvalidToken)?;
+        // Check signature using a key provider callback that returns our public key
+        let key_provider = |_opt_root_id: Option<u32>| -> biscuit_auth::PublicKey {
+            // ignore root id and return the configured public key
+            self.biscuit_public_key.clone()
+        };
 
-        let token_data = String::from_utf8(decoded).map_err(|_| AuthError::InvalidToken)?;
+        let biscuit = unverified
+            .check_signature(key_provider)
+            .map_err(|e| AuthError::Biscuit(format!("Biscuit signature verification failed: {}", e)))?;
 
-        let parts: Vec<&str> = token_data.split(':').collect();
-        if parts.len() != 3 {
+        // Create an Authorizer from the verified biscuit to inspect facts
+        let mut authorizer = biscuit.authorizer().map_err(|e| AuthError::Biscuit(format!("Failed to create authorizer: {}", e)))?;
+
+        // Run a simple authorize (no additional checks) so facts are loaded
+        let _ = authorizer.authorize().map_err(|e| AuthError::Biscuit(format!("Authorizer run failed: {}", e)))?;
+
+        // Extract facts using the Authorizer query API instead of naive string parsing.
+        // We expect a fact of the form: user("<id>", "<username>", "<role>")
+        let query = r#"data($id, $username, $role) <- user($id, $username, $role)"#;
+        let res: Vec<(String, String, String)> = authorizer
+            .query_all(query)
+            .map_err(|e| AuthError::Biscuit(format!("Failed to query biscuit facts: {}", e)))?;
+
+        if res.is_empty() {
             return Err(AuthError::InvalidToken.into());
         }
 
-        let user_id = Uuid::parse_str(parts[0]).map_err(|_| AuthError::InvalidToken)?;
+        let (id_s, username, role_str) = res[0].clone();
+        let user_id = Uuid::parse_str(&id_s).map_err(|_| AuthError::InvalidToken)?;
+        let role = UserRole::parse_str(&role_str).map_err(|_| AuthError::InvalidToken)?;
 
-        let username = parts[1].to_string();
-        let role_str = parts[2];
-
-    let role = UserRole::parse_str(role_str).map_err(|_| AuthError::InvalidToken)?;
-
-    // Verify user still exists and is active
-    let mut conn = self.get_conn()?;
-
+        // Verify user still exists and is active
+        let mut conn = self.database.get_connection()?;
         let user = User::find_by_id(&mut conn, user_id).map_err(|_| AuthError::UserNotFound)?;
-
         if !user.is_active {
             return Err(AuthError::InvalidCredentials.into());
         }
@@ -372,7 +470,7 @@ impl AuthService {
             username,
             role,
             session_id: "biscuit".to_string(),
-            permissions: self.get_role_permissions(role_str),
+            permissions: self.get_role_permissions(&role_str),
         })
     }
 

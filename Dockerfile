@@ -2,13 +2,13 @@
 ## Build-time args:
 ## - FEATURES: features string to pass to `cargo build` (e.g. "dev-tools,auth,database")
 ## - NO_DEFAULT_FEATURES: set to "true" to pass --no-default-features to cargo
-## - BINARY: which binary from target/release to copy/run (default: admin_server)
+## - BINARY: which binary from target/release to copy/run (default: cms-server)
 
 ARG RUST_VERSION=1.75
 FROM rust:${RUST_VERSION} AS builder
 ARG FEATURES=""
 ARG NO_DEFAULT_FEATURES="false"
-ARG BINARY="admin_server"
+ARG BINARY="cms-server"
 
 WORKDIR /app
 

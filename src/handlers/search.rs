@@ -15,7 +15,7 @@ use crate::{AppState, Result};
 
 #[cfg(feature = "search")]
 use crate::search::{
-    SearchRequest, SearchResults, SearchFilter, FilterOperator, SortOrder, SearchStats,
+    SearchRequest, SearchResults, SearchFilter, FilterOperator, SortOrder,
 };
 
 #[cfg(not(feature = "search"))]
