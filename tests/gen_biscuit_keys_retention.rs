@@ -1,8 +1,9 @@
 use assert_cmd::Command;
-use predicates::prelude::*;
 use std::fs;
-use std::path::PathBuf;
 use tempfile::tempdir;
+
+// How many times to generate backups in the smoke portion of this test.
+const NUM_BACKUPS_TO_GENERATE: usize = 5;
 
 #[test]
 fn retention_keeps_only_n_backups() {
