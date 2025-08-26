@@ -62,9 +62,11 @@ jobs:
       - name: Run tests
         env:
           CARGO_TERM_COLOR: always
-          BISCUIT_PRIVATE_KEY_B64: ${{ secrets.BISCUIT_PRIVATE_KEY_B64 }}
           BISCUIT_PUBLIC_KEY_B64: ${{ secrets.BISCUIT_PUBLIC_KEY_B64 }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          # Run all tests. Integration tests may require more resources; CI runners provide sufficient memory.
-          cargo test --workspace --verbose
+          # Write the private key to a temporary file with restricted permissions
+          echo "${{ secrets.BISCUIT_PRIVATE_KEY_B64 }}" > /tmp/biscuit_private_key.b64
+          chmod 600 /tmp/biscuit_private_key.b64
+          # Run all tests, passing the file path as an environment variable
+          BISCUIT_PRIVATE_KEY_B64_PATH=/tmp/biscuit_private_key.b64 cargo test --workspace --verbose
