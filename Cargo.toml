@@ -240,6 +240,10 @@ path = "src/bin/dump_openapi.rs"
 required-features = ["dev-tools"]
 
 [[bin]]
+name = "gen_biscuit_keys"
+path = "src/bin/gen_biscuit_keys.rs"
+
+[[bin]]
 name = "dump_docs"
 path = "src/bin/dump_docs.rs"
 required-features = ["dev-tools"]

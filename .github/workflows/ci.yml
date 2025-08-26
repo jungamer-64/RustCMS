@@ -26,19 +26,22 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            path: target
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y nasm
+      - name: Build dependencies
+        run: cargo fetch && cargo build --workspace --all-targets --release --locked
 
       - name: Build
-        run: cargo build --workspace --all-targets -j1
+        run: cargo build --workspace --all-targets --release
 
       - name: Run tests
         env:
           BISCUIT_PRIVATE_KEY_B64: ${{ secrets.BISCUIT_PRIVATE_KEY_B64 }}
           BISCUIT_PUBLIC_KEY_B64: ${{ secrets.BISCUIT_PUBLIC_KEY_B64 }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: cargo test --workspace -j1
+        run: cargo test --workspace --no-fail-fast
