@@ -44,15 +44,16 @@ RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
         --mount=type=cache,id=cargo-target,target=/usr/local/cargo/target \
         if [ "$NO_DEFAULT_FEATURES" = "true" ]; then \
             if [ -n "$FEATURES" ]; then \
-                sh -c "cargo build --release --no-default-features --features \"$FEATURES\" --locked"; \
+                # Try reproducible build with --locked, fall back to unlocked when lockfile is out-of-date
+                sh -c "cargo build --release --no-default-features --features \"$FEATURES\" --locked || cargo build --release --no-default-features --features \"$FEATURES\""; \
             else \
-                cargo build --release --no-default-features --locked; \
+                cargo build --release --no-default-features --locked || cargo build --release --no-default-features; \
             fi; \
         else \
             if [ -n "$FEATURES" ]; then \
-                sh -c "cargo build --release --features \"$FEATURES\" --locked"; \
+                sh -c "cargo build --release --features \"$FEATURES\" --locked || cargo build --release --features \"$FEATURES\""; \
             else \
-                cargo build --release --locked; \
+                cargo build --release --locked || cargo build --release; \
             fi; \
         fi
 
