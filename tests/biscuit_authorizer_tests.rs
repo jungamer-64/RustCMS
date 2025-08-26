@@ -24,7 +24,8 @@ fn biscuit_authorizer_query_roundtrip() {
 
     // Create authorizer and run
     let mut authorizer = biscuit.authorizer().expect("authorizer should be created");
-    // Explicitly add an allow policy so authorize() succeeds regardless of internal defaults
+    // Add an explicit allow policy to ensure authorize() always succeeds, regardless of internal defaults.
+    // This isolates the test to only verify query roundtrip logic, preventing failures if default policies change.
     authorizer
         .add_policy("allow if true")
         .expect("add_policy should succeed");
