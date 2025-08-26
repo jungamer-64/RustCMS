@@ -59,6 +59,12 @@ RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
             fi; \
         fi
 
+# Debug: list release artifacts so CI logs show what was produced by the build.
+# Remove this after diagnosis.
+RUN --mount=type=cache,id=cargo-target,target=/usr/local/cargo/target \
+    echo "=== /usr/local/cargo/target/release ===" && ls -la /usr/local/cargo/target/release || true && \
+    echo "=== /usr/local/cargo/target/release/deps ===" && ls -la /usr/local/cargo/target/release/deps || true
+
 ## Runtime stage
 FROM debian:bookworm-slim AS runtime
 ARG BINARY="admin_server"
