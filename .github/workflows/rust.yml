@@ -50,6 +50,9 @@ jobs:
       - name: Build workspace
         run: cargo build --workspace --all-targets --verbose
 
+      - name: Build gen_biscuit_keys binary
+        run: cargo build --bin gen_biscuit_keys --verbose
+
       - name: Run tests
         env:
           CARGO_TERM_COLOR: always
