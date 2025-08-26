@@ -39,13 +39,13 @@ jobs:
           path: target
           key: ${{ runner.os }}-cargo-chef-${{ hashFiles('recipe.json') }}
 
-      - name: Cook dependencies
-        run: cargo chef cook --release --recipe-path recipe.json
-
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y nasm
+
+      - name: Cook dependencies
+        run: cargo chef cook --release --recipe-path recipe.json
 
       - name: Build (app only)
         run: cargo build --workspace --all-targets --release
