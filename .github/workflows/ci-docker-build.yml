@@ -16,6 +16,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Show repo root (debug)
+        run: |
+          echo "Repo root files:"; ls -la --color=never || true
+          echo "Top-level Cargo files:"; ls -la Cargo.toml Cargo.lock || true
 
       - name: Cache Cargo registry and git index
         uses: actions/cache@v4

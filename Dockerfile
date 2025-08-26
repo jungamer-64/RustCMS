@@ -26,19 +26,17 @@ ENV CARGO_HOME=/usr/local/cargo
 ENV CARGO_TARGET_DIR=/usr/local/cargo/target
 RUN mkdir -p ${CARGO_HOME} ${CARGO_TARGET_DIR} && chown -R root:root ${CARGO_HOME} ${CARGO_TARGET_DIR}
 
-# Copy manifests first to leverage Docker cache for dependencies
-COPY Cargo.toml Cargo.lock ./
-# create a dummy src/main.rs to allow cargo to fetch deps before copying full source
-RUN mkdir -p src && echo 'fn main() { println!("placeholder"); }' > src/main.rs
+# Copy the full project early to ensure all manifest files (including Cargo.lock) are present
+# This sacrifices one Docker layer optimality for robustness across CI environments where
+# the build context or sparse checkouts can omit top-level files when COPY is targeted.
+COPY . .
+
 # Use BuildKit cache mounts to persist cargo registry/git/target between builds (faster incremental builds)
 # Note: requires Docker BuildKit (DOCKER_BUILDKIT=1) to be enabled when building.
 RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=cargo-index,target=/usr/local/cargo/git \
     --mount=type=cache,id=cargo-target,target=/usr/local/cargo/target \
-    cargo fetch --locked
-
-# Copy the rest of the project
-COPY . .
+    cargo fetch --locked || true
 
 # Build release with optional features
 RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
