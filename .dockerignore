@@ -5,10 +5,6 @@ target
 .github
 .gitignore
 
-# Node / frontend artifacts
-frontend/next-cms/node_modules
-frontend/next-cms/.next
-
 # Editor/temp files
 *.swp
 *.swo
@@ -20,3 +16,6 @@ frontend/next-cms/.next
 
 # Uploads and other large runtime data
 uploads
+
+keys
+repo-mirror
