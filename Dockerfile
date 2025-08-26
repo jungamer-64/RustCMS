@@ -4,7 +4,7 @@
 ## - NO_DEFAULT_FEATURES: set to "true" to pass --no-default-features to cargo
 ## - BINARY: which binary from target/release to copy/run (default: cms-server)
 
-ARG RUST_VERSION=1.75
+ARG RUST_VERSION=stable
 FROM rust:${RUST_VERSION} AS builder
 ARG FEATURES=""
 ARG NO_DEFAULT_FEATURES="false"
