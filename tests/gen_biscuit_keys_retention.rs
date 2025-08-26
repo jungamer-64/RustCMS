@@ -15,8 +15,9 @@ fn retention_keeps_only_n_backups() {
 
     // Run the binary multiple times to generate backups
     for _ in 0..5 {
-        let mut cmd = Command::cargo_bin("gen_biscuit_keys").unwrap();
-        cmd.arg("--format").arg("files")
+        let mut cmd = Command::new("cargo");
+        cmd.arg("run").arg("--bin").arg("gen_biscuit_keys").arg("--")
+            .arg("--format").arg("files")
             .arg("--out-dir").arg(out_dir.to_string_lossy().as_ref())
             .arg("--backup")
             .arg("--backup-dir").arg(backup_dir.to_string_lossy().as_ref())
@@ -25,8 +26,9 @@ fn retention_keeps_only_n_backups() {
     }
 
     // Now run with max_backups = 2 and backup again
-    let mut cmd = Command::cargo_bin("gen_biscuit_keys").unwrap();
-    cmd.arg("--format").arg("files")
+    let mut cmd = Command::new("cargo");
+    cmd.arg("run").arg("--bin").arg("gen_biscuit_keys").arg("--")
+        .arg("--format").arg("files")
         .arg("--out-dir").arg(out_dir.to_string_lossy().as_ref())
         .arg("--backup")
         .arg("--backup-dir").arg(backup_dir.to_string_lossy().as_ref())

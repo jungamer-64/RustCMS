@@ -11,9 +11,10 @@ fn compress_creates_gz_backup() {
     fs::create_dir_all(&out_dir).unwrap();
     fs::create_dir_all(&backup_dir).unwrap();
 
-    // First run to create initial files
-    let mut cmd = Command::cargo_bin("gen_biscuit_keys").unwrap();
-    cmd.arg("--format").arg("files")
+    // First run to create initial files via `cargo run --bin gen_biscuit_keys -- ...`
+    let mut cmd = Command::new("cargo");
+    cmd.arg("run").arg("--bin").arg("gen_biscuit_keys").arg("--")
+        .arg("--format").arg("files")
         .arg("--out-dir").arg(out_dir.to_string_lossy().as_ref())
         .arg("--backup")
         .arg("--backup-dir").arg(backup_dir.to_string_lossy().as_ref())
@@ -21,8 +22,9 @@ fn compress_creates_gz_backup() {
     cmd.assert().success();
 
     // run again with compress
-    let mut cmd = Command::cargo_bin("gen_biscuit_keys").unwrap();
-    cmd.arg("--format").arg("files")
+    let mut cmd = Command::new("cargo");
+    cmd.arg("run").arg("--bin").arg("gen_biscuit_keys").arg("--")
+        .arg("--format").arg("files")
         .arg("--out-dir").arg(out_dir.to_string_lossy().as_ref())
         .arg("--backup")
         .arg("--backup-dir").arg(backup_dir.to_string_lossy().as_ref())
