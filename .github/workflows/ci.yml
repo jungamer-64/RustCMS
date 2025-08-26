@@ -29,6 +29,26 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Install cargo-chef
+        run: |
+          # cargo-chef helps split dependency build from application build so we can cache compiled deps
+          cargo install cargo-chef --locked || true
+
+      - name: Prepare cargo-chef recipe
+        run: |
+          # Produces recipe.json describing dependency graph (used as cache key)
+          cargo chef prepare --recipe-path recipe.json
+
+      - name: Cache cargo-chef target
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-chef-${{ hashFiles('recipe.json') }}
+
+      - name: Cook cargo-chef (build dependencies)
+        run: |
+          cargo chef cook --release --recipe-path recipe.json || true
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
