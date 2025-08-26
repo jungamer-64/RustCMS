@@ -9,11 +9,10 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain (use rustup directly)
+      - name: Install Rust toolchain
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
           source $HOME/.cargo/env
@@ -26,37 +25,29 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install cargo-chef
-        run: |
-          # cargo-chef helps split dependency build from application build so we can cache compiled deps
-          cargo install cargo-chef --locked || true
+        run: cargo install cargo-chef --locked || true
 
-      - name: Prepare cargo-chef recipe
-        run: |
-          # Produces recipe.json describing dependency graph (used as cache key)
-          cargo chef prepare --recipe-path recipe.json
+      - name: Prepare recipe
+        run: cargo chef prepare --recipe-path recipe.json
 
-      - name: Cache cargo-chef target
+      - name: Cache cargo-chef
         uses: actions/cache@v4
         with:
           path: target
           key: ${{ runner.os }}-cargo-chef-${{ hashFiles('recipe.json') }}
 
-      - name: Cook cargo-chef (build dependencies)
-        run: |
-          cargo chef cook --release --recipe-path recipe.json || true
+      - name: Cook dependencies
+        run: cargo chef cook --release --recipe-path recipe.json
 
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y nasm
-      - name: Build dependencies
-        run: cargo fetch && cargo build --workspace --all-targets --release --locked
 
-      - name: Build
+      - name: Build (app only)
         run: cargo build --workspace --all-targets --release
 
       - name: Run tests
