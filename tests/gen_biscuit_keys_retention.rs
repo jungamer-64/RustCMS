@@ -14,7 +14,7 @@ fn retention_keeps_only_n_backups() {
     fs::create_dir_all(&backup_dir).unwrap();
 
     // Run the binary multiple times to generate backups
-    for _ in 0..5 {
+    for _ in 0..NUM_BACKUPS_TO_GENERATE {
     let mut cmd = Command::new("cargo");
     cmd.arg("run").arg("--manifest-path").arg("Cargo.toml").arg("--bin").arg("gen_biscuit_keys").arg("--")
             .arg("--format").arg("files")
