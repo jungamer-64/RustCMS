@@ -73,7 +73,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy binary and migrations (if any)
-COPY --from=builder /app/target/release/${BINARY} /usr/local/bin/${BINARY}
+# The builder sets CARGO_TARGET_DIR=/usr/local/cargo/target, so binaries
+# are produced under /usr/local/cargo/target/release. Use that path here.
+COPY --from=builder /usr/local/cargo/target/release/${BINARY} /usr/local/bin/${BINARY}
 COPY --from=builder /app/migrations ./migrations
 
 # Create a non-root user and make app directory owned by it

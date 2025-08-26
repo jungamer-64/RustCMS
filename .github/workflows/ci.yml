@@ -45,10 +45,10 @@ jobs:
           sudo apt-get install -y nasm
 
       - name: Cook dependencies
-        run: cargo chef cook --release --recipe-path recipe.json
+        run: cargo chef cook --recipe-path recipe.json
 
       - name: Build (app only)
-        run: cargo build --workspace --all-targets --release
+        run: cargo build --workspace --all-targets
 
       - name: Run tests
         env:
