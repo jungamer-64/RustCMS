@@ -34,7 +34,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Set up Rust
-        uses: actions-rs/toolchain@v2
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           profile: minimal
