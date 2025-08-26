@@ -28,16 +28,26 @@ jobs:
         uses: actions/cache@v4
         with:
           path: target
-          key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-target-
+            ${{ runner.os }}-cargo-
 
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
+      - name: Install Rust toolchain (use rustup directly to avoid action deprecation warnings)
+        run: |
+          # Install rustup non-interactively and set stable as default. GitHub runners may already
+          # have Rust installed, but this ensures a predictable toolchain without relying on an
+          # external action that may emit deprecated `set-output` commands.
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          # Load cargo environment for subsequent steps
+          source $HOME/.cargo/env
+          rustup default stable
+          # Add common components if needed (ignore failures on runners that already have them)
+          rustup component add clippy rustfmt || true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm
 
       - name: Show Rust version
         run: rustc --version
@@ -45,9 +55,17 @@ jobs:
       - name: Build workspace
         run: cargo build --workspace --all-targets --verbose
 
+      - name: Build all package binaries (ensure gen_biscuit_keys exists)
+        run: cargo build --package cms-backend --bins --verbose
+
       - name: Run tests
         env:
           CARGO_TERM_COLOR: always
+          BISCUIT_PUBLIC_KEY_B64: ${{ secrets.BISCUIT_PUBLIC_KEY_B64 }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          # Run all tests. Integration tests may require more resources; CI runners provide sufficient memory.
-          cargo test --workspace --verbose
+          # Write the private key to a temporary file with restricted permissions
+          echo "${{ secrets.BISCUIT_PRIVATE_KEY_B64 }}" > /tmp/biscuit_private_key.b64
+          chmod 600 /tmp/biscuit_private_key.b64
+          # Run all tests, passing the file path as an environment variable
+          BISCUIT_PRIVATE_KEY_B64_PATH=/tmp/biscuit_private_key.b64 cargo test --workspace --verbose

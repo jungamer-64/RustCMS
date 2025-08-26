@@ -116,6 +116,41 @@ cargo run --no-default-features --features "dev-tools,auth,database" --bin cms-s
 - `cms-admin` : 管理・運用用 CLI（ユーザ作成など）
 - `cms-migrate`: DB マイグレーション実行
 
+Developer 補助ツール:
+
+- `gen_biscuit_keys` : Biscuit トークン用の鍵ペアを生成するユーティリティ。生成した鍵は標準出力へ base64 で出力されます。ファイルや `.env` へ書き込むオプションもあり、安全に保存することを推奨します。
+
+使い方（簡易）:
+
+```powershell
+# stdout に出力のみ
+cargo run --bin gen_biscuit_keys
+
+# 鍵ファイルを書き出す（ディレクトリ: keys）
+cargo run --bin gen_biscuit_keys -- --format files --out-dir keys
+
+# .env に追記（デフォルト: .env）
+cargo run --bin gen_biscuit_keys -- --format env --env-file .env
+
+# 両方に出力して既存を上書き（強制）
+cargo run --bin gen_biscuit_keys -- --format both --out-dir keys --env-file .env --force
+
+# 既存をバックアップしてから上書き（バックアップは .bak.<unix_ts>）
+cargo run --bin gen_biscuit_keys -- --format files --out-dir keys --backup --force
+
+# バックアップを作成して最新2個だけ保持する
+cargo run --bin gen_biscuit_keys -- --format files --out-dir keys --backup --max-backups 2 --force
+
+# バックアップを作成して gzip 圧縮（元ファイルは削除され .gz が残る）
+cargo run --bin gen_biscuit_keys -- --format files --out-dir keys --backup --backup-compress --force
+```
+
+セキュリティ注意点:
+
+- 生成された秘密鍵は厳重に管理してください。パスワード管理ツールや本番では Doppler / Vault 等のシークレットストアを利用してください。
+- リポジトリやコミットに鍵を含めないでください。`.env` をコミットしない（`.gitignore` に含める）か、環境シークレット管理を用いてください。
+
+
 デフォルト起動バイナリは `cms-server`（`Cargo.toml` の `default-run` 設定に依存）。
 
 ### Docker デプロイ

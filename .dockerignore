@@ -1,0 +1,21 @@
+# Ignore build artifacts and VCS
+target
+**/target
+.git
+.github
+.gitignore
+
+# Editor/temp files
+*.swp
+*.swo
+*.DS_Store
+
+# Local env / secrets
+.env
+.env.*
+
+# Uploads and other large runtime data
+uploads
+
+keys
+repo-mirror

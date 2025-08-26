@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          source $HOME/.cargo/env
+          rustup default stable
+          rustup component add clippy rustfmt || true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install cargo-chef
+        run: cargo install cargo-chef --locked || true
+
+      - name: Prepare recipe
+        run: cargo chef prepare --recipe-path recipe.json
+
+      - name: Cache cargo-chef
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-chef-${{ hashFiles('recipe.json') }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm
+
+      - name: Cook dependencies
+        run: cargo chef cook --recipe-path recipe.json
+
+      - name: Build (app only)
+        run: cargo build --workspace --all-targets
+
+      - name: Run tests
+        env:
+          BISCUIT_PRIVATE_KEY_B64: ${{ secrets.BISCUIT_PRIVATE_KEY_B64 }}
+          BISCUIT_PUBLIC_KEY_B64: ${{ secrets.BISCUIT_PUBLIC_KEY_B64 }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: cargo test --workspace --no-fail-fast
