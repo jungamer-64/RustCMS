@@ -21,10 +21,11 @@ pub struct Config {
     pub webauthn_rp_name: String,
     pub webauthn_origin: String,
     
-    // 認証設定
-    pub jwt_secret: String,
+    // 認証設定 (Biscuit 化)
+    pub biscuit_root_key: String,
     pub session_secret: String,
-    pub token_expiry_hours: i64,
+    pub access_token_ttl_secs: i64,
+    pub refresh_token_ttl_secs: i64,
     
     // ファイルアップロード設定
     pub upload_dir: String,
@@ -77,16 +78,20 @@ impl Config {
             webauthn_origin: env::var("WEBAUTHN_ORIGIN")
                 .unwrap_or_else(|_| "http://localhost:3000".to_string()),
             
-            jwt_secret: env::var("JWT_SECRET")
-                .context("JWT_SECRET must be set")?,
+            biscuit_root_key: env::var("BISCUIT_ROOT_KEY")
+                .context("BISCUIT_ROOT_KEY must be set")?,
             
             session_secret: env::var("SESSION_SECRET")
                 .context("SESSION_SECRET must be set")?,
             
-            token_expiry_hours: env::var("TOKEN_EXPIRY_HOURS")
-                .unwrap_or_else(|_| "24".to_string())
+            access_token_ttl_secs: env::var("ACCESS_TOKEN_TTL_SECS")
+                .unwrap_or_else(|_| "3600".to_string())
                 .parse()
-                .context("Invalid TOKEN_EXPIRY_HOURS value")?,
+                .context("Invalid ACCESS_TOKEN_TTL_SECS value")?,
+            refresh_token_ttl_secs: env::var("REFRESH_TOKEN_TTL_SECS")
+                .unwrap_or_else(|_| "86400".to_string())
+                .parse()
+                .context("Invalid REFRESH_TOKEN_TTL_SECS value")?,
             
             upload_dir: env::var("UPLOAD_DIR")
                 .unwrap_or_else(|_| "./uploads".to_string()),
@@ -146,9 +151,9 @@ impl Config {
             anyhow::bail!("WEBAUTHN_ORIGIN must start with http:// or https://");
         }
         
-        // JWTシークレットの長さ検証
-        if self.jwt_secret.len() < 32 {
-            anyhow::bail!("JWT_SECRET must be at least 32 characters long");
+        // Biscuit root key 最低長さ検証 (簡易)
+        if self.biscuit_root_key.len() < 32 {
+            anyhow::bail!("BISCUIT_ROOT_KEY must be at least 32 characters long");
         }
         
         // セッションシークレットの長さ検証
@@ -184,9 +189,10 @@ impl Default for Config {
             webauthn_rp_id: "localhost".to_string(),
             webauthn_rp_name: "Production CMS".to_string(),
             webauthn_origin: "http://localhost:3000".to_string(),
-            jwt_secret: "your-super-secret-jwt-key-must-be-at-least-32-characters".to_string(),
+            biscuit_root_key: "your-super-secret-biscuit-root-key-at-least-32-characters".to_string(),
             session_secret: "your-super-secret-session-key-must-be-at-least-32-characters".to_string(),
-            token_expiry_hours: 24,
+            access_token_ttl_secs: 3600,
+            refresh_token_ttl_secs: 86400,
             upload_dir: "./uploads".to_string(),
             max_file_size: 10 * 1024 * 1024, // 10MB
             cors_origins: vec![

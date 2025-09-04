@@ -9,7 +9,7 @@
 - HTTP 層: axum
 - データベース: PostgreSQL + Diesel（feature=`database` にて有効）
 - 検索: Tantivy（feature=`search` にて有効）
-- 認証: biscuit-auth / JWT + Argon2（feature=`auth` にて有効）
+- 認証: biscuit-auth + Argon2（feature=`auth` にて有効）
 - TLS: rustls（OpenSSL 非依存）
 
 注: Elasticsearch 等の外部検索は現行実装に含まれていません（Tantivy をオンプロセスで使用する形）。
@@ -50,7 +50,7 @@ Cargo マニフェストに定義されている主要バイナリ:
 主要な環境変数例（`.env` に設定）:
 
 - `DATABASE_URL` — PostgreSQL 接続文字列
-- `JWT_SECRET` / `SESSION_SECRET` — 認証シークレット
+- `BISCUIT_ROOT_KEY` / `SESSION_SECRET` — 認証シークレット
 - `CMS_ENVIRONMENT` / `CONFIG_FILE` — 実行時設定
 
 （詳細は `config/` フォルダの TOML を参照）

@@ -130,7 +130,7 @@ struct ParsedBiscuit {
     username: String,
     role: UserRole,
     token_type: String,
-    exp: i64,
+    // 有効期限は parse 内でチェック後廃棄するため保持しない
     session_id: String,
     version: u32,
 }
@@ -305,9 +305,15 @@ impl AuthService {
         let session_id = Uuid::new_v4().to_string();
         let now = Utc::now();
 
-        // access の有効時間: remember_me=true で 24h, false で 1h に短縮 (セキュリティ強化)
-        let access_ttl = if remember_me { ChronoDuration::hours(24) } else { ChronoDuration::hours(1) };
-        let refresh_ttl = ChronoDuration::days(30);
+        // TTL は設定値を使用 (remember_me なら refresh TTL の 1/2 を access にする等のポリシーも可能)
+    let access_secs_cfg = self.config.access_token_ttl_secs as i64;
+    let refresh_secs_cfg = self.config.refresh_token_ttl_secs as i64;
+        let access_ttl = if remember_me {
+            ChronoDuration::seconds(access_secs_cfg * 2).min(ChronoDuration::seconds(refresh_secs_cfg))
+        } else {
+            ChronoDuration::seconds(access_secs_cfg)
+        };
+        let refresh_ttl = ChronoDuration::seconds(refresh_secs_cfg);
 
         let access_exp = now + access_ttl;
         let refresh_exp = now + refresh_ttl;
@@ -361,9 +367,9 @@ impl AuthService {
         session.refresh_version += 1;
         let new_version = session.refresh_version;
 
-        let now = Utc::now();
-        let access_exp = now + ChronoDuration::hours(1);
-        let refresh_exp = now + ChronoDuration::days(30);
+    let now = Utc::now();
+    let access_exp = now + ChronoDuration::seconds(self.config.access_token_ttl_secs as i64);
+    let refresh_exp = now + ChronoDuration::seconds(self.config.refresh_token_ttl_secs as i64);
 
         let user = self.database.get_user_by_id(parsed.user_id)
             .await
@@ -440,8 +446,8 @@ impl AuthService {
         let exps: Vec<(i64,)> = authorizer.query_all(exp_q)
             .map_err(|e| AuthError::Biscuit(format!("Failed to query exp: {}", e)))?;
         if exps.is_empty() { return Err(AuthError::InvalidToken.into()); }
-        let exp = exps[0].0;
-        if exp < Utc::now().timestamp() { return Err(AuthError::TokenExpired.into()); }
+    let exp = exps[0].0;
+    if exp < Utc::now().timestamp() { return Err(AuthError::TokenExpired.into()); }
 
         // session
         let sess_q = r#"data($sid,$v) <- session($sid,$v)"#;
@@ -451,7 +457,7 @@ impl AuthService {
         let (session_id, version_i) = sess[0].clone();
         let version: u32 = version_i as u32;
 
-        Ok(ParsedBiscuit { user_id, username, role, token_type, exp, session_id, version })
+    Ok(ParsedBiscuit { user_id, username, role, token_type, session_id, version })
     }
 
     async fn verify_biscuit_generic(&self, token: &str, expect_type: Option<&str>) -> Result<AuthContext> {

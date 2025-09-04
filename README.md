@@ -19,14 +19,13 @@
 
 ### セキュリティ
 
-- **JWT 認証**: トークンベースの安全な認証方式
-- **Biscuit トークン (Capability ベース)**: Ed25519 署名付き権限デリゲーション。JWT と併用し柔軟なポリシー表現が可能。
+- **Biscuit トークン (Capability ベース)**: Ed25519 署名付き権限デリゲーション。柔軟なポリシー表現とファクト駆動の権限管理を提供。
 - **ロールベースアクセス制御**: 詳細な権限管理
 - **入力検証**: リクエストの包括的なバリデーション
 - **CORS 設定**: クロスオリジン制御の設定が可能
 - **SQL インジェクション防止**: パラメタライズドクエリと型安全性
 - **リフレッシュトークンローテーション**: セッションごとに refresh_version をインクリメントし使い捨て化、再利用攻撃を軽減。
-- **API キー認証 (X-API-Key)**: サーバ生成の長期利用向けキー。Argon2 での秘密ハッシュ + SHA-256 (base64url) 決定的 lookup hash により O(1) 検索が可能。キー管理エンドポイントはユーザ認証 (JWT/Biscuit) 後に作成/一覧/失効操作を提供。
+- **API キー認証 (X-API-Key)**: サーバ生成の長期利用向けキー。Argon2 での秘密ハッシュ + SHA-256 (base64url) 決定的 lookup hash により O(1) 検索が可能。キー管理エンドポイントはユーザ認証 (Biscuit) 後に作成/一覧/失効操作を提供。
 
 ### モニタリングと可観測性
 
@@ -332,10 +331,10 @@ docker-compose up -d --scale cms-backend=3
 
 ### 認証
 
-保護されたエンドポイントは Authorization ヘッダに JWT トークンを必要とします:
+保護されたエンドポイントは Authorization ヘッダに Biscuit アクセストークン (Bearer) を必要とします:
 
 ```http
-Authorization: Bearer <your-jwt-token>
+Authorization: Bearer <your-biscuit-token>
 ```
 
 または Biscuit を利用する場合:
@@ -428,8 +427,7 @@ curl "http://localhost:3000/api/v1/search?q=rust"
 
 ### ✅ セキュリティ改善
 
-- **JWT 認証**: 安全なトークンベース認証
-- **Biscuit デュアル認証**: JWT との OR 条件サポート (OpenAPI で両スキーム提示)
+- **Biscuit 認証**: Capability ベースのトークン認証 (単一方式に統一)
 - **入力検証**: カスタムエラーハンドリングを含む包括的な検証
 - **SQL インジェクション防止**: パラメタライズドクエリと型安全性
 - **CORS 保護**: 設定可能なクロスオリジン制御
