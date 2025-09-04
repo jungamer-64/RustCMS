@@ -7,6 +7,7 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use serde::Deserialize;
+use utoipa::ToSchema;
 use serde_json::json;
 use std::time::Duration;
 
@@ -65,7 +66,7 @@ mod _search_shim {
 use _search_shim::{FilterOperator, SearchFilter, SearchRequest, SearchResults, SearchStats, SortOrder};
 
 /// Search query parameters
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams, ToSchema)]
 pub struct SearchQuery {
     pub q: String,
     pub limit: Option<usize>,
@@ -76,13 +77,23 @@ pub struct SearchQuery {
 }
 
 /// Search suggestion query
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams, ToSchema)]
 pub struct SuggestQuery {
     pub prefix: String,
     pub limit: Option<usize>,
 }
 
 /// Search endpoint
+#[utoipa::path(
+    get,
+    path = "/api/v1/search",
+    tag = "Search",
+    params(SearchQuery),
+    responses(
+        (status=200, description="Search results (ApiResponse<SearchResults>)"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn search(
     State(state): State<AppState>,
     Query(query): Query<SearchQuery>,
@@ -152,6 +163,16 @@ pub async fn search(
 }
 
 /// Search suggestions endpoint
+#[utoipa::path(
+    get,
+    path = "/api/v1/search/suggest",
+    tag = "Search",
+    params(SuggestQuery),
+    responses(
+        (status=200, description="Suggestions list (ApiResponse<{ suggestions: string[] }>)"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn suggest(
     State(state): State<AppState>,
     Query(query): Query<SuggestQuery>,
@@ -191,6 +212,15 @@ pub async fn suggest(
 }
 
 /// Search statistics endpoint
+#[utoipa::path(
+    get,
+    path = "/api/v1/search/stats",
+    tag = "Search",
+    responses(
+        (status=200, description="Search stats (ApiResponse<SearchStats>)"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn search_stats(State(state): State<AppState>) -> Result<impl IntoResponse> {
     // Try cache first
     let cache_key = "search:stats";
@@ -231,6 +261,16 @@ pub async fn search_stats(State(state): State<AppState>) -> Result<impl IntoResp
 }
 
 /// Reindex all content
+#[utoipa::path(
+    post,
+    path = "/api/v1/search/reindex",
+    tag = "Search",
+    security(("BearerAuth" = [])),
+    responses(
+        (status=200, description="Reindex triggered (ApiResponse<{ message: string }>)"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn reindex(State(_state): State<AppState>) -> Result<impl IntoResponse> {
     // This would be an admin-only endpoint in production
     // For now, return a placeholder response
@@ -249,6 +289,15 @@ pub async fn reindex(State(_state): State<AppState>) -> Result<impl IntoResponse
 }
 
 /// Search index health check
+#[utoipa::path(
+    get,
+    path = "/api/v1/search/health",
+    tag = "Search",
+    responses(
+        (status=200, description="Search health placeholder (ApiResponse<Error>)"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn search_health(State(_state): State<AppState>) -> Result<impl IntoResponse> {
     Ok(Json(ApiResponse::<()>::error(
         "Search health check not implemented".to_string(),

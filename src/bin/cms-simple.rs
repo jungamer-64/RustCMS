@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tokio;
 use tower_http::cors::CorsLayer;
 
 // インメモリデータストア（プロトタイプ用）

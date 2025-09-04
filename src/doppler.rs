@@ -210,8 +210,7 @@ fn fallback_to_dotenv() -> Result<HashMap<String, String>> {
     // 必要な環境変数をチェック
     let required_vars = [
         "HOST", "PORT", "DATABASE_URL", "DATABASE_NAME",
-        "JWT_SECRET", "JWT_EXPIRATION_HOURS", "JWT_REFRESH_EXPIRATION_DAYS",
-        "ALLOWED_ORIGINS", "UPLOAD_DIR"
+        "ALLOWED_ORIGINS", "UPLOAD_DIR", "BISCUIT_ROOT_KEY"
     ];
     
     for var in &required_vars {

@@ -609,15 +609,16 @@ fn truncate(s: &str, max_len: usize) -> String {
 }
 
 fn generate_random_password() -> String {
-    use rand::prelude::*;
+    use rand::Rng;
+    use rand::rng;
 
     const CHARSET: &[u8] =
         b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
-    let mut rng = thread_rng();
+    let mut rng = rng();
 
     (0..16)
         .map(|_| {
-            let idx = rng.gen_range(0..CHARSET.len());
+            let idx = rng.random_range(0..CHARSET.len());
             CHARSET[idx] as char
         })
         .collect()

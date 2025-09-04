@@ -68,7 +68,7 @@ async fn main() -> Result<()> {
                     Ok(uuid) => {
                         let deleted = diesel::delete(posts_dsl::posts.filter(posts_dsl::id.eq(uuid)))
                             .execute(&mut conn)
-                            .map_err(|e| cms_backend::AppError::Database(e))?;
+                            .map_err(cms_backend::AppError::Database)?;
 
                         if json {
                             println!("{}", json!({"deleted": deleted}));
@@ -87,18 +87,18 @@ async fn main() -> Result<()> {
             let users_count: i64 = users_dsl::users
                 .count()
                 .get_result(&mut conn)
-                .map_err(|e| cms_backend::AppError::Database(e))?;
+                .map_err(cms_backend::AppError::Database)?;
 
             let admin_user: Option<User> = users_dsl::users
                 .filter(users_dsl::username.eq("admin"))
                 .first::<User>(&mut conn)
                 .optional()
-                .map_err(|e| cms_backend::AppError::Database(e))?;
+                .map_err(cms_backend::AppError::Database)?;
 
             let posts_count: i64 = posts_dsl::posts
                 .count()
                 .get_result(&mut conn)
-                .map_err(|e| cms_backend::AppError::Database(e))?;
+                .map_err(cms_backend::AppError::Database)?;
 
             #[derive(QueryableByName, Debug)]
             struct PostRow {
@@ -121,7 +121,7 @@ async fn main() -> Result<()> {
 
             let recent: Vec<PostRow> = diesel::sql_query(q)
                 .load(&mut conn)
-                .map_err(|e| cms_backend::AppError::Database(e))?;
+                .map_err(cms_backend::AppError::Database)?;
 
             if json {
                 let admin = admin_user.map(|u| json!({"username": u.username, "email": u.email}));
@@ -211,7 +211,7 @@ async fn main() -> Result<()> {
             println!("DATABASE_NAME=rust_cms");
             println!("SERVER_HOST=127.0.0.1");
             println!("SERVER_PORT=3001");
-            println!("JWT_SECRET=your_secure_jwt_secret_here_at_least_32_characters");
+            println!("BISCUIT_ROOT_KEY=base64_or_path_to_keydir");
 
             println!("\n✅ To run the CMS, use:");
             println!("cargo run --bin cms-simple");

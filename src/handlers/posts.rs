@@ -12,6 +12,7 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use serde_json::json;
 use std::time::Duration;
 use uuid::Uuid;
@@ -23,7 +24,7 @@ use crate::{
 };
 
 /// Post query parameters
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema, utoipa::IntoParams)]
 pub struct PostQuery {
     pub page: Option<u32>,
     pub limit: Option<u32>,
@@ -34,7 +35,7 @@ pub struct PostQuery {
 }
 
 /// Post response for API
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct PostResponse {
     pub id: Uuid,
     pub title: String,
@@ -72,7 +73,7 @@ impl From<&Post> for PostResponse {
 }
 
 /// Paginated posts response
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct PostsResponse {
     pub posts: Vec<PostResponse>,
     pub total: usize,
@@ -82,6 +83,19 @@ pub struct PostsResponse {
 }
 
 /// Create a new post
+#[utoipa::path(
+    post,
+    path = "/api/v1/posts",
+    tag = "Posts",
+    security(("BearerAuth" = [])),
+    request_body = CreatePostRequest,
+    responses(
+    (status=201, body=crate::utils::api_types::ApiResponse<PostResponse>, description="Post created"),
+        (status=400, description="Validation error", body=crate::utils::api_types::ValidationErrorResponse),
+        (status=401, description="Unauthorized"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn create_post(
     State(state): State<AppState>,
     Json(request): Json<CreatePostRequest>,
@@ -99,6 +113,17 @@ pub async fn create_post(
 }
 
 /// Get post by ID
+#[utoipa::path(
+    get,
+    path = "/api/v1/posts/{id}",
+    tag = "Posts",
+    security(("BearerAuth" = [])),
+    responses(
+    (status=200, body=crate::utils::api_types::ApiResponse<PostResponse>),
+        (status=404, description="Post not found"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn get_post(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -122,6 +147,17 @@ pub async fn get_post(
 }
 
 /// Get all posts with pagination and filtering
+#[utoipa::path(
+    get,
+    path = "/api/v1/posts",
+    tag = "Posts",
+    params(PostQuery),
+    security(("BearerAuth" = [])),
+    responses(
+    (status=200, body=crate::utils::api_types::ApiResponse<PostsResponse>),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn get_posts(
     State(state): State<AppState>,
     Query(query): Query<PostQuery>,
@@ -168,6 +204,19 @@ pub async fn get_posts(
 }
 
 /// Update post
+#[utoipa::path(
+    put,
+    path = "/api/v1/posts/{id}",
+    tag = "Posts",
+    request_body = UpdatePostRequest,
+    security(("BearerAuth" = [])),
+    responses(
+    (status=200, body=crate::utils::api_types::ApiResponse<PostResponse>),
+        (status=400, description="Validation error", body=crate::utils::api_types::ValidationErrorResponse),
+        (status=404, description="Post not found"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn update_post(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -191,6 +240,17 @@ pub async fn update_post(
 }
 
 /// Delete post
+#[utoipa::path(
+    delete,
+    path = "/api/v1/posts/{id}",
+    tag = "Posts",
+    security(("BearerAuth" = [])),
+    responses(
+        (status=200, description="Post deleted"),
+        (status=404, description="Post not found"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn delete_post(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -216,6 +276,17 @@ pub async fn delete_post(
 }
 
 /// Get posts by tag
+#[utoipa::path(
+    get,
+    path = "/api/v1/posts/tag/{tag}",
+    tag = "Posts",
+    params(PostQuery),
+    security(("BearerAuth" = [])),
+    responses(
+        (status=200, body=PostsResponse),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn get_posts_by_tag(
     State(state): State<AppState>,
     Path(tag): Path<String>,
@@ -239,6 +310,17 @@ pub async fn get_posts_by_tag(
 }
 
 /// Publish post
+#[utoipa::path(
+    post,
+    path = "/api/v1/posts/{id}/publish",
+    tag = "Posts",
+    security(("BearerAuth" = [])),
+    responses(
+    (status=200, body=crate::utils::api_types::ApiResponse<PostResponse>),
+        (status=404, description="Post not found"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn publish_post(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -262,7 +344,7 @@ pub async fn publish_post(
     if let Err(e) = state.search.index_post(&post).await {
         eprintln!("Failed to update post in search index: {}", e);
     }
-    Ok(Json(PostResponse::from(&post)))
+    Ok(Json(ApiResponse::success(PostResponse::from(&post))))
 }
  
 

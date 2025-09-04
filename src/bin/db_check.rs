@@ -38,7 +38,7 @@ async fn main() -> Result<()> {
             Ok(uuid) => {
                 let deleted = diesel::delete(posts_dsl::posts.filter(posts_dsl::id.eq(uuid)))
                     .execute(&mut conn)
-                    .map_err(|e| cms_backend::AppError::Database(e))?;
+                    .map_err(cms_backend::AppError::Database)?;
 
                 if args.json {
                     println!("{}", json!({"deleted": deleted}));
@@ -58,20 +58,20 @@ async fn main() -> Result<()> {
     let users_count: i64 = users_dsl::users
         .count()
         .get_result(&mut conn)
-        .map_err(|e| cms_backend::AppError::Database(e))?;
+    .map_err(cms_backend::AppError::Database)?;
 
     // Check for admin user
     let admin_user: Option<User> = users_dsl::users
         .filter(users_dsl::username.eq("admin"))
         .first::<User>(&mut conn)
         .optional()
-        .map_err(|e| cms_backend::AppError::Database(e))?;
+    .map_err(cms_backend::AppError::Database)?;
 
     // Count posts
     let posts_count: i64 = posts_dsl::posts
         .count()
         .get_result(&mut conn)
-        .map_err(|e| cms_backend::AppError::Database(e))?;
+    .map_err(cms_backend::AppError::Database)?;
 
     // Recent posts via query
     #[derive(QueryableByName, Debug)]
@@ -95,7 +95,7 @@ async fn main() -> Result<()> {
 
     let recent: Vec<PostRow> = diesel::sql_query(q)
         .load(&mut conn)
-        .map_err(|e| cms_backend::AppError::Database(e))?;
+    .map_err(cms_backend::AppError::Database)?;
 
     if args.json {
         let admin = admin_user.map(|u| json!({"username": u.username, "email": u.email}));

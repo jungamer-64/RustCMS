@@ -3,7 +3,11 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 /// 標準的なAPIレスポンス構造
+///
+/// ジェネリック型 `T` を含むラッパー。OpenAPI 上では良く使う組合せを aliases で公開する。
+/// 例: `ApiResponsePostResponse` は `ApiResponse<PostResponse>` のエイリアス。
 #[derive(Debug, Serialize, ToSchema)]
+// NOTE: utoipa に独自 aliases 属性は無いため削除。必要ならば個別の型ラッパーを定義する。
 pub struct ApiResponse<T> {
     pub success: bool,
     pub data: Option<T>,

@@ -8,13 +8,14 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use serde_json::json;
 
 use crate::utils::{api_types::ApiResponse, common_types::UserInfo};
 use crate::{auth::LoginRequest, models::CreateUserRequest, AppState, Result};
 
 /// Registration request
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct RegisterRequest {
     pub username: String,
     pub email: String,
@@ -24,15 +25,31 @@ pub struct RegisterRequest {
 }
 
 /// Login response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct LoginResponse {
     pub success: bool,
-    pub token: String,
+    pub access_token: String,
+    pub refresh_token: String,
+    pub biscuit_token: String,
     pub user: UserInfo,
     pub expires_in: i64,
+    pub session_id: String,
+    /// 後方互換: 旧クライアントが `token` を参照している可能性があるため複製
+    pub token: String,
 }
 
 /// Register a new user
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/register",
+    tag = "Auth",
+    request_body = RegisterRequest,
+    responses(
+        (status = 201, description = "User registered", body = LoginResponse),
+        (status = 400, description = "Validation error", body = crate::utils::api_types::ValidationErrorResponse),
+        (status = 500, description = "Server error")
+    )
+)]
 pub async fn register(
     State(state): State<AppState>,
     Json(request): Json<RegisterRequest>,
@@ -57,41 +74,73 @@ pub async fn register(
         eprintln!("Failed to index user for search: {}", e);
     }
 
-    // Generate session token via AppState wrapper (records metrics centrally)
-    let token = state.auth_create_session(user.id).await?;
-
+    // Build full auth response (access/refresh/biscuit + session) via AppState
+    let auth = state.auth_build_auth_response(user.clone(), false).await?;
+    let access_token_clone = auth.access_token.clone();
     let response = LoginResponse {
         success: true,
-        token,
+        access_token: access_token_clone.clone(),
+        refresh_token: auth.refresh_token,
+        biscuit_token: auth.biscuit_token,
         user: UserInfo::from(&user),
-        expires_in: 3600, // 1 hour
+        expires_in: auth.expires_in,
+        session_id: auth.session_id,
+        token: access_token_clone,
     };
 
     Ok((StatusCode::CREATED, Json(ApiResponse::success(response))))
 }
 
 /// Login user
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/login",
+    tag = "Auth",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Login success", body = LoginResponse),
+        (status = 400, description = "Validation error", body = crate::utils::api_types::ValidationErrorResponse),
+        (status = 401, description = "Invalid credentials"),
+        (status = 500, description = "Server error")
+    )
+)]
 pub async fn login(
     State(state): State<AppState>,
     Json(request): Json<LoginRequest>,
 ) -> Result<impl IntoResponse> {
+    let remember = request.remember_me.unwrap_or(false);
     // Authenticate user via AppState wrapper (records auth & DB metrics centrally)
     let user = state.auth_authenticate(request).await?;
 
-    // Generate session token (recording handled in AppState wrapper)
-    let token = state.auth_create_session(user.id).await?;
-
+    // remember_me を先に取り出してムーブを防止
+    // Build full auth response
+    let auth = state.auth_build_auth_response(user.clone(), remember).await?;
+    let access_token_clone = auth.access_token.clone();
     let response = LoginResponse {
         success: true,
-        token,
+        access_token: access_token_clone.clone(),
+        refresh_token: auth.refresh_token,
+        biscuit_token: auth.biscuit_token,
         user: UserInfo::from(&user),
-        expires_in: 3600, // 1 hour
+        expires_in: auth.expires_in,
+        session_id: auth.session_id,
+        token: access_token_clone,
     };
 
     Ok(Json(ApiResponse::success(response)))
 }
 
 /// Logout user
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/logout",
+    tag = "Auth",
+    security(("BearerAuth" = [])),
+    responses(
+        (status = 200, description = "Logout success"),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 pub async fn logout(
     State(_state): State<AppState>,
     // Extract token from Authorization header in middleware
@@ -106,6 +155,16 @@ pub async fn logout(
 }
 
 /// Get current user profile
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/profile",
+    tag = "Auth",
+    security(("BearerAuth" = [])),
+    responses(
+        (status = 200, description = "Profile info placeholder"),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 pub async fn profile(
     State(_state): State<AppState>,
     // User would be extracted from middleware after token validation
@@ -118,10 +177,31 @@ pub async fn profile(
 }
 
 /// Refresh token
-pub async fn refresh_token(State(_state): State<AppState>) -> Result<impl IntoResponse> {
-    // Placeholder for token refresh logic
-    Ok(Json(ApiResponse::success(json!({
-        "success": true,
-        "message": "Token refresh endpoint"
-    }))))
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct RefreshRequest { pub refresh_token: String }
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RefreshResponse { pub success: bool, pub access_token: String, pub expires_in: i64, pub session_id: String, pub refresh_token: String }
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/refresh",
+    tag = "Auth",
+    request_body = RefreshRequest,
+    responses(
+        (status = 200, description = "Token refreshed", body = RefreshResponse),
+        (status = 401, description = "Invalid or expired refresh token"),
+        (status = 500, description = "Server error")
+    )
+)]
+pub async fn refresh_token(State(state): State<AppState>, Json(body): Json<RefreshRequest>) -> Result<impl IntoResponse> {
+    let refreshed = state.auth_refresh_access_token(&body.refresh_token).await?;
+    let resp = RefreshResponse {
+        success: true,
+        access_token: refreshed.access_token,
+        expires_in: refreshed.expires_in,
+        session_id: refreshed.session_id,
+        refresh_token: refreshed.refresh_token,
+    };
+    Ok(Json(ApiResponse::success(resp)))
 }

@@ -21,9 +21,9 @@
 - データベース実装は sync な Diesel 呼び出しを async wrapper で包むスタイル。DB トランザクションや接続取得は `Database` 型経由。
 
 ## ビルド・実行・デバッグ（Windows PowerShell 環境向け具体例）
-- 開発ビルド（Windows ではビルド並列数が問題になるので単一ジョブ推奨）:
+- 開発ビルド:
 ```powershell
-cargo build -j1
+cargo build
 ```
 - サーバ起動（環境変数か Doppler を利用）:
 ```powershell
@@ -41,7 +41,7 @@ cargo run --bin dev-tools --features dev-tools
 ```
 - テスト実行:
 ```powershell
-cargo test -j1
+cargo test
 ```
 
 ## 典型的な変更パターンと注意点
@@ -60,7 +60,6 @@ cargo test -j1
 1. まず `AppState` を探す。サービス追加/削除は AppState を通すこと。  
 2. ハンドラは `State<AppState>` を受け、直接 `Database` を取得しないこと（既に存在する wrapper を先に探す）。  
 3. Cargo feature による条件付きコンパイルを壊さない。新しいコードは対応する feature ガードを付ける。  
-4. Windows 開発では `-j1` を使ったビルドを推奨（OOM / ファイルロック回避）。
 
 ## 最後に（フィードバック）
 このファイルをベースに追加して欲しい情報（例えば特定のデバッグログ出力例や CI コマンド）はありますか？不明点があれば指示をください。更新します。

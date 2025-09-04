@@ -62,12 +62,12 @@ pub struct SearchConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthConfig {
-    pub jwt_secret: String,
-    pub jwt_expiration: i64,
     pub biscuit_root_key: String,
     pub webauthn: WebAuthnConfig,
     pub bcrypt_cost: u32,
     pub session_timeout: u64,
+    pub access_token_ttl_secs: u64,
+    pub refresh_token_ttl_secs: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -199,12 +199,12 @@ impl Default for SearchConfig {
 impl Default for AuthConfig {
     fn default() -> Self {
         Self {
-            jwt_secret: "your-secret-key".to_string(),
-            jwt_expiration: 3600,
             biscuit_root_key: "your-biscuit-root-key".to_string(),
             webauthn: WebAuthnConfig::default(),
             bcrypt_cost: 12,
             session_timeout: 86400, // 24 hours
+            access_token_ttl_secs: 3600,
+            refresh_token_ttl_secs: 86400,
         }
     }
 }

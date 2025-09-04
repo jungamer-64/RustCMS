@@ -126,10 +126,10 @@ docker run -d --name production-cms -p 3000:3000 --env-file .env production-cms
 
 ```powershell
 # 単体テスト
-cargo test -j1
+cargo test
 
 # 統合テスト（テストファイル名に依存）
-cargo test --test integration_tests -j1
+cargo test --test integration_tests
 ```
 
 ## 本番デプロイのヒント

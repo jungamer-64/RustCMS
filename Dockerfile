@@ -9,6 +9,7 @@ FROM rust:${RUST_VERSION} AS builder
 ARG FEATURES=""
 ARG NO_DEFAULT_FEATURES="false"
 ARG BINARY="cms-server"
+ARG BUILD_VARIANT="unknown"
 
 WORKDIR /app
 
@@ -32,6 +33,12 @@ RUN mkdir -p ${CARGO_HOME} ${CARGO_TARGET_DIR} && chown -R root:root ${CARGO_HOM
 # This sacrifices one Docker layer optimality for robustness across CI environments where
 # the build context or sparse checkouts can omit top-level files when COPY is targeted.
 COPY . .
+
+LABEL stage=builder \
+    org.opencontainers.image.title="Rust CMS (${BUILD_VARIANT})" \
+    org.opencontainers.image.source="${CI_REPO_URL:-unknown}" \
+    org.opencontainers.image.vendor="RustCMS" \
+    org.opencontainers.image.licenses="MIT"
 
 # Use BuildKit cache mounts to persist cargo registry/git/target between builds (faster incremental builds)
 # Note: requires Docker BuildKit (DOCKER_BUILDKIT=1) to be enabled when building.
@@ -59,15 +66,16 @@ RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
             fi; \
         fi
 
-# Debug: list release artifacts so CI logs show what was produced by the build.
-# Remove this after diagnosis.
+# (Optional) List artifacts when DEBUG_BUILD_LIST=1
 RUN --mount=type=cache,id=cargo-target,target=/usr/local/cargo/target \
-    echo "=== /usr/local/cargo/target/release ===" && ls -la /usr/local/cargo/target/release || true && \
-    echo "=== /usr/local/cargo/target/release/deps ===" && ls -la /usr/local/cargo/target/release/deps || true
+        if [ "${DEBUG_BUILD_LIST:-0}" = "1" ]; then \
+            echo "=== /usr/local/cargo/target/release ===" && ls -la /usr/local/cargo/target/release || true; \
+        fi
 
 ## Runtime stage
 FROM debian:bookworm-slim AS runtime
 ARG BINARY="admin_server"
+ARG BUILD_VARIANT="unknown"
 
 # Minimal runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -100,5 +108,11 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:3000/health || exit 1
 
 # Default command: run selected binary
-ENTRYPOINT ["/usr/local/bin/admin_server"]
+LABEL org.opencontainers.image.title="Rust CMS (${BUILD_VARIANT})" \
+    org.opencontainers.image.description="Multi-binary Rust CMS container image variant: ${BUILD_VARIANT}" \
+    org.opencontainers.image.source="${CI_REPO_URL:-unknown}" \
+    org.opencontainers.image.vendor="RustCMS" \
+    org.opencontainers.image.licenses="MIT"
+
+ENTRYPOINT ["/usr/local/bin/${BINARY}"]
 

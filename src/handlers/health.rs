@@ -8,13 +8,14 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use serde::Serialize;
+use utoipa::ToSchema;
 use serde_json::json;
 
 use crate::utils::api_types::ApiResponse;
 use crate::{AppState, Result};
 
 /// Overall system health response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct HealthResponse {
     pub status: String,
     pub timestamp: String,
@@ -23,7 +24,7 @@ pub struct HealthResponse {
 }
 
 /// Service health details
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ServiceHealthDetails {
     pub database: ServiceStatus,
     pub cache: ServiceStatus,
@@ -32,7 +33,7 @@ pub struct ServiceHealthDetails {
 }
 
 /// Individual service status
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ServiceStatus {
     pub status: String,
     pub response_time_ms: Option<u128>,
@@ -41,7 +42,7 @@ pub struct ServiceStatus {
 }
 
 /// System information
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct SystemInfo {
     pub version: String,
     pub uptime_seconds: u64,
@@ -50,6 +51,15 @@ pub struct SystemInfo {
 }
 
 /// Comprehensive health check
+#[utoipa::path(
+    get,
+    path = "/api/v1/health",
+    tag = "Health",
+    responses(
+        (status = 200, description = "System healthy or minimal", body = HealthResponse),
+        (status = 503, description = "System degraded or unhealthy", body = HealthResponse)
+    )
+)]
 pub async fn health_check(State(state): State<AppState>) -> Result<impl IntoResponse> {
     let _start_time = std::time::Instant::now();
 
@@ -252,6 +262,7 @@ async fn check_search_health(state: &AppState) -> ServiceStatus {
 // Auth health is checked via AppState wrapper `auth_health_check` now.
 
 /// Liveness probe (simple check)
+#[utoipa::path(get, path = "/api/v1/health/liveness", tag = "Health", responses((status = 200, description = "Liveness OK")))]
 pub async fn liveness() -> impl IntoResponse {
     Json(ApiResponse::success(json!({
         "status": "alive",
@@ -260,6 +271,7 @@ pub async fn liveness() -> impl IntoResponse {
 }
 
 /// Readiness probe (check if ready to serve traffic)
+#[utoipa::path(get, path = "/api/v1/health/readiness", tag = "Health", responses((status = 200, description = "Readiness status JSON")))]
 pub async fn readiness(State(state): State<AppState>) -> Result<impl IntoResponse> {
     // Quick checks to see if essential services are ready
     let mut ready = true;

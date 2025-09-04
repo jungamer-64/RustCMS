@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 use serde_json::json;
+use crate::utils::api_types::{ValidationError, ValidationErrorResponse};
 use std::fmt;
 use validator::ValidationErrors;
 
@@ -23,8 +24,6 @@ pub enum AppError {
     BadRequest(String),
     #[cfg(feature = "auth")]
     Argon2(argon2::Error),
-    #[cfg(feature = "auth")]
-    Jwt(jsonwebtoken::errors::Error),
     Biscuit(String),
     Search(String),
     Media(String),
@@ -52,8 +51,6 @@ impl fmt::Display for AppError {
             AppError::BadRequest(msg) => write!(f, "Bad request: {}", msg),
             #[cfg(feature = "auth")]
             AppError::Argon2(err) => write!(f, "Argon2 error: {}", err),
-            #[cfg(feature = "auth")]
-            AppError::Jwt(err) => write!(f, "JWT error: {}", err),
             AppError::Biscuit(msg) => write!(f, "Biscuit auth error: {}", msg),
             AppError::Search(msg) => write!(f, "Search error: {}", msg),
             AppError::Media(msg) => write!(f, "Media error: {}", msg),
@@ -92,12 +89,6 @@ impl From<argon2::Error> for AppError {
     }
 }
 
-#[cfg(feature = "auth")]
-impl From<jsonwebtoken::errors::Error> for AppError {
-    fn from(err: jsonwebtoken::errors::Error) -> Self {
-        AppError::Jwt(err)
-    }
-}
 
 impl From<ValidationErrors> for AppError {
     fn from(err: ValidationErrors) -> Self {
@@ -126,36 +117,48 @@ impl From<tantivy::TantivyError> for AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, error_message) = match &self {
+    let (status, error_message, validation_details): (StatusCode, &str, Option<Vec<ValidationError>>) = match &self {
             #[cfg(feature = "database")]
-            AppError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error occurred"),
+            AppError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error occurred", None),
             #[cfg(feature = "cache")]
-            AppError::Redis(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Cache error occurred"),
-            AppError::Validation(_) => (StatusCode::BAD_REQUEST, "Invalid input data"),
-            AppError::Authentication(msg) => (StatusCode::UNAUTHORIZED, msg.as_str()),
-            AppError::Authorization(msg) => (StatusCode::FORBIDDEN, msg.as_str()),
-            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.as_str()),
-            AppError::Conflict(msg) => (StatusCode::CONFLICT, msg.as_str()),
-            AppError::RateLimit(msg) => (StatusCode::TOO_MANY_REQUESTS, msg.as_str()),
-            AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str()),
-            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.as_str()),
+            AppError::Redis(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Cache error occurred", None),
+            AppError::Validation(ve) => {
+                let mut list = Vec::new();
+                for (field, errs) in ve.field_errors().iter() {
+                    for e in errs.iter() {
+                        let message = e.message.clone().unwrap_or_else(|| std::borrow::Cow::from("validation error"));
+                        list.push(ValidationError { field: field.to_string(), message: message.to_string() });
+                    }
+                }
+                (StatusCode::BAD_REQUEST, "Invalid input data", Some(list))
+            },
+            AppError::Authentication(msg) => (StatusCode::UNAUTHORIZED, msg.as_str(), None),
+            AppError::Authorization(msg) => (StatusCode::FORBIDDEN, msg.as_str(), None),
+            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.as_str(), None),
+            AppError::Conflict(msg) => (StatusCode::CONFLICT, msg.as_str(), None),
+            AppError::RateLimit(msg) => (StatusCode::TOO_MANY_REQUESTS, msg.as_str(), None),
+            AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str(), None),
+            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.as_str(), None),
             #[cfg(feature = "auth")]
-            AppError::Argon2(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Password hashing error"),
-            #[cfg(feature = "auth")]
-            AppError::Jwt(_) => (StatusCode::UNAUTHORIZED, "Invalid authentication token"),
-            AppError::Biscuit(msg) => (StatusCode::UNAUTHORIZED, msg.as_str()),
-            AppError::Search(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str()),
-            AppError::Media(msg) => (StatusCode::BAD_REQUEST, msg.as_str()),
-            AppError::Config(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str()),
-            AppError::IO(_) => (StatusCode::INTERNAL_SERVER_ERROR, "IO error occurred"),
-            AppError::Serde(_) => (StatusCode::BAD_REQUEST, "Serialization error"),
+            AppError::Argon2(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Password hashing error", None),
+            AppError::Biscuit(msg) => (StatusCode::UNAUTHORIZED, msg.as_str(), None),
+            AppError::Search(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str(), None),
+            AppError::Media(msg) => (StatusCode::BAD_REQUEST, msg.as_str(), None),
+            AppError::Config(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str(), None),
+            AppError::IO(_) => (StatusCode::INTERNAL_SERVER_ERROR, "IO error occurred", None),
+            AppError::Serde(_) => (StatusCode::BAD_REQUEST, "Serialization error", None),
             #[cfg(feature = "search")]
-            AppError::Tantivy(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Search service error"),
+            AppError::Tantivy(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Search service error", None),
         };
-
+        let body = ValidationErrorResponse {
+            success: false,
+            error: error_message.to_string(),
+            validation_errors: validation_details.unwrap_or_default(),
+        };
         let body = Json(json!({
-            "success": false,
-            "error": error_message,
+            "success": body.success,
+            "error": body.error,
+            "validation_errors": body.validation_errors,
             "timestamp": chrono::Utc::now().to_rfc3339(),
         }));
 

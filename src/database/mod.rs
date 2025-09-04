@@ -10,10 +10,16 @@ use crate::{
     },
     Result,
 };
+#[cfg(all(feature = "database", not(test)))]
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use uuid::Uuid;
 
-pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
+// Diesel 2.x の embed_migrations: Cargo.toml からの相対パスでディレクトリ配下の
+// up.sql / down.sql を持つバージョンディレクトリを埋め込む。
+// 以前: 存在しない feature(with-migrations) と fallback(".") でビルド失敗を誘発していたため撤去。
+// 単純に migrations ディレクトリを埋め込む。テストでは speed / isolation のためスキップ。
+#[cfg(all(feature = "database", not(test)))]
+const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
 #[derive(Debug, Clone)]
 pub struct Database {
@@ -24,6 +30,7 @@ impl Database {
     pub async fn new(config: &DatabaseConfig) -> Result<Self> {
         let pool = DatabasePool::new(&config.url, config.max_connections)?;
 
+        #[cfg(all(feature = "database", not(test)))]
         if config.enable_migrations {
             Self::run_migrations(&pool)?;
         }
@@ -84,8 +91,10 @@ impl Database {
     }
 
     pub async fn get_user_by_id(&self, _id: Uuid) -> Result<User> {
-        // Placeholder implementation
-        Err(crate::AppError::NotFound("User not found".to_string()))
+        let mut conn = self.get_connection()?;
+        let user = User::find_by_id(&mut conn, _id)
+            .map_err(|_| crate::AppError::NotFound("User not found".to_string()))?;
+        Ok(user)
     }
 
     /// Find a user by email
@@ -208,6 +217,7 @@ impl Database {
         Ok(())
     }
 
+    #[cfg(all(feature = "database", not(test)))]
     fn run_migrations(pool: &DatabasePool) -> Result<()> {
         let mut conn = pool.get()?;
         conn.run_pending_migrations(MIGRATIONS)

@@ -1,3 +1,4 @@
+#![cfg(feature = "database")]
 use assert_cmd::prelude::*;
 use std::process::Command;
 

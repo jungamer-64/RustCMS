@@ -2,12 +2,7 @@
 //!
 //! Creates an initial admin user and a sample post if the database is empty.
 
-use cms_backend::{
-    config::Config,
-    database::Database,
-    models::{CreatePostRequest, CreateUserRequest, PostStatus, UserRole},
-    Result,
-};
+use cms_backend::{models::{CreatePostRequest, CreateUserRequest, PostStatus, UserRole}, Result};
 use tracing::{info, warn};
 
 #[tokio::main]
@@ -33,7 +28,7 @@ async fn main() -> Result<()> {
     let existing_users: i64 = users
         .count()
         .get_result(&mut conn)
-        .map_err(|e| cms_backend::AppError::Database(e))?;
+    .map_err(cms_backend::AppError::Database)?;
 
     if existing_users > 0 {
         info!(

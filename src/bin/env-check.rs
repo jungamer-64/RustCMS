@@ -27,7 +27,7 @@ fn main() {
     println!("DATABASE_NAME=rust_cms");
     println!("SERVER_HOST=127.0.0.1");
     println!("SERVER_PORT=3001");
-    println!("JWT_SECRET=your_secure_jwt_secret_here_at_least_32_characters");
+    println!("BISCUIT_ROOT_KEY=base64_or_path_to_keydir");
 
     println!("\n✅ To run the CMS, use:");
     println!("cargo run --bin cms-simple");

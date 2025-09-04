@@ -14,6 +14,8 @@ pub fn create_router() -> Router<AppState> {
     let mut router = Router::new()
         // Root API info
         .route("/api/v1", get(handlers::api_info))
+    // Metrics
+    .route("/api/v1/metrics", get(handlers::metrics::metrics))
         // Serve interactive docs and OpenAPI JSON at /api/docs
         .route("/api/docs", get(handlers::docs_ui))
         .route("/api/docs/openapi.json", get(handlers::openapi_json))
@@ -37,6 +39,11 @@ pub fn create_router() -> Router<AppState> {
         router = router.nest("/api/v1/users", user_routes());
         // Admin-only management endpoints (simple token auth in handlers)
         router = router.nest("/api/v1/admin", admin_routes());
+        // API Key 管理 (要 auth feature)
+        #[cfg(feature = "auth")]
+        {
+            router = router.nest("/api/v1/api-keys", api_key_routes());
+        }
     }
 
     #[cfg(feature = "search")]
@@ -95,6 +102,15 @@ fn admin_routes() -> Router<AppState> {
     Router::new()
         .route("/posts", get(admin::list_posts).post(admin::create_post))
         .route("/posts/:id", delete(admin::delete_post))
+}
+
+#[cfg(all(feature = "database", feature = "auth"))]
+fn api_key_routes() -> Router<AppState> {
+    use crate::handlers::api_keys as ak;
+    // APIキーの発行/一覧/削除は ユーザ (Biscuit) 認証のみで保護し、APIキー自身での自己管理は現状サポートしない
+    Router::new()
+        .route("/", post(ak::create_api_key).get(ak::list_api_keys))
+        .route("/:id", delete(ak::revoke_api_key))
 }
 
 /// Search routes - use handler functions, not the service layer

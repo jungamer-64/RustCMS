@@ -5,10 +5,9 @@
 
 use utoipa::OpenApi;
 
-use crate::utils::api_types::{
-    ApiResponse, CreatedResponse, DeletedResponse, FilterQuery, PaginatedResponse, Pagination,
-    PaginationQuery, SortQuery, UpdatedResponse, ValidationError, ValidationErrorResponse,
-};
+use crate::app::{AppMetrics, HealthStatus, ServiceHealth};
+
+// (Schemas temporarily minimized during refactor; extend later as needed)
 
 #[derive(OpenApi)]
 #[openapi(
@@ -17,24 +16,75 @@ use crate::utils::api_types::{
         version = "2.0.0",
         description = "Production-ready Content Management System API"
     ),
+    paths(
+        // Generated from handler #[utoipa::path] attributes; listing here enables explicit inclusion
+        // Health
+        crate::handlers::health::health_check,
+        crate::handlers::health::liveness,
+        crate::handlers::health::readiness,
+        // Auth
+        crate::handlers::auth::register,
+        crate::handlers::auth::login,
+        crate::handlers::auth::refresh_token,
+        // Posts
+        crate::handlers::posts::create_post,
+        crate::handlers::posts::get_post,
+        crate::handlers::posts::get_posts,
+        crate::handlers::posts::update_post,
+        crate::handlers::posts::delete_post,
+    crate::handlers::posts::get_posts_by_tag,
+    crate::handlers::posts::publish_post,
+        // Users
+        crate::handlers::users::get_users,
+        crate::handlers::users::get_user,
+        crate::handlers::users::update_user,
+        crate::handlers::users::delete_user,
+    crate::handlers::users::get_user_posts,
+    crate::handlers::users::change_user_role,
+        // Search
+        crate::handlers::search::search,
+        crate::handlers::search::suggest,
+        crate::handlers::search::search_stats,
+        crate::handlers::search::reindex,
+        crate::handlers::search::search_health
+    ,
+    // API Keys
+    crate::handlers::api_keys::create_api_key,
+    crate::handlers::api_keys::list_api_keys,
+    crate::handlers::api_keys::revoke_api_key
+    ),
     servers(
         (url = "http://localhost:3000", description = "Development server")
     ),
+    tags(
+        (name = "Health", description = "Health check endpoints"),
+        (name = "Metrics", description = "Metrics exposition")
+    ),
     components(
         schemas(
-            Pagination,
-            PaginationQuery,
-            SortQuery,
-            FilterQuery,
-            ValidationError,
-            ValidationErrorResponse,
-            CreatedResponse,
-            UpdatedResponse,
-            DeletedResponse,
-            // register common concrete instances of the generic wrappers so they appear in the OpenAPI components
-            PaginatedResponse<CreatedResponse>,
-            ApiResponse<CreatedResponse>,
-            ApiResponse<ValidationErrorResponse>
+            AppMetrics,
+            HealthStatus,
+            ServiceHealth,
+            // Auth
+            crate::handlers::auth::RegisterRequest,
+            crate::auth::LoginRequest,
+            crate::handlers::auth::LoginResponse,
+            crate::handlers::auth::RefreshRequest,
+            crate::handlers::auth::RefreshResponse,
+            // Posts
+            crate::handlers::posts::PostQuery,
+            crate::handlers::posts::PostResponse,
+            crate::handlers::posts::PostsResponse,
+            // Users
+            crate::handlers::users::UserQuery,
+            crate::handlers::users::UsersResponse,
+            // Search queries (responses are dynamic JSON; queries documented)
+            crate::handlers::search::SearchQuery,
+            crate::handlers::search::SuggestQuery,
+            // Generic related
+            crate::utils::api_types::Pagination,
+            crate::utils::api_types::ValidationError,
+            crate::utils::api_types::ValidationErrorResponse
         )
     )
 )]

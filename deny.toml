@@ -1,0 +1,45 @@
+# cargo-deny configuration
+# 参考: https://embarkstudios.github.io/cargo-deny/
+
+[advisories]
+ignore = [
+  # 例: "RUSTSEC-0000-0000"
+]
+# yanked/crate 更新の警告をビルド失敗にしない (初期段階)
+deny = ["unmaintained", "unsound", "malicious"]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+denied = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+
+[licenses]
+# 明示的に許可するライセンス
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "Unicode-DFS-2016",
+  "CC0-1.0"
+]
+# GPL/LGPL 系は初期段階で警告に (将来ポリシー強化時に deny へ)
+warn = ["GPL-2.0", "GPL-3.0", "LGPL-2.1", "LGPL-3.0", "AGPL-3.0"]
+
+# 例: 一時的に無視 (期限付コメントを書く)
+# exceptions = [
+#   { name = "some-crate", version = "=1.2.3", rationale = "Awaiting upstream fix (#123)", license = "GPL-3.0" }
+# ]
+
+[sources.allow-org]
+# GitHub org のみ許可したい場合はここに追記
+# github = ["jungamer-64"]

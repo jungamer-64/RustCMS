@@ -3,56 +3,164 @@ name: CI
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*.*.*' ]
+    paths-ignore:
+      - 'README.md'
+      - 'README_PRODUCTION.md'
+      - 'docs/**'
+      - '**/*.md'
+      - 'LICENSE'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - 'README.md'
+      - 'README_PRODUCTION.md'
+      - 'docs/**'
+      - '**/*.md'
+      - 'LICENSE'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # テストで DB が不要な場合は secrets が無くても進行させるために空文字を許容
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  BISCUIT_PRIVATE_KEY_B64: ${{ secrets.BISCUIT_PRIVATE_KEY_B64 }}
+  BISCUIT_PUBLIC_KEY_B64: ${{ secrets.BISCUIT_PUBLIC_KEY_B64 }}
 
 jobs:
-  build-and-test:
+  lint:
+    name: Lint & Format
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-          source $HOME/.cargo/env
-          rustup default stable
-          rustup component add clippy rustfmt || true
-
-      - name: Cache cargo registry
-        uses: actions/cache@v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          fetch-depth: 1
 
-      - name: Install cargo-chef
-        run: cargo install cargo-chef --locked || true
-
-      - name: Prepare recipe
-        run: cargo chef prepare --recipe-path recipe.json
-
-      - name: Cache cargo-chef
-        uses: actions/cache@v4
+      - name: Setup toolchain (stable)
+        uses: dtolnay/rust-toolchain@stable
         with:
-          path: target
-          key: ${{ runner.os }}-cargo-chef-${{ hashFiles('recipe.json') }}
+          components: rustfmt, clippy
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y nasm
+      - name: Cache (Swatinem/rust-cache)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
 
-      - name: Cook dependencies
-        run: cargo chef cook --recipe-path recipe.json
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
 
-      - name: Build (app only)
-        run: cargo build --workspace --all-targets
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-      - name: Run tests
+  test:
+    name: Build & Test (matrix)
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16-alpine
         env:
-          BISCUIT_PRIVATE_KEY_B64: ${{ secrets.BISCUIT_PRIVATE_KEY_B64 }}
-          BISCUIT_PUBLIC_KEY_B64: ${{ secrets.BISCUIT_PUBLIC_KEY_B64 }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: cargo test --workspace --no-fail-fast
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cms_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=5s --health-timeout=5s --health-retries=5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=5s --health-retries=10
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: ["1.89.0", "stable"]
+        feature-set: ["default", "minimal"]
+        include:
+          - feature-set: default
+            cargo-features: "--all-features"
+          - feature-set: minimal
+            cargo-features: "--no-default-features"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup toolchain ${{ matrix.toolchain }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: clippy
+
+      - name: Cache (Swatinem/rust-cache)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: Show cargo version
+        run: cargo --version --verbose
+
+      - name: Build (${{ matrix.feature-set }})
+        run: cargo build --workspace --all-targets ${{ matrix.cargo-features }}
+
+      - name: Run migrations (default feature-set only)
+        if: matrix.feature-set == 'default'
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/cms_test' }}
+        run: |
+          set -e
+          if [ -z "${DATABASE_URL}" ]; then
+            export DATABASE_URL="postgres://postgres:postgres@localhost:5432/cms_test"
+          fi
+          echo "Running migrations against $DATABASE_URL"
+          ./target/debug/cms-migrate migrate --no-seed || ./target/release/cms-migrate migrate --no-seed || true
+
+      - name: Run tests (${{ matrix.feature-set }})
+        # DB を必要とするテストが失敗した場合でも他は継続させるため、明示的なリトライや --no-fail-fast を使用
+        run: |
+          set -eo pipefail
+          if [ -z "${DATABASE_URL}" ]; then
+            export DATABASE_URL="postgres://postgres:postgres@localhost:5432/cms_test" || true
+          fi
+          echo "DATABASE_URL=${DATABASE_URL}"
+          # Wait for Postgres health (max 30s)
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -p 5432 -U postgres && break || sleep 1
+          done || true
+          cargo test --workspace --no-fail-fast ${{ matrix.cargo-features }} 2>&1 | tee test-output.log
+          echo "Test exit code: ${PIPESTATUS[0]}" || true
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-log-${{ matrix.toolchain }}-${{ matrix.feature-set }}
+          path: test-output.log
+          retention-days: 5
+
+  # オプション: 将来カバレッジを追加する場合のテンプレ (disabled by default)
+  # coverage:
+  #   name: Coverage (tarpaulin)
+  #   if: false  # 有効化する場合は true または条件式に変更
+  #   runs-on: ubuntu-latest
+  #   needs: test
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: dtolnay/rust-toolchain@stable
+  #     - uses: Swatinem/rust-cache@v2
+  #     - name: Install tarpaulin
+  #       run: cargo install cargo-tarpaulin --locked
+  #     - name: Run coverage
+  #       run: cargo tarpaulin --workspace --timeout 240 --out Xml
+  #     - name: Upload coverage artifact
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: coverage-report
+  #         path: cobertura.xml

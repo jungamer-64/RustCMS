@@ -18,9 +18,54 @@ use crate::database::Database;
 #[cfg(feature = "search")]
 use crate::search::SearchService;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use std::{sync::Arc, time::Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
+
+// --- Internal helper macros to reduce重複 for metrics timing wrappers ---
+// それぞれのサービス呼び出しで共通する「開始時刻取得→await→経過時間計測→メトリクス記録」の
+// ボイラープレートを削除し、ラッパー追加コストを下げる。
+// 可読性維持のため `timed_db!`, `timed_search!`, `timed_auth!` を用意。
+// 成功/失敗に関わらず計測したいものは success_only=false を指定できる拡張も検討可能だが、
+// 現状は成功時のみ平均に寄与させる既存実装に合わせる。
+
+#[cfg(feature = "database")]
+macro_rules! timed_db {
+    ($self:ident, $future:expr) => {{
+        let start = std::time::Instant::now();
+        let res = $future.await;
+        let elapsed = start.elapsed().as_millis() as f64;
+        if res.is_ok() { $self.record_db_query(elapsed).await; }
+        res
+    }};
+}
+
+#[cfg(feature = "search")]
+macro_rules! timed_search {
+    ($self:ident, $future:expr) => {{
+        let start = std::time::Instant::now();
+        let res = $future.await;
+        let elapsed = start.elapsed().as_millis() as f64;
+        // search は成功失敗関係なくクエリ数増やしていた挙動 → 成功時のみ平均更新だったので同等
+        if res.is_ok() { $self.record_search_query(elapsed).await; }
+        res
+    }};
+}
+
+#[cfg(feature = "auth")]
+macro_rules! timed_auth_attempt {
+    ($self:ident, $future:expr) => {{
+        let start = std::time::Instant::now();
+        let res = $future.await;
+        let elapsed = start.elapsed().as_millis() as f64;
+        $self.record_auth_attempt(res.is_ok()).await;
+        if res.is_ok() { $self.record_db_query(elapsed).await; }
+        res
+    }};
+}
+
+// マクロはこのファイル内のみで使う想定
 
 /// Central application state containing all services
 #[derive(Clone)]
@@ -52,7 +97,7 @@ pub struct AppState {
 }
 
 /// Application metrics for monitoring
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct AppMetrics {
     /// Total number of requests processed
     pub total_requests: u64,
@@ -83,6 +128,9 @@ pub struct AppMetrics {
     pub errors_db: u64,
     pub errors_cache: u64,
     pub errors_search: u64,
+
+    /// Active auth sessions (computed periodically)
+    pub active_sessions: u64,
 }
 
 impl Default for AppMetrics {
@@ -104,6 +152,7 @@ impl Default for AppMetrics {
             errors_db: 0,
             errors_cache: 0,
             errors_search: 0,
+            active_sessions: 0,
         }
     }
 }
@@ -151,7 +200,7 @@ impl AppStateBuilder {
 }
 
 /// Health status for individual services
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct HealthStatus {
     /// Overall status: "healthy", "degraded", "unhealthy"
     pub status: String,
@@ -173,7 +222,7 @@ pub struct HealthStatus {
 }
 
 /// Individual service health information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ServiceHealth {
     /// Service status: "up", "down", "degraded"
     pub status: String,
@@ -257,6 +306,31 @@ impl AppState {
         }
 
         let app_state = app_state_builder.build();
+
+        // --- Background maintenance tasks ---
+        #[cfg(feature = "auth")]
+        {
+            // Clone for task
+            let state_clone = app_state.clone();
+            // Cleanup interval (seconds) via env or default 300
+            let interval_secs: u64 = std::env::var("AUTH_SESSION_CLEAN_INTERVAL_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(300);
+            tokio::spawn(async move {
+                let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
+                loop {
+                    ticker.tick().await;
+                    // Clean expired
+                    state_clone.auth.cleanup_expired_sessions().await;
+                    // Update metric snapshot
+                    let active = state_clone.auth.get_active_session_count().await as u64;
+                    if let Ok(mut m) = state_clone.metrics.try_write() { // try_write to avoid blocking
+                        m.active_sessions = active;
+                    }
+                }
+            });
+        }
 
         info!("🎉 Application state initialized successfully");
         Ok(app_state)
@@ -532,65 +606,36 @@ impl AppState {
     // --- Search service wrappers to record search metrics centrally ---
     #[cfg(feature = "search")]
     pub async fn search_execute(&self, req: crate::search::SearchRequest) -> crate::Result<crate::search::SearchResults<serde_json::Value>> {
-        let start = std::time::Instant::now();
-        let res = self.search.search(req).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        // record search timing
-        self.record_search_query(elapsed).await;
-        res
+    timed_search!(self, self.search.search(req))
     }
 
     #[cfg(feature = "search")]
     pub async fn search_suggest(&self, prefix: &str, limit: usize) -> crate::Result<Vec<String>> {
-        let start = std::time::Instant::now();
-        let res = self.search.suggest(prefix, limit).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_search_query(elapsed).await;
-        res
+    timed_search!(self, self.search.suggest(prefix, limit))
     }
 
     #[cfg(feature = "search")]
     pub async fn search_get_stats(&self) -> crate::Result<crate::search::SearchStats> {
-        let start = std::time::Instant::now();
-        let res = self.search.get_stats().await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_search_query(elapsed).await;
-        res
+    timed_search!(self, self.search.get_stats())
     }
 
     // --- Auth service wrappers to record auth metrics centrally ---
     #[cfg(feature = "auth")]
     pub async fn auth_create_user(&self, request: crate::models::CreateUserRequest) -> crate::Result<crate::models::User> {
-        let start = std::time::Instant::now();
-        // AuthService::create_user expects &AppState, so pass self
-        let res = self.auth.create_user(self, request).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_auth_attempt(res.is_ok()).await;
-        // Optionally also record DB timing if auth touched DB
-        if res.is_ok() {
-            self.record_db_query(elapsed).await;
-        }
-        res
+    timed_auth_attempt!(self, self.auth.create_user(self, request))
     }
 
     #[cfg(feature = "auth")]
     pub async fn auth_authenticate(&self, request: crate::auth::LoginRequest) -> crate::Result<crate::models::User> {
-        let start = std::time::Instant::now();
-    let res = self.auth.authenticate_user(self, request).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_auth_attempt(res.is_ok()).await;
-        if res.is_ok() {
-            self.record_db_query(elapsed).await;
-        }
-        res
+    timed_auth_attempt!(self, self.auth.authenticate_user(self, request))
     }
 
     #[cfg(feature = "auth")]
     pub async fn auth_create_session(&self, user_id: uuid::Uuid) -> crate::Result<String> {
+        // create_session 内でユーザー情報を DB 取得するため DB 計測を行う
         let start = std::time::Instant::now();
-        let res = self.auth.create_session(user_id).await;
+        let res = self.auth.create_session(user_id, self).await;
         let elapsed = start.elapsed().as_millis() as f64;
-        // treat session creation as a successful auth operation for metrics
         if res.is_ok() {
             self.record_auth_attempt(true).await;
             self.record_db_query(elapsed).await;
@@ -598,18 +643,41 @@ impl AppState {
         res
     }
 
+    #[cfg(feature = "auth")]
+    pub async fn auth_build_auth_response(&self, user: crate::models::User, remember_me: bool) -> crate::Result<crate::auth::AuthResponse> {
+        // create_auth_response 内でセッションも作成するので計測
+        let start = std::time::Instant::now();
+        let res = self.auth.create_auth_response(user, remember_me).await;
+        let elapsed = start.elapsed().as_millis() as f64;
+        self.record_auth_attempt(res.is_ok()).await;
+        if res.is_ok() { self.record_db_query(elapsed).await; }
+        res
+    }
+
+    #[cfg(feature = "auth")]
+    pub async fn auth_refresh_access_token(&self, refresh_token: &str) -> crate::Result<crate::auth::RefreshResponse> {
+        let start = std::time::Instant::now();
+        let res = self.auth.refresh_access_token(refresh_token).await;
+        let elapsed = start.elapsed().as_millis() as f64;
+        // refresh は成功時のみ auth 成功とみなす
+        if res.is_ok() {
+            self.record_auth_attempt(true).await;
+            self.record_db_query(elapsed).await;
+        } else {
+            self.record_auth_attempt(false).await;
+        }
+        res
+    }
+
     /// Validate a token using the AuthService; returns the authenticated user on success and records an auth attempt
     #[cfg(feature = "auth")]
     pub async fn auth_validate_token(&self, token: &str) -> crate::Result<crate::models::User> {
-        let start = std::time::Instant::now();
-    let res = self.auth.validate_token(self, token).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        // record an auth attempt regardless of outcome
-        self.record_auth_attempt(res.is_ok()).await;
-        if res.is_ok() {
-            self.record_db_query(elapsed).await;
-        }
-        res
+    timed_auth_attempt!(self, self.auth.validate_token(self, token))
+    }
+
+    #[cfg(feature = "auth")]
+    pub async fn auth_verify_biscuit(&self, token: &str) -> crate::Result<crate::auth::AuthContext> {
+        timed_auth_attempt!(self, self.auth.verify_biscuit(self, token))
     }
 
     /// Health check wrapper for AuthService that records timing
@@ -628,110 +696,201 @@ impl AppState {
     // --- Database wrapper helpers that record metrics centrally on AppState ---
     #[cfg(feature = "database")]
     pub async fn db_create_user(&self, req: crate::models::CreateUserRequest) -> crate::Result<crate::models::User> {
-        let start = std::time::Instant::now();
-        let res = self.database.create_user(req).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_db_query(elapsed).await;
-        res
+    timed_db!(self, self.database.create_user(req))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_get_user_by_id(&self, id: uuid::Uuid) -> crate::Result<crate::models::User> {
-        let start = std::time::Instant::now();
-        let res = self.database.get_user_by_id(id).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_db_query(elapsed).await;
-        res
+    timed_db!(self, self.database.get_user_by_id(id))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_get_user_by_email(&self, email: &str) -> crate::Result<crate::models::User> {
-        let start = std::time::Instant::now();
-        let res = self.database.get_user_by_email(email).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_db_query(elapsed).await;
-        res
+    timed_db!(self, self.database.get_user_by_email(email))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_get_users(&self, page: u32, limit: u32, role: Option<String>, active: Option<bool>, sort: Option<String>) -> crate::Result<Vec<crate::models::User>> {
-        let start = std::time::Instant::now();
-        let res = self.database.get_users(page, limit, role, active, sort).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_db_query(elapsed).await;
-        res
+    timed_db!(self, self.database.get_users(page, limit, role, active, sort))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_update_last_login(&self, id: uuid::Uuid) -> crate::Result<()> {
-        let start = std::time::Instant::now();
-        let res = self.database.update_last_login(id).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_db_query(elapsed).await;
-        res
+    timed_db!(self, self.database.update_last_login(id))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_count_users(&self) -> crate::Result<usize> {
-        let start = std::time::Instant::now();
-        let res = self.database.count_users().await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_db_query(elapsed).await;
-        res
+    timed_db!(self, self.database.count_users())
     }
 
     #[cfg(feature = "database")]
     pub async fn db_create_post(&self, req: crate::models::CreatePostRequest) -> crate::Result<crate::models::Post> {
-        let start = std::time::Instant::now();
-        let res = self.database.create_post(req).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_db_query(elapsed).await;
-        res
+    timed_db!(self, self.database.create_post(req))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_get_post_by_id(&self, id: uuid::Uuid) -> crate::Result<crate::models::Post> {
-        let start = std::time::Instant::now();
-        let res = self.database.get_post_by_id(id).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_db_query(elapsed).await;
-        res
+    timed_db!(self, self.database.get_post_by_id(id))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_get_posts(&self, page: u32, limit: u32, status: Option<String>, author: Option<uuid::Uuid>, tag: Option<String>, sort: Option<String>) -> crate::Result<Vec<crate::models::Post>> {
-        let start = std::time::Instant::now();
-        let res = self.database.get_posts(page, limit, status, author, tag, sort).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_db_query(elapsed).await;
-        res
+    timed_db!(self, self.database.get_posts(page, limit, status, author, tag, sort))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_update_post(&self, id: uuid::Uuid, req: crate::models::UpdatePostRequest) -> crate::Result<crate::models::Post> {
-        let start = std::time::Instant::now();
-        let res = self.database.update_post(id, req).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_db_query(elapsed).await;
-        res
+    timed_db!(self, self.database.update_post(id, req))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_delete_post(&self, id: uuid::Uuid) -> crate::Result<()> {
-        let start = std::time::Instant::now();
-        let res = self.database.delete_post(id).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_db_query(elapsed).await;
-        res
+    timed_db!(self, self.database.delete_post(id))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_count_posts(&self, tag: Option<&str>) -> crate::Result<usize> {
+    timed_db!(self, self.database.count_posts(tag))
+    }
+
+    // --- API Key wrappers ---
+    #[cfg(all(feature = "database", feature = "auth"))]
+    pub async fn db_create_api_key(&self, name: String, user_id: uuid::Uuid, permissions: Vec<String>) -> crate::Result<(crate::models::ApiKeyResponse, String)> {
+        use crate::models::ApiKey;
+    let start = std::time::Instant::now();
+    let (model, raw) = ApiKey::new_validated(name, user_id, permissions)?;
+    let mut conn = self.database.get_connection()?;
+    let saved = ApiKey::create(&mut conn, &model)?;
+    let elapsed = start.elapsed().as_millis() as f64;
+    self.record_db_query(elapsed).await;
+    Ok((saved.to_response(), raw))
+    }
+
+    #[cfg(all(feature = "database", feature = "auth"))]
+    pub async fn db_get_api_key(&self, id: uuid::Uuid) -> crate::Result<crate::models::ApiKeyResponse> {
+        use crate::models::ApiKey;
+    let start = std::time::Instant::now();
+    let mut conn = self.database.get_connection()?;
+    let model = ApiKey::find_by_id(&mut conn, id)?;
+    let elapsed = start.elapsed().as_millis() as f64;
+    self.record_db_query(elapsed).await;
+    Ok(model.to_response())
+    }
+
+    #[cfg(all(feature = "database", feature = "auth"))]
+    pub async fn db_delete_api_key(&self, id: uuid::Uuid) -> crate::Result<()> {
+        use crate::models::ApiKey;
+        use diesel::prelude::*;
+        use crate::database::schema::api_keys::dsl::*;
         let start = std::time::Instant::now();
-        let res = self.database.count_posts(tag).await;
+        let mut conn = self.database.get_connection()?;
+        let affected = diesel::delete(api_keys.filter(crate::database::schema::api_keys::dsl::id.eq(id))).execute(&mut conn)?;
         let elapsed = start.elapsed().as_millis() as f64;
         self.record_db_query(elapsed).await;
-        res
+        if affected == 0 { return Err(crate::AppError::NotFound("api key not found".into())); }
+        Ok(())
+    }
+
+    #[cfg(all(feature = "database", feature = "auth"))]
+    pub async fn db_rotate_api_key(&self, id: uuid::Uuid, new_name: Option<String>, new_permissions: Option<Vec<String>>) -> crate::Result<(crate::models::ApiKeyResponse, String)> {
+        // Fetch existing
+        let existing = self.db_get_api_key_model(id).await?;
+        let name = new_name.unwrap_or(existing.name.clone());
+        let perms = new_permissions.unwrap_or(existing.get_permissions());
+        // Create replacement (same user)
+        let (new_model_resp, raw) = self.db_create_api_key(name, existing.user_id, perms).await?;
+        // Expire old key (soft: set expires_at = now)
+        #[cfg(all(feature = "database", feature = "auth"))]
+        {
+            use diesel::prelude::*;
+            use crate::database::schema::api_keys::dsl::*;
+            let mut conn = self.database.get_connection()?;
+            let now = chrono::Utc::now();
+            diesel::update(api_keys.find(existing.id)).set(expires_at.eq(Some(now))).execute(&mut conn)?;
+        }
+        Ok((new_model_resp, raw))
+    }
+
+    #[cfg(all(feature = "database", feature = "auth"))]
+    pub async fn db_revoke_api_key(&self, id: uuid::Uuid) -> crate::Result<()> {
+        use crate::models::ApiKey;
+    let start = std::time::Instant::now();
+    let mut conn = self.database.get_connection()?;
+    ApiKey::delete(&mut conn, id)?;
+    let elapsed = start.elapsed().as_millis() as f64;
+    self.record_db_query(elapsed).await;
+    Ok(())
+    }
+
+    #[cfg(all(feature = "database", feature = "auth"))]
+    pub async fn db_revoke_api_key_owned(&self, key_id: uuid::Uuid, user: uuid::Uuid) -> crate::Result<()> {
+        use crate::models::ApiKey;
+        use diesel::prelude::*;
+        use crate::database::schema::api_keys::dsl::*;
+        let start = std::time::Instant::now();
+        let mut conn = self.database.get_connection()?;
+        // 該当行 (id,user_id) 同時一致で削除
+        let affected = diesel::delete(api_keys.filter(crate::database::schema::api_keys::dsl::id.eq(key_id).and(user_id.eq(user)))).execute(&mut conn)?;
+        if affected == 0 {
+            // id の存在を確認して権限エラー or NotFound に振り分け
+            let exists = ApiKey::find_by_id(&mut conn, key_id).ok();
+            let elapsed = start.elapsed().as_millis() as f64;
+            self.record_db_query(elapsed).await;
+            if exists.is_some() {
+                return Err(crate::AppError::Authorization("not owner".into()));
+            } else {
+                return Err(crate::AppError::NotFound("api key not found".into()));
+            }
+        }
+        let elapsed = start.elapsed().as_millis() as f64;
+        self.record_db_query(elapsed).await;
+        Ok(())
+    }
+
+    #[cfg(all(feature = "database", feature = "auth"))]
+    pub async fn db_touch_api_key(&self, id: uuid::Uuid) -> crate::Result<()> {
+        use crate::models::ApiKey;
+    let start = std::time::Instant::now();
+    let mut conn = self.database.get_connection()?;
+    ApiKey::update_last_used(&mut conn, id)?;
+    let elapsed = start.elapsed().as_millis() as f64;
+    self.record_db_query(elapsed).await;
+    Ok(())
+    }
+
+    #[cfg(all(feature = "database", feature = "auth"))]
+    pub async fn db_list_api_keys(&self, user_id: uuid::Uuid, include_expired: bool) -> crate::Result<Vec<crate::models::ApiKeyResponse>> {
+        use crate::models::ApiKey;
+        let start = std::time::Instant::now();
+        let mut conn = self.database.get_connection()?;
+        let models = ApiKey::list_for_user(&mut conn, user_id, include_expired)?;
+        let elapsed = start.elapsed().as_millis() as f64;
+        self.record_db_query(elapsed).await;
+        Ok(models.into_iter().map(|m| m.to_response()).collect())
+    }
+
+    #[cfg(all(feature = "database", feature = "auth"))]
+    pub async fn db_get_api_key_by_lookup_hash(&self, lookup: &str) -> crate::Result<crate::models::ApiKey> {
+        use crate::models::ApiKey;
+        let lookup = lookup.to_string();
+        let start = std::time::Instant::now();
+        let mut conn = self.database.get_connection()?;
+        let model = ApiKey::find_by_lookup_hash(&mut conn, &lookup)?;
+        let elapsed = start.elapsed().as_millis() as f64;
+        self.record_db_query(elapsed).await;
+        Ok(model)
+    }
+
+    #[cfg(all(feature = "database", feature = "auth"))]
+    pub async fn db_get_api_key_model(&self, id: uuid::Uuid) -> crate::Result<crate::models::ApiKey> {
+        use crate::models::ApiKey;
+        let start = std::time::Instant::now();
+        let mut conn = self.database.get_connection()?;
+        let model = ApiKey::find_by_id(&mut conn, id)?;
+        let elapsed = start.elapsed().as_millis() as f64;
+        self.record_db_query(elapsed).await;
+        Ok(model)
     }
 }
 

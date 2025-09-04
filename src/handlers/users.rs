@@ -8,6 +8,7 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use serde_json::json;
 use std::time::Duration;
 use uuid::Uuid;
@@ -16,7 +17,7 @@ use crate::utils::{api_types::ApiResponse, common_types::UserInfo};
 use crate::{models::UpdateUserRequest, AppState, Result};
 
 /// User query parameters
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema, utoipa::IntoParams)]
 pub struct UserQuery {
     pub page: Option<u32>,
     pub limit: Option<u32>,
@@ -26,7 +27,7 @@ pub struct UserQuery {
 }
 
 /// Users response
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct UsersResponse {
     pub users: Vec<UserInfo>,
     pub total: usize,
@@ -36,6 +37,17 @@ pub struct UsersResponse {
 }
 
 /// Get all users with pagination
+#[utoipa::path(
+    get,
+    path = "/api/v1/users",
+    tag = "Users",
+    params(UserQuery),
+    security(("BearerAuth" = [])),
+    responses(
+        (status=200, body=UsersResponse),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn get_users(
     State(state): State<AppState>,
     Query(query): Query<UserQuery>,
@@ -94,6 +106,17 @@ pub async fn get_users(
 }
 
 /// Get user by ID
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/{id}",
+    tag = "Users",
+    security(("BearerAuth" = [])),
+    responses(
+        (status=200, body=UserInfo),
+        (status=404, description="User not found"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn get_user(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -127,6 +150,18 @@ pub async fn get_user(
 }
 
 /// Update user
+#[utoipa::path(
+    put,
+    path = "/api/v1/users/{id}",
+    tag = "Users",
+    security(("BearerAuth" = [])),
+    responses(
+        (status=200, body=UserInfo),
+        (status=400, description="Validation error", body=crate::utils::api_types::ValidationErrorResponse),
+        (status=404, description="User not found"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn update_user(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -158,6 +193,17 @@ pub async fn update_user(
 }
 
 /// Delete user (soft delete by deactivating)
+#[utoipa::path(
+    delete,
+    path = "/api/v1/users/{id}",
+    tag = "Users",
+    security(("BearerAuth" = [])),
+    responses(
+        (status=200, description="User deactivated"),
+        (status=404, description="User not found"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn delete_user(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -194,6 +240,18 @@ pub async fn delete_user(
 }
 
 /// Get user's posts
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/{id}/posts",
+    tag = "Users",
+    params(crate::handlers::posts::PostQuery),
+    security(("BearerAuth" = [])),
+    responses(
+        (status=200, body=crate::utils::api_types::ApiResponse<crate::handlers::posts::PostsResponse>),
+        (status=404, description="User not found"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn get_user_posts(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -232,6 +290,18 @@ pub async fn get_user_posts(
 }
 
 /// Change user role (admin only)
+#[utoipa::path(
+    post,
+    path = "/api/v1/users/{id}/role",
+    tag = "Users",
+    security(("BearerAuth" = [])),
+    responses(
+        (status=200, body=UserInfo),
+        (status=400, description="Invalid role value"),
+        (status=404, description="User not found"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn change_user_role(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
