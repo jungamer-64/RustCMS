@@ -757,7 +757,7 @@ impl AppState {
     // --- API Key wrappers ---
     #[cfg(all(feature = "database", feature = "auth"))]
     pub async fn db_create_api_key(&self, name: String, user_id: uuid::Uuid, permissions: Vec<String>) -> crate::Result<(crate::models::ApiKeyResponse, String)> {
-        use crate::models::ApiKey;
+    use crate::models::ApiKey; // required
     let start = std::time::Instant::now();
     let (model, raw) = ApiKey::new_validated(name, user_id, permissions)?;
     let mut conn = self.database.get_connection()?;
@@ -769,7 +769,7 @@ impl AppState {
 
     #[cfg(all(feature = "database", feature = "auth"))]
     pub async fn db_get_api_key(&self, id: uuid::Uuid) -> crate::Result<crate::models::ApiKeyResponse> {
-        use crate::models::ApiKey;
+        use crate::models::ApiKey; // needed for find_by_id
     let start = std::time::Instant::now();
     let mut conn = self.database.get_connection()?;
     let model = ApiKey::find_by_id(&mut conn, id)?;
@@ -779,13 +779,12 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
-    pub async fn db_delete_api_key(&self, id: uuid::Uuid) -> crate::Result<()> {
-        use crate::models::ApiKey;
+    pub async fn db_delete_api_key(&self, _id: uuid::Uuid) -> crate::Result<()> {
         use diesel::prelude::*;
         use crate::database::schema::api_keys::dsl::*;
         let start = std::time::Instant::now();
         let mut conn = self.database.get_connection()?;
-        let affected = diesel::delete(api_keys.filter(crate::database::schema::api_keys::dsl::id.eq(id))).execute(&mut conn)?;
+    let affected = diesel::delete(api_keys.filter(crate::database::schema::api_keys::dsl::id.eq(_id))).execute(&mut conn)?;
         let elapsed = start.elapsed().as_millis() as f64;
         self.record_db_query(elapsed).await;
         if affected == 0 { return Err(crate::AppError::NotFound("api key not found".into())); }

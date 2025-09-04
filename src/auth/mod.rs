@@ -57,8 +57,6 @@ pub enum AuthError {
     PasswordHash(String),
     #[error("Biscuit error: {0}")]
     Biscuit(String),
-    #[error("Deprecated JWT error placeholder: {0}")]
-    Jwt(String), // 後方互換 (既存エラー variant を残置) - 利用は行わない
     #[error("Database error: {0}")]
     Database(String),
     #[error("WebAuthn error: {0}")]
