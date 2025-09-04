@@ -3,7 +3,14 @@ use axum::http::StatusCode;
 use tracing::{warn, debug};
 #[cfg(feature = "monitoring")]
 use metrics::{counter, gauge};
-use crate::middleware::rate_limit_backend::get_rate_limiter;
+use crate::limiter::{GenericRateLimiter, RateLimitDecision};
+#[cfg(feature = "auth")]
+use crate::limiter::adapters::ApiKeyFailureLimiterAdapter;
+use once_cell::sync::Lazy;
+
+// 統一トレイト対応アダプタ (失敗回数レートリミット) ※AUTH feature 時のみ
+#[cfg(feature = "auth")]
+static API_KEY_FAILURE_LIMITER: Lazy<ApiKeyFailureLimiterAdapter> = Lazy::new(|| ApiKeyFailureLimiterAdapter::from_env());
 
 /// 抽出結果を request extensions に格納するキー
 #[derive(Clone, Debug)]
@@ -54,13 +61,13 @@ pub async fn api_key_auth_layer(
 
     // 決定的 lookup hash
     let lookup_hash = crate::models::api_key::ApiKey::lookup_hash(raw);
-    // レート制限 (存在確認前でも hash は決定できる)。
-    let limiter = get_rate_limiter();
-    if limiter.record_failure(&lookup_hash) { // 先に+1されるため閾値超過直後にブロック (初回は1)
+    // レート制限 (統一アダプタ経由)。
+    let decision = API_KEY_FAILURE_LIMITER.check(&lookup_hash);
+    if let RateLimitDecision::Blocked { .. } = decision {
         #[cfg(feature = "monitoring")]
         {
             counter!("api_key_auth_failure_total", "reason" => "rate_limited").increment(1);
-            gauge!("api_key_rate_limit_tracked_keys").set(limiter.tracked_len() as f64);
+            gauge!("api_key_rate_limit_tracked_keys").set(API_KEY_FAILURE_LIMITER.tracked_len() as f64);
         }
         return Err((StatusCode::TOO_MANY_REQUESTS, "API key attempts rate limited"));
     }
@@ -93,10 +100,10 @@ pub async fn api_key_auth_layer(
     if let Err(e) = state.db_touch_api_key(api_key.id).await { warn!(?e, "Failed to update last_used_at"); }
 
     // 成功: 該当 lookup_hash の失敗カウントをクリア (早期 +1 を相殺)
-    limiter.clear(&lookup_hash);
+    API_KEY_FAILURE_LIMITER.clear(&lookup_hash);
     let info = ApiKeyAuthInfo { api_key_id: api_key.id, user_id: api_key.user_id, permissions: api_key.get_permissions() };
     #[cfg(feature = "monitoring")]
-    gauge!("api_key_rate_limit_tracked_keys").set(limiter.tracked_len() as f64);
+    gauge!("api_key_rate_limit_tracked_keys").set(API_KEY_FAILURE_LIMITER.tracked_len() as f64);
     #[cfg(feature = "monitoring")]
     counter!("api_key_auth_success_total").increment(1);
     debug!(api_key_id=%info.api_key_id, user_id=%info.user_id, perms=?info.permissions, "API key authenticated");

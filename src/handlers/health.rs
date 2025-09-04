@@ -5,13 +5,14 @@
 use axum::{
     extract::State,
     http::StatusCode,
-    response::{IntoResponse, Json},
+    response::IntoResponse,
 };
 use serde::Serialize;
 use utoipa::ToSchema;
 use serde_json::json;
 
-use crate::utils::api_types::ApiResponse;
+// removed unused ok helper after migrating to IntoApiOk
+use crate::utils::response_ext::ApiOk;
 use crate::{AppState, Result};
 
 /// Overall system health response
@@ -193,7 +194,7 @@ pub async fn health_check(State(state): State<AppState>) -> Result<impl IntoResp
         StatusCode::SERVICE_UNAVAILABLE
     };
 
-    Ok((status_code, Json(ApiResponse::success(response))))
+    Ok((status_code, ApiOk(response)))
 }
 
 /// Database health check
@@ -264,10 +265,10 @@ async fn check_search_health(state: &AppState) -> ServiceStatus {
 /// Liveness probe (simple check)
 #[utoipa::path(get, path = "/api/v1/health/liveness", tag = "Health", responses((status = 200, description = "Liveness OK")))]
 pub async fn liveness() -> impl IntoResponse {
-    Json(ApiResponse::success(json!({
+    ApiOk(json!({
         "status": "alive",
         "timestamp": chrono::Utc::now().to_rfc3339()
-    })))
+    }))
 }
 
 /// Readiness probe (check if ready to serve traffic)
@@ -306,5 +307,5 @@ pub async fn readiness(State(state): State<AppState>) -> Result<impl IntoRespons
         status_json["status"] = json!("not_ready");
     }
 
-    Ok(Json(ApiResponse::success(status_json)))
+    Ok(ApiOk(status_json))
 }

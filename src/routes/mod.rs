@@ -8,6 +8,8 @@ use axum::{
 };
 
 use crate::{handlers, AppState};
+use crate::middleware::rate_limiting::RateLimitLayer; // unified IP rate limiting
+// logging middleware layer integration pending (currently unused)
 
 /// Create the main application router
 pub fn create_router() -> Router<AppState> {
@@ -25,7 +27,9 @@ pub fn create_router() -> Router<AppState> {
         // Build info endpoint
         .route("/api/v1/info", get(handlers::api_info))
         // 404 handler
-        .fallback(handlers::not_found);
+        .fallback(handlers::not_found)
+        // Apply global IP rate limiting (config-driven via AppState)
+    .layer(RateLimitLayer::new());
 
     // Add conditional routes based on features
     #[cfg(feature = "auth")]

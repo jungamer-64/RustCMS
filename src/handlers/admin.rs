@@ -1,14 +1,15 @@
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use serde::Deserialize;
 
-use crate::utils::{api_types::ApiResponse, auth_utils, common_types::PostSummary};
+use crate::utils::{auth_utils, common_types::PostSummary};
+use crate::utils::response_ext::ApiOk;
 use crate::{AppState, Result};
 
 pub async fn list_posts(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
-) -> Result<Json<ApiResponse<Vec<PostSummary>>>> {
+) -> Result<impl IntoResponse> {
     // Simple header auth
     if let Some(val) = headers.get("x-admin-token") {
         if !auth_utils::check_admin_token(val.to_str().unwrap_or("")) {
@@ -38,7 +39,7 @@ pub async fn list_posts(
         .load(&mut conn)
     .map_err(crate::AppError::Database)?;
 
-    let out = rows
+    let out: Vec<PostSummary> = rows
         .into_iter()
         .map(|r| PostSummary {
             id: r.id.to_string(),
@@ -49,7 +50,7 @@ pub async fn list_posts(
         })
         .collect();
 
-    Ok(Json(ApiResponse::success(out)))
+    Ok(ApiOk(out))
 }
 
 #[derive(Deserialize)]
@@ -63,7 +64,7 @@ pub async fn create_post(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
     Json(payload): Json<CreatePostBody>,
-) -> Result<(StatusCode, Json<ApiResponse<PostSummary>>)> {
+) -> Result<(StatusCode, impl IntoResponse)> {
     if let Some(val) = headers.get("x-admin-token") {
         if !auth_utils::check_admin_token(val.to_str().unwrap_or("")) {
             return Err(crate::AppError::Authentication("invalid token".to_string()));
@@ -98,7 +99,7 @@ pub async fn create_post(
         created_at: post.created_at.to_rfc3339(),
     };
 
-    Ok((StatusCode::CREATED, Json(ApiResponse::success(out))))
+    Ok((StatusCode::CREATED, ApiOk(out)))
 }
 
 pub async fn delete_post(

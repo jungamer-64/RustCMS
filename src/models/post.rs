@@ -176,6 +176,17 @@ pub struct UpdatePostRequest {
     pub status: Option<PostStatus>,
 }
 
+// Builder-style convenience constructors to remove repetitive None initializations in handlers
+impl UpdatePostRequest {
+    pub fn empty() -> Self { Self { title: None, content: None, excerpt: None, slug: None, published: None, tags: None, category: None, featured_image: None, meta_title: None, meta_description: None, published_at: None, status: None } }
+    pub fn publish_now(mut self) -> Self {
+        self.published = Some(true);
+        self.status = Some(PostStatus::Published);
+        self.published_at = Some(chrono::Utc::now());
+        self
+    }
+}
+
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct PostFilter {
     #[serde(default = "default_page")]

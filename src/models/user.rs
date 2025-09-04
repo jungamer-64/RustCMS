@@ -87,6 +87,12 @@ pub struct UpdateUserRequest {
     pub is_active: Option<bool>,
 }
 
+impl UpdateUserRequest {
+    pub fn empty() -> Self { Self { username: None, email: None, first_name: None, last_name: None, role: None, is_active: None } }
+    pub fn deactivate() -> Self { Self { is_active: Some(false), ..Self::empty() } }
+    pub fn with_role(role: UserRole) -> Self { Self { role: Some(role), ..Self::empty() } }
+}
+
 impl User {
     pub fn new(
         username: String,

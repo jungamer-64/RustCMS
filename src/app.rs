@@ -8,6 +8,7 @@
 //! - Health monitoring and metrics collection
 
 use crate::{config::Config, Result};
+use crate::limiter::FixedWindowLimiter;
 
 #[cfg(feature = "auth")]
 use crate::auth::AuthService;
@@ -22,50 +23,53 @@ use utoipa::ToSchema;
 use std::{sync::Arc, time::Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
+#[cfg(feature = "cache")]
+use std::time::Duration;
 
-// --- Internal helper macros to reduce重複 for metrics timing wrappers ---
-// それぞれのサービス呼び出しで共通する「開始時刻取得→await→経過時間計測→メトリクス記録」の
-// ボイラープレートを削除し、ラッパー追加コストを下げる。
-// 可読性維持のため `timed_db!`, `timed_search!`, `timed_auth!` を用意。
-// 成功/失敗に関わらず計測したいものは success_only=false を指定できる拡張も検討可能だが、
-// 現状は成功時のみ平均に寄与させる既存実装に合わせる。
-
-#[cfg(feature = "database")]
-macro_rules! timed_db {
-    ($self:ident, $future:expr) => {{
+// --- Generic instrumentation macro ---
+// 単一マクロで開始→await→経過時間→成功時処理 を汎用化。
+// 呼び出し側で metric 種別を &str で指定し、対応する更新ロジックに分岐。
+macro_rules! timed_op {
+    ($self:ident, $kind:expr, $future:expr) => {{
         let start = std::time::Instant::now();
         let res = $future.await;
         let elapsed = start.elapsed().as_millis() as f64;
-        if res.is_ok() { $self.record_db_query(elapsed).await; }
+        if res.is_ok() {
+            match $kind {
+                #[cfg(feature = "database")] "db" => { $self.record_db_query(elapsed).await; },
+                #[cfg(feature = "search")] "search" => { $self.record_search_query(elapsed).await; },
+                #[cfg(feature = "auth")] "auth" => {
+                    // auth は同時に auth 試行 & DB クエリ計測（ユーザー/セッション更新含む）
+                    $self.record_auth_attempt(true).await;
+                    #[cfg(feature = "database")] { $self.record_db_query(elapsed).await; }
+                },
+                _ => {},
+            }
+        } else {
+            #[cfg(feature = "auth")]
+            if $kind == "auth" { $self.record_auth_attempt(false).await; }
+        }
         res
     }};
 }
 
-#[cfg(feature = "search")]
-macro_rules! timed_search {
-    ($self:ident, $future:expr) => {{
-        let start = std::time::Instant::now();
-        let res = $future.await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        // search は成功失敗関係なくクエリ数増やしていた挙動 → 成功時のみ平均更新だったので同等
-        if res.is_ok() { $self.record_search_query(elapsed).await; }
-        res
-    }};
+// Generic health check macro (module scope)
+macro_rules! define_health_check {
+    ($fn_name:ident, $feature:literal, $field:ident, $failure_mode:expr, $missing:expr) => {
+        #[cfg(feature = $feature)]
+        async fn $fn_name(&self) -> ServiceHealth {
+            let h = to_service_health(self.$field.health_check(), $failure_mode).await;
+            match h.status.as_str() {
+                "down" => error!(service = $feature, error = ?h.error, "health check failed"),
+                "degraded" => warn!(service = $feature, error = ?h.error, "health check degraded"),
+                _ => {}
+            }
+            h
+        }
+        #[cfg(not(feature = $feature))]
+        async fn $fn_name(&self) -> ServiceHealth { service_not_configured($missing) }
+    };
 }
-
-#[cfg(feature = "auth")]
-macro_rules! timed_auth_attempt {
-    ($self:ident, $future:expr) => {{
-        let start = std::time::Instant::now();
-        let res = $future.await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        $self.record_auth_attempt(res.is_ok()).await;
-        if res.is_ok() { $self.record_db_query(elapsed).await; }
-        res
-    }};
-}
-
-// マクロはこのファイル内のみで使う想定
 
 /// Central application state containing all services
 #[derive(Clone)]
@@ -92,9 +96,13 @@ pub struct AppState {
     /// Application metrics
     pub metrics: Arc<RwLock<AppMetrics>>,
 
+    /// Unified IP rate limiter (fixed window strategy)
+    pub rate_limiter: Arc<FixedWindowLimiter>,
+
     /// Application start time for uptime calculations
     pub start_time: Instant,
 }
+
 
 /// Application metrics for monitoring
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -122,6 +130,10 @@ pub struct AppMetrics {
     pub db_queries: u64,
     pub db_avg_response_time_ms: f64,
 
+    /// Cache invalidation counters
+    pub cache_invalidations: u64,
+    pub cache_invalidation_errors: u64,
+
     /// Error counts by type
     pub errors_total: u64,
     pub errors_auth: u64,
@@ -147,6 +159,8 @@ impl Default for AppMetrics {
             auth_failures: 0,
             db_queries: 0,
             db_avg_response_time_ms: 0.0,
+            cache_invalidations: 0,
+            cache_invalidation_errors: 0,
             errors_total: 0,
             errors_auth: 0,
             errors_db: 0,
@@ -156,6 +170,43 @@ impl Default for AppMetrics {
         }
     }
 }
+
+// ----------------- Shared Instrumentation Helpers -----------------
+#[derive(Copy, Clone)]
+enum FailureMode { Down, Degraded }
+
+#[inline]
+async fn to_service_health<F, T>(fut: F, failure: FailureMode) -> ServiceHealth
+where
+    F: std::future::Future<Output = crate::Result<T>>,
+{
+    let start = std::time::Instant::now();
+    match fut.await {
+        Ok(_) => ServiceHealth {
+            status: "up".to_string(),
+            response_time_ms: start.elapsed().as_millis() as f64,
+            error: None,
+            details: serde_json::json!({}),
+        },
+    Err(e) => {
+            let status = match failure { FailureMode::Down => "down", FailureMode::Degraded => "degraded" };
+            ServiceHealth {
+                status: status.to_string(),
+                response_time_ms: start.elapsed().as_millis() as f64,
+        error: Some(format!("{:?}", e)),
+                details: serde_json::json!({}),
+            }
+        }
+    }
+}
+
+#[inline]
+#[allow(dead_code)]
+fn service_not_configured(msg: &str) -> ServiceHealth {
+    ServiceHealth { status: "not_configured".into(), response_time_ms: 0.0, error: None, details: serde_json::json!({"message": msg}) }
+}
+
+// (旧) update_running_avg は各 record_* 内へインライン化済み
 
 /// Builder pattern for AppState to handle conditional compilation
 pub struct AppStateBuilder {
@@ -194,6 +245,7 @@ impl AppStateBuilder {
                 .unwrap_or_else(|| panic!("Search service not initialized but feature enabled")),
             config: self.config,
             metrics: self.metrics,
+            rate_limiter: Arc::new(FixedWindowLimiter::new(100, 60)), // default; real values set in from_config
             start_time: self.start_time,
         }
     }
@@ -305,7 +357,12 @@ impl AppState {
             info!("✅ Search service initialized");
         }
 
-        let app_state = app_state_builder.build();
+        let mut app_state = app_state_builder.build();
+        // Override default limiter with configured values
+        app_state.rate_limiter = Arc::new(FixedWindowLimiter::new(
+            config.security.rate_limit_requests as u32,
+            config.security.rate_limit_window,
+        ));
 
         // --- Background maintenance tasks ---
         #[cfg(feature = "auth")]
@@ -385,141 +442,10 @@ impl AppState {
         Ok(health_status)
     }
 
-    /// Check database service health
-    #[cfg(feature = "database")]
-    async fn check_database_health(&self) -> ServiceHealth {
-        let start_time = Instant::now();
-
-        match self.database.health_check().await {
-            Ok(_) => ServiceHealth {
-                status: "up".to_string(),
-                response_time_ms: start_time.elapsed().as_millis() as f64,
-                error: None,
-                details: serde_json::json!({}),
-            },
-            Err(e) => {
-                error!("Database health check failed: {}", e);
-                ServiceHealth {
-                    status: "down".to_string(),
-                    response_time_ms: start_time.elapsed().as_millis() as f64,
-                    error: Some(e.to_string()),
-                    details: serde_json::json!({}),
-                }
-            }
-        }
-    }
-
-    #[cfg(not(feature = "database"))]
-    async fn check_database_health(&self) -> ServiceHealth {
-        ServiceHealth {
-            status: "not_configured".to_string(),
-            response_time_ms: 0.0,
-            error: None,
-            details: serde_json::json!({"message": "Database feature not enabled"}),
-        }
-    }
-
-    /// Check cache service health
-    #[cfg(feature = "cache")]
-    async fn check_cache_health(&self) -> ServiceHealth {
-        let start_time = Instant::now();
-
-        match self.cache.health_check().await {
-            Ok(_) => ServiceHealth {
-                status: "up".to_string(),
-                response_time_ms: start_time.elapsed().as_millis() as f64,
-                error: None,
-                details: serde_json::json!({}),
-            },
-            Err(e) => {
-                warn!("Cache health check failed: {}", e);
-                ServiceHealth {
-                    status: "degraded".to_string(),
-                    response_time_ms: start_time.elapsed().as_millis() as f64,
-                    error: Some(e.to_string()),
-                    details: serde_json::json!({}),
-                }
-            }
-        }
-    }
-
-    #[cfg(not(feature = "cache"))]
-    async fn check_cache_health(&self) -> ServiceHealth {
-        ServiceHealth {
-            status: "not_configured".to_string(),
-            response_time_ms: 0.0,
-            error: None,
-            details: serde_json::json!({"message": "Cache feature not enabled"}),
-        }
-    }
-
-    /// Check search service health
-    #[cfg(feature = "search")]
-    async fn check_search_health(&self) -> ServiceHealth {
-        let start_time = Instant::now();
-
-        match self.search.health_check().await {
-            Ok(_) => ServiceHealth {
-                status: "up".to_string(),
-                response_time_ms: start_time.elapsed().as_millis() as f64,
-                error: None,
-                details: serde_json::json!({}),
-            },
-            Err(e) => {
-                warn!("Search health check failed: {}", e);
-                ServiceHealth {
-                    status: "degraded".to_string(),
-                    response_time_ms: start_time.elapsed().as_millis() as f64,
-                    error: Some(e.to_string()),
-                    details: serde_json::json!({}),
-                }
-            }
-        }
-    }
-
-    #[cfg(not(feature = "search"))]
-    async fn check_search_health(&self) -> ServiceHealth {
-        ServiceHealth {
-            status: "not_configured".to_string(),
-            response_time_ms: 0.0,
-            error: None,
-            details: serde_json::json!({"message": "Search feature not enabled"}),
-        }
-    }
-
-    /// Check authentication service health
-    #[cfg(feature = "auth")]
-    async fn check_auth_health(&self) -> ServiceHealth {
-        let start_time = Instant::now();
-
-        match self.auth.health_check().await {
-            Ok(_) => ServiceHealth {
-                status: "up".to_string(),
-                response_time_ms: start_time.elapsed().as_millis() as f64,
-                error: None,
-                details: serde_json::json!({}),
-            },
-            Err(e) => {
-                error!("Auth health check failed: {}", e);
-                ServiceHealth {
-                    status: "down".to_string(),
-                    response_time_ms: start_time.elapsed().as_millis() as f64,
-                    error: Some(e.to_string()),
-                    details: serde_json::json!({}),
-                }
-            }
-        }
-    }
-
-    #[cfg(not(feature = "auth"))]
-    async fn check_auth_health(&self) -> ServiceHealth {
-        ServiceHealth {
-            status: "not_configured".to_string(),
-            response_time_ms: 0.0,
-            error: None,
-            details: serde_json::json!({"message": "Auth feature not enabled"}),
-        }
-    }
+    define_health_check!(check_database_health, "database", database, FailureMode::Down, "Database feature not enabled");
+    define_health_check!(check_cache_health, "cache", cache, FailureMode::Degraded, "Cache feature not enabled");
+    define_health_check!(check_search_health, "search", search, FailureMode::Degraded, "Search feature not enabled");
+    define_health_check!(check_auth_health, "auth", auth, FailureMode::Down, "Auth feature not enabled");
 
     /// Get current application metrics
     pub async fn get_metrics(&self) -> AppMetrics {
@@ -556,26 +482,18 @@ impl AppState {
 
     /// Update search metrics
     pub async fn record_search_query(&self, response_time_ms: f64) {
-        let mut metrics = self.metrics.write().await;
-        metrics.search_queries += 1;
-
-        // Update rolling average
-        let total_queries = metrics.search_queries as f64;
-        metrics.search_avg_response_time_ms =
-            (metrics.search_avg_response_time_ms * (total_queries - 1.0) + response_time_ms)
-                / total_queries;
+    let mut m = self.metrics.write().await;
+    m.search_queries += 1;
+    let n = m.search_queries as f64;
+    m.search_avg_response_time_ms = (m.search_avg_response_time_ms * (n - 1.0) + response_time_ms) / n;
     }
 
     /// Update database metrics
     pub async fn record_db_query(&self, response_time_ms: f64) {
-        let mut metrics = self.metrics.write().await;
-        metrics.db_queries += 1;
-
-        // Update rolling average
-        let total_queries = metrics.db_queries as f64;
-        metrics.db_avg_response_time_ms = (metrics.db_avg_response_time_ms * (total_queries - 1.0)
-            + response_time_ms)
-            / total_queries;
+    let mut m = self.metrics.write().await;
+    m.db_queries += 1;
+    let n = m.db_queries as f64;
+    m.db_avg_response_time_ms = (m.db_avg_response_time_ms * (n - 1.0) + response_time_ms) / n;
     }
 
     /// Record error by type
@@ -597,198 +515,257 @@ impl AppState {
         self.start_time.elapsed().as_secs()
     }
 
+    /// Rate limit helper for IP addresses. Returns true if request allowed.
+    pub fn allow_ip(&self, ip: &std::net::IpAddr) -> bool {
+        self.rate_limiter.allow(&ip.to_string())
+    }
+
     /// Convenience helper to get a pooled DB connection from AppState
     #[cfg(feature = "database")]
     pub fn get_conn(&self) -> crate::Result<crate::database::PooledConnection> {
         self.database.get_connection()
     }
 
+    // ---------------- Cache helper (get or compute & store) ----------------
+    #[cfg(feature = "cache")]
+    pub async fn cache_get_or_set<T, F, Fut>(&self, key: &str, ttl: Duration, builder: F) -> crate::Result<T>
+    where
+        T: serde::de::DeserializeOwned + serde::Serialize + Clone + Send + Sync + 'static,
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = crate::Result<T>>,
+    {
+        if let Ok(Some(v)) = self.cache.get::<T>(key).await { return Ok(v); }
+        let value = builder().await?;
+        // キャッシュ失敗は致命ではないので黙殺（ログのみ）
+        if let Err(e) = self.cache.set(key.to_string(), &value, Some(ttl)).await {
+            warn!("cache set failed key={} err={}", key, e);
+        }
+        Ok(value)
+    }
+
+    /// Prefix invalidation helper (supports patterns like "posts:*").
+    /// Wildcard削除はサービス側の delete がパターン処理をサポートしている前提。
+    #[cfg(feature = "cache")]
+    pub async fn cache_invalidate_prefix(&self, prefix: &str) {
+        let mut metrics = self.metrics.write().await;
+        match self.cache.delete(prefix).await {
+            Ok(_) => { metrics.cache_invalidations += 1; },
+            Err(e) => { metrics.cache_invalidation_errors += 1; warn!("cache invalidate failed prefix={} err={}", prefix, e); }
+        }
+    }
+
+    // ---------------- Entity specific cache helpers (to reduce handler duplication) ----------------
+    #[cfg(feature = "cache")]
+    pub async fn invalidate_post_caches(&self, id: uuid::Uuid) {
+    use crate::utils::cache_key::{CACHE_PREFIX_POST_ID, CACHE_PREFIX_POSTS};
+    let key = format!("{}{}", CACHE_PREFIX_POST_ID, id);
+        let mut metrics = self.metrics.write().await;
+        match self.cache.delete(&key).await {
+            Ok(_) => { metrics.cache_invalidations += 1; },
+            Err(e) => { metrics.cache_invalidation_errors += 1; warn!(post_id=%id, error=%e, "post cache delete failed"); }
+        }
+        drop(metrics);
+        self.cache_invalidate_prefix(&format!("{}*", CACHE_PREFIX_POSTS)).await; // prefix helper already logs
+    }
+
+    #[cfg(feature = "cache")]
+    pub async fn invalidate_user_caches(&self, id: uuid::Uuid) {
+    use crate::utils::cache_key::{CACHE_PREFIX_USER_ID, CACHE_PREFIX_USERS, CACHE_PREFIX_USER_POSTS};
+    let key = format!("{}{}", CACHE_PREFIX_USER_ID, id);
+        let mut metrics = self.metrics.write().await;
+        match self.cache.delete(&key).await {
+            Ok(_) => { metrics.cache_invalidations += 1; },
+            Err(e) => { metrics.cache_invalidation_errors += 1; warn!(user_id=%id, error=%e, "user cache delete failed"); }
+        }
+        drop(metrics);
+        self.cache_invalidate_prefix(&format!("{}*", CACHE_PREFIX_USERS)).await;
+        self.cache_invalidate_prefix(&format!("{}{}:*", CACHE_PREFIX_USER_POSTS, id)).await;
+    }
+
+    // ---------------- Search index safe helpers (avoid duplicated error logging) ----------------
+    #[cfg(feature = "search")]
+    pub async fn search_index_post_safe(&self, post: &crate::models::Post) {
+        if let Err(e) = self.search.index_post(post).await {
+            warn!(post_id = %post.id, error = ?e, "search index post failed");
+        }
+    }
+
+    #[cfg(feature = "search")]
+    pub async fn search_remove_post_safe(&self, id: uuid::Uuid) {
+        if let Err(e) = self.search.remove_document(&id.to_string()).await {
+            warn!(post_id = %id, error = ?e, "search remove post failed");
+        }
+    }
+
+    #[cfg(feature = "search")]
+    pub async fn search_index_user_safe(&self, user: &crate::models::User) {
+        if let Err(e) = self.search.index_user(user).await {
+            warn!(user_id = %user.id, error = ?e, "search index user failed");
+        }
+    }
+
+    #[cfg(feature = "search")]
+    pub async fn search_remove_user_safe(&self, id: uuid::Uuid) {
+        if let Err(e) = self.search.remove_document(&id.to_string()).await {
+            warn!(user_id = %id, error = ?e, "search remove user failed");
+        }
+    }
+
     // --- Search service wrappers to record search metrics centrally ---
     #[cfg(feature = "search")]
     pub async fn search_execute(&self, req: crate::search::SearchRequest) -> crate::Result<crate::search::SearchResults<serde_json::Value>> {
-    timed_search!(self, self.search.search(req))
+    timed_op!(self, "search", self.search.search(req))
     }
 
     #[cfg(feature = "search")]
     pub async fn search_suggest(&self, prefix: &str, limit: usize) -> crate::Result<Vec<String>> {
-    timed_search!(self, self.search.suggest(prefix, limit))
+    timed_op!(self, "search", self.search.suggest(prefix, limit))
     }
 
     #[cfg(feature = "search")]
     pub async fn search_get_stats(&self) -> crate::Result<crate::search::SearchStats> {
-    timed_search!(self, self.search.get_stats())
+    timed_op!(self, "search", self.search.get_stats())
     }
 
     // --- Auth service wrappers to record auth metrics centrally ---
     #[cfg(feature = "auth")]
     pub async fn auth_create_user(&self, request: crate::models::CreateUserRequest) -> crate::Result<crate::models::User> {
-    timed_auth_attempt!(self, self.auth.create_user(self, request))
+    timed_op!(self, "auth", self.auth.create_user(self, request))
     }
 
     #[cfg(feature = "auth")]
     pub async fn auth_authenticate(&self, request: crate::auth::LoginRequest) -> crate::Result<crate::models::User> {
-    timed_auth_attempt!(self, self.auth.authenticate_user(self, request))
+    timed_op!(self, "auth", self.auth.authenticate_user(self, request))
     }
 
     #[cfg(feature = "auth")]
     pub async fn auth_create_session(&self, user_id: uuid::Uuid) -> crate::Result<String> {
-        // create_session 内でユーザー情報を DB 取得するため DB 計測を行う
-        let start = std::time::Instant::now();
-        let res = self.auth.create_session(user_id, self).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        if res.is_ok() {
-            self.record_auth_attempt(true).await;
-            self.record_db_query(elapsed).await;
-        }
-        res
+    timed_op!(self, "auth", self.auth.create_session(user_id, self))
     }
 
     #[cfg(feature = "auth")]
     pub async fn auth_build_auth_response(&self, user: crate::models::User, remember_me: bool) -> crate::Result<crate::auth::AuthResponse> {
-        // create_auth_response 内でセッションも作成するので計測
-        let start = std::time::Instant::now();
-        let res = self.auth.create_auth_response(user, remember_me).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_auth_attempt(res.is_ok()).await;
-        if res.is_ok() { self.record_db_query(elapsed).await; }
-        res
+    timed_op!(self, "auth", self.auth.create_auth_response(user, remember_me))
     }
 
     #[cfg(feature = "auth")]
     pub async fn auth_refresh_access_token(&self, refresh_token: &str) -> crate::Result<crate::auth::RefreshResponse> {
-        let start = std::time::Instant::now();
-        let res = self.auth.refresh_access_token(refresh_token).await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        // refresh は成功時のみ auth 成功とみなす
-        if res.is_ok() {
-            self.record_auth_attempt(true).await;
-            self.record_db_query(elapsed).await;
-        } else {
-            self.record_auth_attempt(false).await;
-        }
-        res
+    timed_op!(self, "auth", self.auth.refresh_access_token(refresh_token))
     }
 
     /// Validate a token using the AuthService; returns the authenticated user on success and records an auth attempt
     #[cfg(feature = "auth")]
     pub async fn auth_validate_token(&self, token: &str) -> crate::Result<crate::models::User> {
-    timed_auth_attempt!(self, self.auth.validate_token(self, token))
+    timed_op!(self, "auth", self.auth.validate_token(self, token))
     }
 
     #[cfg(feature = "auth")]
     pub async fn auth_verify_biscuit(&self, token: &str) -> crate::Result<crate::auth::AuthContext> {
-        timed_auth_attempt!(self, self.auth.verify_biscuit(self, token))
+    timed_op!(self, "auth", self.auth.verify_biscuit(self, token))
     }
 
     /// Health check wrapper for AuthService that records timing
     #[cfg(feature = "auth")]
     pub async fn auth_health_check(&self) -> crate::Result<crate::app::ServiceHealth> {
-        let start = std::time::Instant::now();
-        let res = self.check_auth_health().await;
-        let elapsed = start.elapsed().as_millis() as f64;
-        // If the check involved DB calls record them
-        if res.status == "up" {
-            self.record_db_query(elapsed).await;
-        }
-        Ok(res)
+    // auth の内部 DB 呼び出しを個別にカウントする必要があれば AuthService 側で timed 化する想定
+    Ok(self.check_auth_health().await)
     }
 
     // --- Database wrapper helpers that record metrics centrally on AppState ---
     #[cfg(feature = "database")]
     pub async fn db_create_user(&self, req: crate::models::CreateUserRequest) -> crate::Result<crate::models::User> {
-    timed_db!(self, self.database.create_user(req))
+    timed_op!(self, "db", self.database.create_user(req))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_get_user_by_id(&self, id: uuid::Uuid) -> crate::Result<crate::models::User> {
-    timed_db!(self, self.database.get_user_by_id(id))
+    timed_op!(self, "db", self.database.get_user_by_id(id))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_get_user_by_email(&self, email: &str) -> crate::Result<crate::models::User> {
-    timed_db!(self, self.database.get_user_by_email(email))
+    timed_op!(self, "db", self.database.get_user_by_email(email))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_get_users(&self, page: u32, limit: u32, role: Option<String>, active: Option<bool>, sort: Option<String>) -> crate::Result<Vec<crate::models::User>> {
-    timed_db!(self, self.database.get_users(page, limit, role, active, sort))
+    timed_op!(self, "db", self.database.get_users(page, limit, role, active, sort))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_update_last_login(&self, id: uuid::Uuid) -> crate::Result<()> {
-    timed_db!(self, self.database.update_last_login(id))
+    timed_op!(self, "db", self.database.update_last_login(id))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_count_users(&self) -> crate::Result<usize> {
-    timed_db!(self, self.database.count_users())
+    timed_op!(self, "db", self.database.count_users())
     }
 
     #[cfg(feature = "database")]
     pub async fn db_create_post(&self, req: crate::models::CreatePostRequest) -> crate::Result<crate::models::Post> {
-    timed_db!(self, self.database.create_post(req))
+    timed_op!(self, "db", self.database.create_post(req))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_get_post_by_id(&self, id: uuid::Uuid) -> crate::Result<crate::models::Post> {
-    timed_db!(self, self.database.get_post_by_id(id))
+    timed_op!(self, "db", self.database.get_post_by_id(id))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_get_posts(&self, page: u32, limit: u32, status: Option<String>, author: Option<uuid::Uuid>, tag: Option<String>, sort: Option<String>) -> crate::Result<Vec<crate::models::Post>> {
-    timed_db!(self, self.database.get_posts(page, limit, status, author, tag, sort))
+    timed_op!(self, "db", self.database.get_posts(page, limit, status, author, tag, sort))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_update_post(&self, id: uuid::Uuid, req: crate::models::UpdatePostRequest) -> crate::Result<crate::models::Post> {
-    timed_db!(self, self.database.update_post(id, req))
+    timed_op!(self, "db", self.database.update_post(id, req))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_delete_post(&self, id: uuid::Uuid) -> crate::Result<()> {
-    timed_db!(self, self.database.delete_post(id))
+    timed_op!(self, "db", self.database.delete_post(id))
     }
 
     #[cfg(feature = "database")]
     pub async fn db_count_posts(&self, tag: Option<&str>) -> crate::Result<usize> {
-    timed_db!(self, self.database.count_posts(tag))
+    timed_op!(self, "db", self.database.count_posts(tag))
     }
 
     // --- API Key wrappers ---
+    // NOTE: 他の DB ラッパは timed_db! macro を直接使えるが、ここは一部で in-place クロージャを
+    // 使っており都度 start/elapsed を書いていたため共通化。
     #[cfg(all(feature = "database", feature = "auth"))]
     pub async fn db_create_api_key(&self, name: String, user_id: uuid::Uuid, permissions: Vec<String>) -> crate::Result<(crate::models::ApiKeyResponse, String)> {
-    use crate::models::ApiKey; // required
-    let start = std::time::Instant::now();
-    let (model, raw) = ApiKey::new_validated(name, user_id, permissions)?;
-    let mut conn = self.database.get_connection()?;
-    let saved = ApiKey::create(&mut conn, &model)?;
-    let elapsed = start.elapsed().as_millis() as f64;
-    self.record_db_query(elapsed).await;
-    Ok((saved.to_response(), raw))
+        use crate::models::ApiKey;
+        timed_op!(self, "db", async {
+            let (model, raw) = ApiKey::new_validated(name, user_id, permissions)?;
+            let mut conn = self.database.get_connection()?;
+            let saved = ApiKey::create(&mut conn, &model)?;
+            Ok((saved.to_response(), raw))
+        })
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
     pub async fn db_get_api_key(&self, id: uuid::Uuid) -> crate::Result<crate::models::ApiKeyResponse> {
-        use crate::models::ApiKey; // needed for find_by_id
-    let start = std::time::Instant::now();
-    let mut conn = self.database.get_connection()?;
-    let model = ApiKey::find_by_id(&mut conn, id)?;
-    let elapsed = start.elapsed().as_millis() as f64;
-    self.record_db_query(elapsed).await;
-    Ok(model.to_response())
+        use crate::models::ApiKey;
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            let model = ApiKey::find_by_id(&mut conn, id)?;
+            Ok(model.to_response())
+        })
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
     pub async fn db_delete_api_key(&self, _id: uuid::Uuid) -> crate::Result<()> {
         use diesel::prelude::*;
         use crate::database::schema::api_keys::dsl::*;
-        let start = std::time::Instant::now();
-        let mut conn = self.database.get_connection()?;
-    let affected = diesel::delete(api_keys.filter(crate::database::schema::api_keys::dsl::id.eq(_id))).execute(&mut conn)?;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_db_query(elapsed).await;
-        if affected == 0 { return Err(crate::AppError::NotFound("api key not found".into())); }
-        Ok(())
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            let affected = diesel::delete(api_keys.filter(crate::database::schema::api_keys::dsl::id.eq(_id))).execute(&mut conn)?;
+            if affected == 0 { return Err(crate::AppError::NotFound("api key not found".into())); }
+            Ok(())
+        })
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
@@ -814,12 +791,11 @@ impl AppState {
     #[cfg(all(feature = "database", feature = "auth"))]
     pub async fn db_revoke_api_key(&self, id: uuid::Uuid) -> crate::Result<()> {
         use crate::models::ApiKey;
-    let start = std::time::Instant::now();
-    let mut conn = self.database.get_connection()?;
-    ApiKey::delete(&mut conn, id)?;
-    let elapsed = start.elapsed().as_millis() as f64;
-    self.record_db_query(elapsed).await;
-    Ok(())
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            ApiKey::delete(&mut conn, id)?;
+            Ok(())
+        })
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
@@ -827,69 +803,56 @@ impl AppState {
         use crate::models::ApiKey;
         use diesel::prelude::*;
         use crate::database::schema::api_keys::dsl::*;
-        let start = std::time::Instant::now();
-        let mut conn = self.database.get_connection()?;
-        // 該当行 (id,user_id) 同時一致で削除
-        let affected = diesel::delete(api_keys.filter(crate::database::schema::api_keys::dsl::id.eq(key_id).and(user_id.eq(user)))).execute(&mut conn)?;
-        if affected == 0 {
-            // id の存在を確認して権限エラー or NotFound に振り分け
-            let exists = ApiKey::find_by_id(&mut conn, key_id).ok();
-            let elapsed = start.elapsed().as_millis() as f64;
-            self.record_db_query(elapsed).await;
-            if exists.is_some() {
-                return Err(crate::AppError::Authorization("not owner".into()));
-            } else {
-                return Err(crate::AppError::NotFound("api key not found".into()));
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            let affected = diesel::delete(api_keys.filter(crate::database::schema::api_keys::dsl::id.eq(key_id).and(user_id.eq(user)))).execute(&mut conn)?;
+            if affected == 0 {
+                let exists = ApiKey::find_by_id(&mut conn, key_id).ok();
+                if exists.is_some() { return Err(crate::AppError::Authorization("not owner".into())); } else { return Err(crate::AppError::NotFound("api key not found".into())); }
             }
-        }
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_db_query(elapsed).await;
-        Ok(())
+            Ok(())
+        })
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
     pub async fn db_touch_api_key(&self, id: uuid::Uuid) -> crate::Result<()> {
         use crate::models::ApiKey;
-    let start = std::time::Instant::now();
-    let mut conn = self.database.get_connection()?;
-    ApiKey::update_last_used(&mut conn, id)?;
-    let elapsed = start.elapsed().as_millis() as f64;
-    self.record_db_query(elapsed).await;
-    Ok(())
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            ApiKey::update_last_used(&mut conn, id)?;
+            Ok(())
+        })
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
     pub async fn db_list_api_keys(&self, user_id: uuid::Uuid, include_expired: bool) -> crate::Result<Vec<crate::models::ApiKeyResponse>> {
         use crate::models::ApiKey;
-        let start = std::time::Instant::now();
-        let mut conn = self.database.get_connection()?;
-        let models = ApiKey::list_for_user(&mut conn, user_id, include_expired)?;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_db_query(elapsed).await;
-        Ok(models.into_iter().map(|m| m.to_response()).collect())
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            let models = ApiKey::list_for_user(&mut conn, user_id, include_expired)?;
+            Ok(models.into_iter().map(|m| m.to_response()).collect())
+        })
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
     pub async fn db_get_api_key_by_lookup_hash(&self, lookup: &str) -> crate::Result<crate::models::ApiKey> {
         use crate::models::ApiKey;
         let lookup = lookup.to_string();
-        let start = std::time::Instant::now();
-        let mut conn = self.database.get_connection()?;
-        let model = ApiKey::find_by_lookup_hash(&mut conn, &lookup)?;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_db_query(elapsed).await;
-        Ok(model)
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            let model = ApiKey::find_by_lookup_hash(&mut conn, &lookup)?;
+            Ok(model)
+        })
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
     pub async fn db_get_api_key_model(&self, id: uuid::Uuid) -> crate::Result<crate::models::ApiKey> {
         use crate::models::ApiKey;
-        let start = std::time::Instant::now();
-        let mut conn = self.database.get_connection()?;
-        let model = ApiKey::find_by_id(&mut conn, id)?;
-        let elapsed = start.elapsed().as_millis() as f64;
-        self.record_db_query(elapsed).await;
-        Ok(model)
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            let model = ApiKey::find_by_id(&mut conn, id)?;
+            Ok(model)
+        })
     }
 }
 

@@ -258,6 +258,59 @@ Redis バックエンド時の注意:
 
 容量制御挙動: 追跡件数が最大の 90% を超えた時点でウィンドウ外の古いエントリを opportunistic に掃除し、なお超過する場合は最も古いエントリを 1 件強制削除します。
 
+## ✅ 統一レスポンス仕様 (Unified API Response Layer)
+
+すべての成功レスポンスは `ApiResponse<T>` へ正規化され、ハンドラでは `ApiOk(value)` を返すだけで以下 JSON 形状になります:
+
+```json
+{
+  "success": true,
+  "data": { /* value */ },
+  "message": null,
+  "error": null,
+  "validation_errors": null
+}
+```
+
+バリデーション / ドメインエラー時は:
+
+```json
+{
+  "success": false,
+  "data": null,
+  "message": null,
+  "error": "Invalid input",
+  "validation_errors": [
+    {"field": "title", "message": "must not be empty"}
+  ]
+}
+```
+
+### 利用パターン
+
+| 目的 | ハンドラ戻り値例 | 備考 |
+|------|-----------------|------|
+| 通常成功 | `ApiOk(entity)` | `entity` は `Serialize` |
+| 作成 (201) | `(StatusCode::CREATED, ApiOk(created))` | タプルで任意ステータス |
+| ページング | `ApiOk(Paginated<T>)` | 内部 `data` にそのまま格納 |
+| メッセージのみ | `ApiOk(json!({"message":"Done"}))` | シンプルテキストラップ不要 |
+
+### 廃止予定 API
+
+| 項目 | 状態 | 代替 |
+|------|------|------|
+| `IntoApiOk` トレイト | deprecated | `ApiOk(...)` |
+| 直接 `ok(value)` ヘルパ | 移行段階 | `ApiOk(value)` |
+
+### 実装メモ (開発者向け)
+
+1. `ApiOk<T>` は `IntoResponse` 実装を持ち `ApiResponse::success(T)` を包む。
+2. エラー (`AppError`) は `IntoResponse` 実装内で同じ `ApiResponse` 形状へ統一。
+3. OpenAPI では `ApiResponse<serde_json::Value>` + `ApiResponseExample` をスキーマ提供。
+4. バリデーション詳細は `validation_errors` 配列 (省略時非表示)。
+
+将来: `IntoApiOk` は段階的に削除予定。コードベース内に存在する場合は PR で置換してください。
+
 ### メトリクス (主要抜粋)
 
 | 名前 | ラベル | 説明 |

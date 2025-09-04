@@ -3,8 +3,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use serde_json::json;
-use crate::utils::api_types::{ValidationError, ValidationErrorResponse};
+use crate::utils::api_types::{ValidationError, ApiResponse, err};
 use std::fmt;
 use validator::ValidationErrors;
 
@@ -150,18 +149,11 @@ impl IntoResponse for AppError {
             #[cfg(feature = "search")]
             AppError::Tantivy(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Search service error", None),
         };
-        let body = ValidationErrorResponse {
-            success: false,
-            error: error_message.to_string(),
-            validation_errors: validation_details.unwrap_or_default(),
+        let body = if let Some(details) = validation_details {
+            Json(ApiResponse::error_with_validation(error_message.to_string(), details))
+        } else {
+            err(error_message.to_string())
         };
-        let body = Json(json!({
-            "success": body.success,
-            "error": body.error,
-            "validation_errors": body.validation_errors,
-            "timestamp": chrono::Utc::now().to_rfc3339(),
-        }));
-
         (status, body).into_response()
     }
 }

@@ -4,14 +4,15 @@
 
 use axum::{
     extract::{Query, State},
-    response::{IntoResponse, Json},
+    response::IntoResponse,
 };
 use serde::Deserialize;
 use utoipa::ToSchema;
 use serde_json::json;
 use std::time::Duration;
 
-use crate::utils::api_types::ApiResponse;
+// removed unused ok helper after migrating to IntoApiOk
+use crate::utils::response_ext::ApiOk;
 use crate::{AppState, Result};
 
 #[cfg(feature = "search")]
@@ -137,7 +138,7 @@ pub async fn search(
             .get::<SearchResults<serde_json::Value>>(&cache_key)
             .await
         {
-            return Ok(Json(ApiResponse::success(cached)));
+    return Ok(ApiOk(cached));
         }
     }
 
@@ -149,17 +150,15 @@ pub async fn search(
 
     // Cache results for 2 minutes
     #[cfg(feature = "cache")]
+    if let Err(e) = state
+        .cache
+        .set(cache_key, &results, Some(Duration::from_secs(120)))
+        .await
     {
-        if let Err(e) = state
-            .cache
-            .set(cache_key, &results, Some(Duration::from_secs(120)))
-            .await
-        {
-            eprintln!("Failed to cache search results: {}", e);
-        }
+        eprintln!("Failed to cache search results: {}", e);
     }
 
-    Ok(Json(ApiResponse::success(results)))
+    Ok(ApiOk(results))
 }
 
 /// Search suggestions endpoint
@@ -184,7 +183,7 @@ pub async fn suggest(
     #[cfg(feature = "cache")]
     {
         if let Ok(Some(cached)) = state.cache.get::<Vec<String>>(&cache_key).await {
-            return Ok(Json(ApiResponse::success(json!({ "suggestions": cached }))));
+    return Ok(ApiOk(json!({ "suggestions": cached })));
         }
     }
 
@@ -196,19 +195,15 @@ pub async fn suggest(
 
     // Cache for 10 minutes
     #[cfg(feature = "cache")]
+    if let Err(e) = state
+        .cache
+        .set(cache_key, &suggestions, Some(Duration::from_secs(600)))
+        .await
     {
-        if let Err(e) = state
-            .cache
-            .set(cache_key, &suggestions, Some(Duration::from_secs(600)))
-            .await
-        {
-            eprintln!("Failed to cache suggestions: {}", e);
-        }
+        eprintln!("Failed to cache suggestions: {}", e);
     }
 
-    Ok(Json(ApiResponse::success(
-        json!({ "suggestions": suggestions }),
-    )))
+    Ok(ApiOk(json!({ "suggestions": suggestions })))
 }
 
 /// Search statistics endpoint
@@ -231,7 +226,7 @@ pub async fn search_stats(State(state): State<AppState>) -> Result<impl IntoResp
             .get::<crate::search::SearchStats>(cache_key)
             .await
         {
-            return Ok(Json(ApiResponse::success(cached)));
+    return Ok(ApiOk(cached));
         }
     }
 
@@ -243,21 +238,19 @@ pub async fn search_stats(State(state): State<AppState>) -> Result<impl IntoResp
 
     // Cache for 5 minutes
     #[cfg(feature = "cache")]
+    if let Err(e) = state
+        .cache
+        .set(
+            cache_key.to_string(),
+            &stats,
+            Some(Duration::from_secs(300)),
+        )
+        .await
     {
-        if let Err(e) = state
-            .cache
-            .set(
-                cache_key.to_string(),
-                &stats,
-                Some(Duration::from_secs(300)),
-            )
-            .await
-        {
-            eprintln!("Failed to cache search stats: {}", e);
-        }
+        eprintln!("Failed to cache search stats: {}", e);
     }
 
-    Ok(Json(ApiResponse::success(stats)))
+    Ok(ApiOk(stats))
 }
 
 /// Reindex all content
@@ -282,10 +275,10 @@ pub async fn reindex(State(_state): State<AppState>) -> Result<impl IntoResponse
     // 4. Re-index all content
     // 5. Clear search-related cache
 
-    Ok(Json(ApiResponse::success(json!({
+    Ok(ApiOk(json!({
         "success": true,
         "message": "Reindexing started - this would be implemented as a background task"
-    }))))
+    })))
 }
 
 /// Search index health check
@@ -299,7 +292,7 @@ pub async fn reindex(State(_state): State<AppState>) -> Result<impl IntoResponse
     )
 )]
 pub async fn search_health(State(_state): State<AppState>) -> Result<impl IntoResponse> {
-    Ok(Json(ApiResponse::<()>::error(
-        "Search health check not implemented".to_string(),
-    )))
+    Ok(ApiOk(json!({
+    "error": "Search health check not implemented"
+    })))
 }

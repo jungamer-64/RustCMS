@@ -1,5 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use axum::Json;
+use serde_json::{json, Value};
 use utoipa::ToSchema;
 
 /// 標準的なAPIレスポンス構造
@@ -7,12 +9,20 @@ use utoipa::ToSchema;
 /// ジェネリック型 `T` を含むラッパー。OpenAPI 上では良く使う組合せを aliases で公開する。
 /// 例: `ApiResponsePostResponse` は `ApiResponse<PostResponse>` のエイリアス。
 #[derive(Debug, Serialize, ToSchema)]
-// NOTE: utoipa に独自 aliases 属性は無いため削除。必要ならば個別の型ラッパーを定義する。
+#[schema(example = json!({
+    "success": true,
+    "data": {"example": "value"},
+    "message": null,
+    "error": null,
+    "validation_errors": null
+}))]
 pub struct ApiResponse<T> {
     pub success: bool,
     pub data: Option<T>,
     pub message: Option<String>,
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub validation_errors: Option<Vec<ValidationError>>,    
 }
 
 impl<T> ApiResponse<T> {
@@ -22,6 +32,7 @@ impl<T> ApiResponse<T> {
             data: Some(data),
             message: None,
             error: None,
+            validation_errors: None,
         }
     }
 
@@ -31,21 +42,53 @@ impl<T> ApiResponse<T> {
             data: Some(data),
             message: Some(message),
             error: None,
+            validation_errors: None,
         }
     }
 
-    pub fn error(error: String) -> ApiResponse<()> {
-        ApiResponse {
+}
+
+impl ApiResponse<()> {
+    pub fn error(error: String) -> Self {
+        Self {
             success: false,
             data: None,
             message: None,
             error: Some(error),
+            validation_errors: None,
+        }
+    }
+
+    pub fn error_with_validation(error: String, validation_errors: Vec<ValidationError>) -> Self {
+        Self {
+            success: false,
+            data: None,
+            message: None,
+            error: Some(error),
+            validation_errors: Some(validation_errors),
         }
     }
 }
 
+/// 便利用成功ヘルパ: `Json(ApiResponse::success(data))` の重複削減。
+pub fn ok<T: Serialize>(data: T) -> Json<ApiResponse<T>> {
+    Json(ApiResponse::success(data))
+}
+
+/// メッセージのみの成功レスポンス (data は空 JSON オブジェクト扱い)。
+pub fn ok_message(msg: impl Into<String>) -> Json<ApiResponse<Value>> {
+    Json(ApiResponse::success(json!({ "message": msg.into() })))
+}
+
+/// エラーヘルパ: `Json(ApiResponse::error(msg))` の重複削減。
+pub fn err(msg: impl Into<String>) -> Json<ApiResponse<()>> {
+    let resp: ApiResponse<()> = ApiResponse::error(msg.into());
+    Json(resp)
+}
+
 /// ページネーション情報
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(example = json!({"page":1,"per_page":20,"total":42,"total_pages":3}))]
 pub struct Pagination {
     pub page: u32,
     pub per_page: u32,
@@ -155,15 +198,27 @@ pub struct DeletedResponse {
 
 /// バリデーションエラー
 #[derive(Debug, Serialize, ToSchema)]
+#[schema(example = json!({"field":"title","message":"must not be empty"}))]
 pub struct ValidationError {
     pub field: String,
     pub message: String,
 }
 
-/// バリデーションエラーレスポンス
+// ValidationErrorResponse は統合のため削除 (ApiResponse に統合)
+
+/// ApiResponse の具体例（ジェネリックなし）
 #[derive(Debug, Serialize, ToSchema)]
-pub struct ValidationErrorResponse {
+#[schema(example = json!({
+    "success": true,
+    "data": {"message": "Operation completed"},
+    "message": null,
+    "error": null,
+    "validation_errors": null
+}))]
+pub struct ApiResponseExample {
     pub success: bool,
-    pub error: String,
-    pub validation_errors: Vec<ValidationError>,
+    pub data: Option<Value>,
+    pub message: Option<String>,
+    pub error: Option<String>,
+    pub validation_errors: Option<Vec<ValidationError>>,
 }

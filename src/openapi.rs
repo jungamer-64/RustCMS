@@ -74,17 +74,18 @@ use crate::app::{AppMetrics, HealthStatus, ServiceHealth};
             // Posts
             crate::handlers::posts::PostQuery,
             crate::handlers::posts::PostResponse,
-            crate::handlers::posts::PostsResponse,
+            crate::models::pagination::Paginated<crate::handlers::posts::PostResponse>,
             // Users
             crate::handlers::users::UserQuery,
-            crate::handlers::users::UsersResponse,
+            crate::models::pagination::Paginated<crate::utils::common_types::UserInfo>,
             // Search queries (responses are dynamic JSON; queries documented)
             crate::handlers::search::SearchQuery,
             crate::handlers::search::SuggestQuery,
             // Generic related
             crate::utils::api_types::Pagination,
             crate::utils::api_types::ValidationError,
-            crate::utils::api_types::ValidationErrorResponse
+            crate::utils::api_types::ApiResponse<serde_json::Value>,
+            crate::utils::api_types::ApiResponseExample
         )
     )
 )]

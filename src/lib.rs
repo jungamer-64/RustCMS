@@ -47,6 +47,7 @@ pub mod middleware;
 pub mod models;
 pub mod routes;
 pub mod utils;
+pub mod limiter; // unified rate limiting
 
 // OpenAPI documentation system
 pub mod openapi;

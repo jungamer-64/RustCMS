@@ -2,9 +2,8 @@
 //! 
 //! auth_v3.rsから分離して循環参照を避ける
 
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
-use dashmap::DashMap;
+use std::sync::atomic::AtomicU64;
+use std::time::Instant;
 
 /// 高性能認証メトリクス
 #[derive(Default, Debug)]
@@ -28,31 +27,4 @@ pub struct AuthSession {
     pub user_agent: String,
 }
 
-/// レート制限（ロックフリー）
-#[derive(Default, Debug)]
-pub struct RateLimiter {
-    attempts: DashMap<String, (AtomicU64, Instant)>,
-}
-
-impl RateLimiter {
-    pub fn check_rate_limit(&self, ip: &str, max_attempts: u64, window: Duration) -> bool {
-        let now = Instant::now();
-        
-        self.attempts
-            .entry(ip.to_string())
-            .and_modify(|(count, last_reset)| {
-                if now.duration_since(*last_reset) > window {
-                    count.store(1, Ordering::Relaxed);
-                    *last_reset = now;
-                } else {
-                    count.fetch_add(1, Ordering::Relaxed);
-                }
-            })
-            .or_insert_with(|| (AtomicU64::new(1), now));
-
-        self.attempts
-            .get(ip)
-            .map(|entry| entry.0.load(Ordering::Relaxed) <= max_attempts)
-            .unwrap_or(true)
-    }
-}
+// NOTE: Legacy RateLimiter removed (now unified via AppState.rate_limiter and middleware).

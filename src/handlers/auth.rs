@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use serde_json::json;
 
-use crate::utils::{api_types::ApiResponse, common_types::UserInfo};
+use crate::utils::{common_types::UserInfo};
+use crate::utils::response_ext::ApiOk;
 use crate::{auth::LoginRequest, models::CreateUserRequest, AppState, Result};
 
 /// Registration request
@@ -38,6 +39,22 @@ pub struct LoginResponse {
     pub token: String,
 }
 
+impl From<crate::auth::AuthResponse> for LoginResponse {
+    fn from(a: crate::auth::AuthResponse) -> Self {
+        let access = a.access_token.clone();
+        LoginResponse {
+            success: true,
+            access_token: access.clone(),
+            refresh_token: a.refresh_token,
+            biscuit_token: a.biscuit_token,
+            user: a.user,
+            expires_in: a.expires_in,
+            session_id: a.session_id,
+            token: access,
+        }
+    }
+}
+
 /// Register a new user
 #[utoipa::path(
     post,
@@ -46,7 +63,7 @@ pub struct LoginResponse {
     request_body = RegisterRequest,
     responses(
         (status = 201, description = "User registered", body = LoginResponse),
-        (status = 400, description = "Validation error", body = crate::utils::api_types::ValidationErrorResponse),
+        (status = 400, description = "Validation error", body = crate::utils::api_types::ApiResponse<serde_json::Value>),
         (status = 500, description = "Server error")
     )
 )]
@@ -75,20 +92,8 @@ pub async fn register(
     }
 
     // Build full auth response (access/refresh/biscuit + session) via AppState
-    let auth = state.auth_build_auth_response(user.clone(), false).await?;
-    let access_token_clone = auth.access_token.clone();
-    let response = LoginResponse {
-        success: true,
-        access_token: access_token_clone.clone(),
-        refresh_token: auth.refresh_token,
-        biscuit_token: auth.biscuit_token,
-        user: UserInfo::from(&user),
-        expires_in: auth.expires_in,
-        session_id: auth.session_id,
-        token: access_token_clone,
-    };
-
-    Ok((StatusCode::CREATED, Json(ApiResponse::success(response))))
+    let auth = state.auth_build_auth_response(user, false).await?;
+    Ok((StatusCode::CREATED, ApiOk(LoginResponse::from(auth))))
 }
 
 /// Login user
@@ -99,7 +104,7 @@ pub async fn register(
     request_body = LoginRequest,
     responses(
         (status = 200, description = "Login success", body = LoginResponse),
-        (status = 400, description = "Validation error", body = crate::utils::api_types::ValidationErrorResponse),
+        (status = 400, description = "Validation error", body = crate::utils::api_types::ApiResponse<serde_json::Value>),
         (status = 401, description = "Invalid credentials"),
         (status = 500, description = "Server error")
     )
@@ -114,20 +119,8 @@ pub async fn login(
 
     // remember_me を先に取り出してムーブを防止
     // Build full auth response
-    let auth = state.auth_build_auth_response(user.clone(), remember).await?;
-    let access_token_clone = auth.access_token.clone();
-    let response = LoginResponse {
-        success: true,
-        access_token: access_token_clone.clone(),
-        refresh_token: auth.refresh_token,
-        biscuit_token: auth.biscuit_token,
-        user: UserInfo::from(&user),
-        expires_in: auth.expires_in,
-        session_id: auth.session_id,
-        token: access_token_clone,
-    };
-
-    Ok(Json(ApiResponse::success(response)))
+    let auth = state.auth_build_auth_response(user, remember).await?;
+    Ok(ApiOk(LoginResponse::from(auth)))
 }
 
 /// Logout user
@@ -148,10 +141,10 @@ pub async fn logout(
     // In a real implementation, you'd extract the token from the Authorization header
     // and invalidate it in the auth service
 
-    Ok(Json(ApiResponse::success(json!({
+    Ok(ApiOk(json!({
         "success": true,
         "message": "Successfully logged out"
-    }))))
+    })))
 }
 
 /// Get current user profile
@@ -170,10 +163,10 @@ pub async fn profile(
     // User would be extracted from middleware after token validation
 ) -> Result<impl IntoResponse> {
     // Placeholder - in real implementation, user ID would come from validated token
-    Ok(Json(ApiResponse::success(json!({
+    Ok(ApiOk(json!({
         "success": true,
         "message": "Profile endpoint - requires authentication middleware"
-    }))))
+    })))
 }
 
 /// Refresh token
@@ -203,5 +196,5 @@ pub async fn refresh_token(State(state): State<AppState>, Json(body): Json<Refre
         session_id: refreshed.session_id,
         refresh_token: refreshed.refresh_token,
     };
-    Ok(Json(ApiResponse::success(resp)))
+    Ok(ApiOk(resp))
 }

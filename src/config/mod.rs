@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::PathBuf;
+use tracing::warn;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -21,6 +22,10 @@ pub struct Config {
     pub media: MediaConfig,
     pub notifications: NotificationConfig,
     pub security: SecurityConfig,
+    #[serde(default)]
+    pub logging: LoggingConfig,
+    #[serde(default)]
+    pub monitoring: MonitoringConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -126,6 +131,8 @@ impl Default for Config {
             media: MediaConfig::default(),
             notifications: NotificationConfig::default(),
             security: SecurityConfig::default(),
+            logging: LoggingConfig::default(),
+            monitoring: MonitoringConfig::default(),
         }
     }
 }
@@ -145,6 +152,33 @@ impl Default for SecurityConfig {
             rate_limit_window: 60,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoggingConfig {
+    #[serde(default = "default_log_level")] pub level: String,
+    #[serde(default = "default_log_format")] pub format: String, // "text" | "json"
+}
+
+fn default_log_level() -> String { "info".into() }
+fn default_log_format() -> String { "text".into() }
+
+impl Default for LoggingConfig {
+    fn default() -> Self { Self { level: default_log_level(), format: default_log_format() } }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MonitoringConfig {
+    #[serde(default)] pub enable_metrics: bool,
+    #[serde(default = "default_metrics_port")] pub metrics_port: u16,
+    #[serde(default = "default_health_interval")] pub health_check_interval: u64,
+}
+
+fn default_metrics_port() -> u16 { 9090 }
+fn default_health_interval() -> u64 { 30 }
+
+impl Default for MonitoringConfig {
+    fn default() -> Self { Self { enable_metrics: false, metrics_port: default_metrics_port(), health_check_interval: default_health_interval() } }
 }
 
 impl Default for ServerConfig {
@@ -266,17 +300,21 @@ impl Default for WebhookConfig {
 impl Config {
     pub fn from_env() -> Result<Self, crate::AppError> {
         dotenvy::dotenv().ok();
-
-        let config = config::Config::builder()
-            .add_source(config::File::with_name("config/default").required(false))
+        // プロファイル (development / production / staging など) を環境変数から取得
+        let profile = env::var("CMS_PROFILE").or_else(|_| env::var("RUN_MODE")).unwrap_or_else(|_| "development".to_string());
+        // 基本: default → {profile}.toml → local.toml → env(CMS_*) の順で上書き
+        let mut builder = config::Config::builder()
+            .add_source(config::File::with_name("config/default").required(false));
+        if profile != "development" {
+            builder = builder.add_source(config::File::with_name(&format!("config/{}", profile)).required(false));
+        }
+        builder = builder
             .add_source(config::File::with_name("config/local").required(false))
-            .add_source(config::Environment::with_prefix("CMS").separator("_"))
-            .build()
-            .map_err(|e| crate::AppError::Config(e.to_string()))?;
+            .add_source(config::Environment::with_prefix("CMS").separator("_"));
 
-        let mut cfg: Self = config
-            .try_deserialize()
-            .map_err(|e| crate::AppError::Config(e.to_string()))?;
+        let raw = builder.build().map_err(|e| crate::AppError::Config(e.to_string()))?;
+        let mut cfg: Self = raw.try_deserialize().map_err(|e| crate::AppError::Config(e.to_string()))?;
+        cfg.environment = profile;
 
         // If the config contains the literal "${DATABASE_URL}", expand it from the environment
         // This keeps secrets out of the repo while allowing config files to reference the env var.
@@ -296,6 +334,23 @@ impl Config {
                 ));
             }
         }
+
+        // 追加: LOG_LEVEL / LOG_FORMAT 環境変数があれば上書き
+        if let Ok(lvl) = env::var("LOG_LEVEL") { if !lvl.is_empty() { cfg.logging.level = lvl; } }
+        if let Ok(fmt) = env::var("LOG_FORMAT") { if !fmt.is_empty() { cfg.logging.format = fmt; } }
+
+        // 旧 production_config.rs / simple_config.rs 由来の変数を一部マッピング (後方互換)
+        if let Ok(v) = env::var("ACCESS_TOKEN_TTL_SECS") { if let Ok(n) = v.parse() { cfg.auth.access_token_ttl_secs = n; } }
+        if let Ok(v) = env::var("REFRESH_TOKEN_TTL_SECS") { if let Ok(n) = v.parse() { cfg.auth.refresh_token_ttl_secs = n; } }
+
+        // sanitize cors origins (toml で文字列カンマ列だった場合をケア) ※ production.toml 古い形式互換
+        if cfg.security.cors_origins.len() == 1 && cfg.security.cors_origins[0].contains(',') {
+            let joined = cfg.security.cors_origins[0].clone();
+            cfg.security.cors_origins = joined.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+        }
+
+        // warn if deprecated envs used
+        for k in ["PORT", "HOST", "RATE_LIMIT_REQUESTS", "RATE_LIMIT_WINDOW_SECONDS"] { if env::var(k).is_ok() { warn!("deprecated env var '{}' detected; use CMS_SERVER__* or CMS_SECURITY__* via prefixed config", k); } }
 
         Ok(cfg)
     }
