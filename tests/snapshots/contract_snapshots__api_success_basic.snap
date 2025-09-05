@@ -1,0 +1,13 @@
+---
+source: tests/contract_snapshots.rs
+expression: resp
+---
+{
+  "success": true,
+  "data": {
+    "foo": "bar",
+    "num": 123
+  },
+  "message": null,
+  "error": null
+}

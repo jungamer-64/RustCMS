@@ -90,9 +90,6 @@ mod api_types_tests {
     }
 
     #[test]
-    // Removed obsolete status_code() tests (AppError no longer exposes direct status_code helper)
-
-    #[test]
     fn test_type_safety_with_generic_data() {
         #[derive(serde::Serialize)]
         struct TestData {

@@ -158,7 +158,7 @@ tokio-tungstenite = { version = "0.27", features = ["rustls-tls-native-roots"], 
 # Development and test helpers (alphabetical)
 assert_cmd = "2.0"
 criterion = { version = "0.7", features = ["html_reports"] }
-insta = "1.34"
+insta = { version = "1.34", features = ["json"] }
 mockall = "0.13"
 predicates = "3.1"
 pretty_assertions = "1.4"

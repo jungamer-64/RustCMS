@@ -137,6 +137,14 @@ jobs:
           done || true
           cargo test --workspace --no-fail-fast ${{ matrix.cargo-features }} 2>&1 | tee test-output.log
           echo "Test exit code: ${PIPESTATUS[0]}" || true
+      - name: Contract snapshot check (insta)
+        if: matrix.feature-set == 'default'
+        env:
+          FAST_KEY_TESTS: 1
+        run: |
+          set -e
+          cargo install cargo-insta --locked || true
+          cargo insta test
       - name: Upload test log
         if: always()
         uses: actions/upload-artifact@v4

@@ -1,0 +1,12 @@
+---
+source: tests/contract_snapshots.rs
+expression: resp
+---
+{
+  "success": true,
+  "data": {
+    "ok": true
+  },
+  "message": "done",
+  "error": null
+}
