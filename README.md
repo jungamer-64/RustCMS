@@ -41,6 +41,78 @@
 - **モダンな非同期処理**: Tokio ベースの async ランタイム
 - **Docker サポート**: 本番対応のコンテナ化
 
+### API レスポンス統一 & コントラクトテスト
+
+全エンドポイントは共通構造 `ApiResponse<T>` を返します。
+
+```jsonc
+// 成功
+{
+  "success": true,
+  "data": { /* 任意のペイロード */ },
+  "message": null,
+  "error": null,
+  "validation_errors": null
+}
+
+// バリデーションエラー
+{
+  "success": false,
+  "data": null,
+  "message": null,
+  "error": "validation failed",
+  "validation_errors": [
+    {"field": "title", "message": "must not be empty"}
+  ]
+}
+```
+
+簡易な成功パスはハンドラで `ApiOk(payload)` を返すだけです。従来の `ok/err/ok_message` ヘルパは非推奨 (将来削除)。
+
+#### スナップショット (contract) テスト
+`tests/contract_snapshots.rs` で代表的な 4 パターン (成功 / 成功+message / エラー / バリデーションエラー) を `insta` で固定化しています。破壊的変更があると CI で差分が検出されます。
+
+追加で `/health` エンドポイント形状を監視する **統合スナップショット** (`tests/integration_health_snapshot.rs`) を導入しています。これは本物のサービス初期化に依存せず、決定的なダミー `HealthStatus` を生成しタイムスタンプを `<redacted>` にマスクすることでインフラ非依存 & 変動値排除を実現しています。
+
+拡張方針:
+
+- 他エンドポイントを追加する際も「実サービス呼び出しを避けた合成データ or 最小スタブ」を返すテストハーネスを用意し、`insta::assert_json_snapshot!` で `ApiResponse` 形状 (特に `data` 部) を固定化。
+- 不安定なフィールド (時刻 / ランダム ID / 並列で順序変動) は事前に書き換え or 削除してください。
+
+実行例:
+
+```powershell
+# 既存スナップショットを含む全チェック
+cargo insta test
+
+# health のみ (普通の cargo test 経由)
+cargo test snapshot_health_endpoint -- --exact
+```
+
+新規追加 → 差分確認 → 受け入れのフローは従来と同じです。
+
+更新フロー:
+```powershell
+# 変更検証
+cargo insta test
+
+# 差分を確認 (対話)
+cargo insta review
+
+# 全て受け入れる (非推奨: 内容確認後に実行)
+cargo insta accept
+```
+
+#### 重い鍵生成テストの高速化
+`FAST_KEY_TESTS=1` を設定すると高速版圧縮テストのみ実行し、フルバックアップ/圧縮テストをスキップする CI マトリクス構成が可能です。
+例: GitHub Actions でのステップ:
+
+```yaml
+- name: Fast tests
+  run: FAST_KEY_TESTS=1 cargo test --all --no-fail-fast
+```
+長時間走る完全テストは nightly ジョブに分離する運用を推奨します。
+
 ## 📊 アーキテクチャ
 
 ```text
@@ -168,7 +240,7 @@ cargo run --bin gen_biscuit_keys -- --out-dir keys --list
 
 - 生成された秘密鍵は厳重に管理してください。パスワード管理ツールや本番では Doppler / Vault 等のシークレットストアを利用してください。
 - リポジトリやコミットに鍵を含めないでください。`.env` をコミットしない（`.gitignore` に含める）か、環境シークレット管理を用いてください。
- - バージョン運用時は古い秘密鍵が不要になったタイミングで安全に破棄 (安全な削除/秘匿ストレージ除外) してください。
+- バージョン運用時は古い秘密鍵が不要になったタイミングで安全に破棄 (安全な削除/秘匿ストレージ除外) してください。
 
 ### API キー認証の概要
 
