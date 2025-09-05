@@ -1,7 +1,7 @@
 use axum::response::IntoResponse;
 use axum::Json;
 use serde::Serialize;
-use crate::utils::api_types::{ok, ApiResponse};
+use crate::utils::api_types::ApiResponse;
 
 /// (Deprecated) 自動で `ApiResponse` に包むためのトレイト。
 ///
@@ -16,7 +16,7 @@ pub trait IntoApiOk: Sized {
 #[allow(deprecated)]
 impl<T> IntoApiOk for T where T: Serialize {
     type Resp = Json<ApiResponse<T>>;
-    fn into_api_ok(self) -> Self::Resp { ok(self) }
+    fn into_api_ok(self) -> Self::Resp { Json(ApiResponse::success(self)) }
 }
 
 /// Newtype wrapper enabling `ApiOk(data)` return style.
@@ -26,7 +26,7 @@ impl<T: Serialize> From<T> for ApiOk<T> { fn from(value: T) -> Self { Self(value
 
 impl<T: Serialize> IntoResponse for ApiOk<T> {
     fn into_response(self) -> axum::response::Response {
-        let body: Json<ApiResponse<T>> = ok(self.0);
+    let body: Json<ApiResponse<T>> = Json(ApiResponse::success(self.0));
         body.into_response()
     }
 }

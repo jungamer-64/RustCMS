@@ -1,5 +1,5 @@
 use assert_cmd::Command;
-use predicates::prelude::*;
+use predicates::str::contains;
 
 #[test]
 fn smoke_prints_private_key() {
@@ -8,5 +8,5 @@ fn smoke_prints_private_key() {
         .arg("--format").arg("stdout");
     cmd.assert()
         .success()
-        .stdout(predicates::str::contains("BISCUIT_PRIVATE_KEY_B64="));
+        .stdout(contains("BISCUIT_PRIVATE_KEY_B64="));
 }

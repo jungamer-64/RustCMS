@@ -1,22 +1,20 @@
-use cms_backend::utils::api_types::{ok, err};
+use cms_backend::utils::api_types::ApiResponse;
 use cms_backend::error::AppError; // Re-export path likely cms_backend::AppError if different adjust
 use axum::response::IntoResponse;
-use axum::body::to_bytes;
-use http_body_util::BodyExt; // if available; fallback manual collect
 use validator::Validate;
 
 #[test]
 fn ok_helper_wraps_data() {
-    let j = ok(serde_json::json!({"foo":"bar"}));
-    let body = serde_json::to_value(&j.0).unwrap();
+    let resp = ApiResponse::success(serde_json::json!({"foo":"bar"}));
+    let body = serde_json::to_value(&resp).unwrap();
     assert_eq!(body.get("success").unwrap(), true);
     assert_eq!(body.get("data").unwrap().get("foo").unwrap(), "bar");
 }
 
 #[test]
 fn err_helper_wraps_error() {
-    let j = err("bad");
-    let body = serde_json::to_value(&j.0).unwrap();
+    let resp = ApiResponse::error("bad".to_string());
+    let body = serde_json::to_value(&resp).unwrap();
     assert_eq!(body.get("success").unwrap(), false);
     assert_eq!(body.get("error").unwrap(), "bad");
 }

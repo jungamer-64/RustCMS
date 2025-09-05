@@ -71,16 +71,19 @@ impl ApiResponse<()> {
 }
 
 /// 便利用成功ヘルパ: `Json(ApiResponse::success(data))` の重複削減。
+#[deprecated(note = "Use ApiOk(value) or Json(ApiResponse::success(value)) へ移行。Ok ヘルパは今後削除予定。")]
 pub fn ok<T: Serialize>(data: T) -> Json<ApiResponse<T>> {
     Json(ApiResponse::success(data))
 }
 
 /// メッセージのみの成功レスポンス (data は空 JSON オブジェクト扱い)。
+#[deprecated(note = "Use ApiOk(json!({ \"message\": ... })) もしくは Json(ApiResponse::success(...)) へ移行。")]
 pub fn ok_message(msg: impl Into<String>) -> Json<ApiResponse<Value>> {
     Json(ApiResponse::success(json!({ "message": msg.into() })))
 }
 
 /// エラーヘルパ: `Json(ApiResponse::error(msg))` の重複削減。
+#[deprecated(note = "Use Json(ApiResponse::error(...)) へ移行。err ヘルパは今後削除予定。")]
 pub fn err(msg: impl Into<String>) -> Json<ApiResponse<()>> {
     let resp: ApiResponse<()> = ApiResponse::error(msg.into());
     Json(resp)

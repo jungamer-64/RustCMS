@@ -2,6 +2,7 @@ use assert_cmd::Command;
 use std::fs;
 use tempfile::tempdir;
 
+// Full (slower) compression test; fast variant exists in gen_biscuit_keys_compress_fast.rs
 #[test]
 fn compress_creates_gz_backup() {
     let tmp = tempdir().unwrap();
