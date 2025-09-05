@@ -854,6 +854,38 @@ impl AppState {
             Ok(model)
         })
     }
+
+    /// Backfill api_key_lookup_hash for legacy rows (where it's an empty string), using a raw API key.
+    /// Returns Some(ApiKey) if a matching legacy key was found and updated; None otherwise.
+    #[cfg(all(feature = "database", feature = "auth"))]
+    pub async fn db_backfill_api_key_lookup_for_raw(&self, raw: &str) -> crate::Result<Option<crate::models::ApiKey>> {
+        use diesel::prelude::*;
+        use crate::database::schema::api_keys::dsl::*;
+        use crate::models::ApiKey as ApiKeyModel;
+
+        let raw = raw.to_string();
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            // fetch candidates with empty lookup
+            let mut candidates: Vec<ApiKeyModel> = api_keys
+                .filter(api_key_lookup_hash.eq(""))
+                .load(&mut conn)?;
+
+            // try to find a verifying match
+            for cand in candidates.iter_mut() {
+                if cand.verify_key(&raw).unwrap_or(false) {
+                    // compute new lookup and persist
+                    let new_lookup = ApiKeyModel::lookup_hash(&raw);
+                    diesel::update(api_keys.find(cand.id))
+                        .set(api_key_lookup_hash.eq(new_lookup.clone()))
+                        .execute(&mut conn)?;
+                    cand.api_key_lookup_hash = new_lookup;
+                    return Ok(Some(cand.clone()));
+                }
+            }
+            Ok(None)
+        })
+    }
 }
 
 /// Application environment setup

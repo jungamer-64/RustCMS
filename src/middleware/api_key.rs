@@ -114,22 +114,11 @@ pub async fn api_key_auth_layer(
 
 #[cfg(all(feature="database", feature="auth"))]
 async fn legacy_fallback_fetch(state: &crate::AppState, raw: &str) -> Option<crate::models::ApiKey> {
-    use diesel::prelude::*;
-    use crate::database::schema::api_keys::dsl::*;
-    let mut conn = state.database.get_connection().ok()?;
-    // 空 lookup_hash のみ取得 (少数想定)
-    let candidates: Vec<crate::models::ApiKey> = api_keys.filter(api_key_lookup_hash.eq("")).load(&mut conn).ok()?;
-    for mut cand in candidates { // mut for potential update
-        if cand.verify_key(raw).ok()? {
-            // バックフィル
-            let new_lookup = crate::models::api_key::ApiKey::lookup_hash(raw);
-            if diesel::update(api_keys.find(cand.id)).set(api_key_lookup_hash.eq(new_lookup.clone())).execute(&mut conn).is_ok() {
-                cand.api_key_lookup_hash = new_lookup;
-            }
-            return Some(cand);
-        }
+    // Delegate to centralized AppState DB wrapper for backfill.
+    match state.db_backfill_api_key_lookup_for_raw(raw).await {
+        Ok(Some(model)) => Some(model),
+        _ => None,
     }
-    None
 }
 
 #[cfg(not(all(feature="database", feature="auth")))]
