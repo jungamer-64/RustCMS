@@ -62,7 +62,23 @@ impl From<crate::auth::AuthResponse> for LoginResponse {
     tag = "Auth",
     request_body = RegisterRequest,
     responses(
-        (status = 201, description = "User registered", body = LoginResponse),
+        (status = 201, description = "User registered", body = LoginResponse,
+            examples((
+                "Registered" = (
+                    summary = "登録成功",
+                    value = json!({
+                        "success": true,
+                        "access_token": "ACCESS_TOKEN_SAMPLE",
+                        "refresh_token": "REFRESH_TOKEN_SAMPLE",
+                        "biscuit_token": "BISCUIT_TOKEN_SAMPLE",
+                        "user": {"id": "1d2e3f40-1111-2222-3333-444455556666", "username": "alice", "email": "alice@example.com", "role": "subscriber"},
+                        "expires_in": 3600,
+                        "session_id": "sess_123",
+                        "token": "ACCESS_TOKEN_SAMPLE"
+                    })
+                )
+            ))
+        ),
         (status = 400, description = "Validation error", body = crate::utils::api_types::ApiResponse<serde_json::Value>),
         (status = 500, description = "Server error")
     )
@@ -103,7 +119,23 @@ pub async fn register(
     tag = "Auth",
     request_body = LoginRequest,
     responses(
-        (status = 200, description = "Login success", body = LoginResponse),
+        (status = 200, description = "Login success", body = LoginResponse,
+            examples((
+                "LoggedIn" = (
+                    summary = "ログイン成功",
+                    value = json!({
+                        "success": true,
+                        "access_token": "ACCESS_TOKEN_SAMPLE",
+                        "refresh_token": "REFRESH_TOKEN_SAMPLE",
+                        "biscuit_token": "BISCUIT_TOKEN_SAMPLE",
+                        "user": {"id": "1d2e3f40-1111-2222-3333-444455556666", "username": "alice", "email": "alice@example.com", "role": "subscriber"},
+                        "expires_in": 3600,
+                        "session_id": "sess_123",
+                        "token": "ACCESS_TOKEN_SAMPLE"
+                    })
+                )
+            ))
+        ),
         (status = 400, description = "Validation error", body = crate::utils::api_types::ApiResponse<serde_json::Value>),
         (status = 401, description = "Invalid credentials"),
         (status = 500, description = "Server error")
@@ -130,7 +162,12 @@ pub async fn login(
     tag = "Auth",
     security(("BearerAuth" = [])),
     responses(
-        (status = 200, description = "Logout success"),
+        (status = 200, description = "Logout success", examples((
+            "LoggedOut" = (
+                summary="ログアウト成功",
+                value = json!({"success": true, "message": "Successfully logged out"})
+            )
+        ))),
         (status = 401, description = "Unauthorized")
     )
 )]
@@ -154,7 +191,12 @@ pub async fn logout(
     tag = "Auth",
     security(("BearerAuth" = [])),
     responses(
-        (status = 200, description = "Profile info placeholder"),
+        (status = 200, description = "Profile info placeholder", examples((
+            "Profile" = (
+                summary = "プロファイル例",
+                value = json!({"success": true, "message": "Profile endpoint - requires authentication middleware"})
+            )
+        ))),
         (status = 401, description = "Unauthorized")
     )
 )]
@@ -182,7 +224,20 @@ pub struct RefreshResponse { pub success: bool, pub access_token: String, pub ex
     tag = "Auth",
     request_body = RefreshRequest,
     responses(
-        (status = 200, description = "Token refreshed", body = RefreshResponse),
+        (status = 200, description = "Token refreshed", body = RefreshResponse,
+            examples((
+                "Refreshed" = (
+                    summary = "トークン更新成功",
+                    value = json!({
+                        "success": true,
+                        "access_token": "NEW_ACCESS_TOKEN_SAMPLE",
+                        "expires_in": 3600,
+                        "session_id": "sess_123",
+                        "refresh_token": "NEW_REFRESH_TOKEN_SAMPLE"
+                    })
+                )
+            ))
+        ),
         (status = 401, description = "Invalid or expired refresh token"),
         (status = 500, description = "Server error")
     )

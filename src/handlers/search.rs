@@ -91,7 +91,23 @@ pub struct SuggestQuery {
     tag = "Search",
     params(SearchQuery),
     responses(
-        (status=200, description="Search results (ApiResponse<SearchResults>)"),
+        (status=200, description="Search results (ApiResponse<SearchResults>)", examples((
+            "SearchResults" = (
+                summary = "検索結果例",
+                value = json!({
+                    "success": true,
+                    "data": {
+                        "results": [
+                            {"id": "550e8400-e29b-41d4-a716-446655440000", "title": "Hello World", "doc_type": "post"}
+                        ],
+                        "total": 1
+                    },
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))),
         (status=500, description="Server error")
     )
 )]
@@ -168,7 +184,18 @@ pub async fn search(
     tag = "Search",
     params(SuggestQuery),
     responses(
-        (status=200, description="Suggestions list (ApiResponse<{ suggestions: string[] }>)"),
+        (status=200, description="Suggestions list (ApiResponse<{ suggestions: string[] }>)", examples((
+            "Suggestions" = (
+                summary = "サジェスト例",
+                value = json!({
+                    "success": true,
+                    "data": {"suggestions": ["hel", "hello", "hello world"]},
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))),
         (status=500, description="Server error")
     )
 )]
@@ -212,7 +239,18 @@ pub async fn suggest(
     path = "/api/v1/search/stats",
     tag = "Search",
     responses(
-        (status=200, description="Search stats (ApiResponse<SearchStats>)"),
+        (status=200, description="Search stats (ApiResponse<SearchStats>)", examples((
+            "Stats" = (
+                summary = "統計例",
+                value = json!({
+                    "success": true,
+                    "data": {"index_size": 12345, "documents": 42},
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))),
         (status=500, description="Server error")
     )
 )]
@@ -260,7 +298,18 @@ pub async fn search_stats(State(state): State<AppState>) -> Result<impl IntoResp
     tag = "Search",
     security(("BearerAuth" = [])),
     responses(
-        (status=200, description="Reindex triggered (ApiResponse<{ message: string }>)"),
+        (status=200, description="Reindex triggered (ApiResponse<{ message: string }>)", examples((
+            "Reindex" = (
+                summary = "再インデックス開始",
+                value = json!({
+                    "success": true,
+                    "data": {"message": "Reindexing started - this would be implemented as a background task"},
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))),
         (status=500, description="Server error")
     )
 )]
@@ -287,7 +336,18 @@ pub async fn reindex(State(_state): State<AppState>) -> Result<impl IntoResponse
     path = "/api/v1/search/health",
     tag = "Search",
     responses(
-        (status=200, description="Search health placeholder (ApiResponse<Error>)"),
+        (status=200, description="Search health placeholder (ApiResponse<Error>)", examples((
+            "Health" = (
+                summary = "未実装例",
+                value = json!({
+                    "success": true,
+                    "data": {"error": "Search health check not implemented"},
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))),
         (status=500, description="Server error")
     )
 )]

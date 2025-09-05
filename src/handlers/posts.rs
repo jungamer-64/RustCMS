@@ -80,7 +80,29 @@ impl From<&Post> for PostResponse {
     security(("BearerAuth" = [])),
     request_body = CreatePostRequest,
     responses(
-    (status=201, body=crate::utils::api_types::ApiResponse<PostResponse>, description="Post created"),
+    (status=201, body=crate::utils::api_types::ApiResponse<PostResponse>, description="Post created",
+        examples((
+            "Created" = (
+                summary = "新規作成成功",
+                value = json!({
+                    "success": true,
+                    "data": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "title": "Hello World",
+                        "content": "First post body...",
+                        "author_id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "status": "draft",
+                        "tags": ["intro"],
+                        "created_at": "2025-09-05T12:00:00Z",
+                        "updated_at": "2025-09-05T12:00:00Z"
+                    },
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))
+    ),
     (status=400, description="Validation error", body=crate::utils::api_types::ApiResponse<serde_json::Value>),
         (status=401, description="Unauthorized"),
         (status=500, description="Server error")
@@ -105,7 +127,29 @@ pub async fn create_post(
     tag = "Posts",
     security(("BearerAuth" = [])),
     responses(
-    (status=200, body=crate::utils::api_types::ApiResponse<PostResponse>),
+    (status=200, body=crate::utils::api_types::ApiResponse<PostResponse>,
+        examples((
+            "Found" = (
+                summary = "取得成功",
+                value = json!({
+                    "success": true,
+                    "data": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "title": "Hello World",
+                        "content": "First post body...",
+                        "author_id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "status": "published",
+                        "tags": ["intro"],
+                        "created_at": "2025-09-05T12:00:00Z",
+                        "updated_at": "2025-09-05T12:05:00Z"
+                    },
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))
+    ),
         (status=404, description="Post not found"),
         (status=500, description="Server error")
     )
@@ -138,7 +182,37 @@ pub async fn get_post(
     params(PostQuery),
     security(("BearerAuth" = [])),
     responses(
-    (status=200, body=crate::utils::api_types::ApiResponse<Paginated<PostResponse>>),
+    (status=200, body=crate::utils::api_types::ApiResponse<Paginated<PostResponse>>,
+        examples((
+            "List" = (
+                summary = "ページ付き一覧",
+                value = json!({
+                    "success": true,
+                    "data": {
+                        "items": [
+                            {
+                                "id": "550e8400-e29b-41d4-a716-446655440000",
+                                "title": "Hello World",
+                                "content": "First post body...",
+                                "author_id": "1d2e3f40-1111-2222-3333-444455556666",
+                                "status": "published",
+                                "tags": ["intro"],
+                                "created_at": "2025-09-05T12:00:00Z",
+                                "updated_at": "2025-09-05T12:05:00Z"
+                            }
+                        ],
+                        "page": 1,
+                        "per_page": 20,
+                        "total": 1,
+                        "total_pages": 1
+                    },
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))
+    ),
         (status=500, description="Server error")
     )
 )]
@@ -186,7 +260,29 @@ pub async fn get_posts(
     request_body = UpdatePostRequest,
     security(("BearerAuth" = [])),
     responses(
-    (status=200, body=crate::utils::api_types::ApiResponse<PostResponse>),
+    (status=200, body=crate::utils::api_types::ApiResponse<PostResponse>,
+        examples((
+            "Updated" = (
+                summary = "更新成功",
+                value = json!({
+                    "success": true,
+                    "data": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "title": "Hello World (edited)",
+                        "content": "Updated post body...",
+                        "author_id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "status": "published",
+                        "tags": ["intro"],
+                        "created_at": "2025-09-05T12:00:00Z",
+                        "updated_at": "2025-09-05T12:10:00Z"
+                    },
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))
+    ),
     (status=400, description="Validation error", body=crate::utils::api_types::ApiResponse<serde_json::Value>),
         (status=404, description="Post not found"),
         (status=500, description="Server error")
@@ -212,7 +308,18 @@ pub async fn update_post(
     tag = "Posts",
     security(("BearerAuth" = [])),
     responses(
-        (status=200, description="Post deleted"),
+        (status=200, description="Post deleted", examples((
+            "Deleted" = (
+                summary="削除成功",
+                value = json!({
+                    "success": true,
+                    "data": {"message": "Post deleted successfully"},
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))),
         (status=404, description="Post not found"),
         (status=500, description="Server error")
     )
@@ -265,7 +372,27 @@ pub async fn get_posts_by_tag(
     tag = "Posts",
     security(("BearerAuth" = [])),
     responses(
-    (status=200, body=crate::utils::api_types::ApiResponse<PostResponse>),
+    (status=200, body=crate::utils::api_types::ApiResponse<PostResponse>, examples((
+        "Published" = (
+            summary="公開成功",
+            value = json!({
+                "success": true,
+                "data": {
+                    "id": "550e8400-e29b-41d4-a716-446655440000",
+                    "title": "Hello World",
+                    "content": "First post body...",
+                    "author_id": "1d2e3f40-1111-2222-3333-444455556666",
+                    "status": "published",
+                    "tags": ["intro"],
+                    "created_at": "2025-09-05T12:00:00Z",
+                    "updated_at": "2025-09-05T12:05:00Z"
+                },
+                "message": null,
+                "error": null,
+                "validation_errors": null
+            })
+        )
+    ))),
         (status=404, description="Post not found"),
         (status=500, description="Server error")
     )

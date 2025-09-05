@@ -40,18 +40,18 @@ mod api_key_adapter_tests {
     use cms_backend::limiter::adapters::ApiKeyFailureLimiterAdapter;
     use std::env;
 
-    #[test]
-    fn adapter_blocks_after_threshold() {
+    #[tokio::test]
+    async fn adapter_blocks_after_threshold() {
         // Ensure env threshold determinism; backend reads on construction.
         env::set_var("API_KEY_FAIL_WINDOW_SECS", "60");
         env::set_var("API_KEY_FAIL_THRESHOLD", "2"); // block after >2 failures
         let adapter = ApiKeyFailureLimiterAdapter::from_env();
         // First 3 checks correspond to 3 failures (record_failure increments internally)
-        assert_eq!(adapter.check("k1"), RateLimitDecision::Allowed);
-        assert_eq!(adapter.check("k1"), RateLimitDecision::Allowed);
-        match adapter.check("k1") { RateLimitDecision::Blocked { .. } => {}, _ => panic!("expected blocked") }
+    assert_eq!(adapter.check("k1"), RateLimitDecision::Allowed);
+    assert_eq!(adapter.check("k1"), RateLimitDecision::Allowed);
+    match adapter.check("k1") { RateLimitDecision::Blocked { .. } => {}, _ => panic!("expected blocked") }
         // Clear and ensure it allows again
-        adapter.clear("k1");
-        assert_eq!(adapter.check("k1"), RateLimitDecision::Allowed);
+    adapter.clear("k1");
+    assert_eq!(adapter.check("k1"), RateLimitDecision::Allowed);
     }
 }

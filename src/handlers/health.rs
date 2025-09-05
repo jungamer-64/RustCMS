@@ -57,7 +57,22 @@ pub struct SystemInfo {
     path = "/api/v1/health",
     tag = "Health",
     responses(
-        (status = 200, description = "System healthy or minimal", body = HealthResponse),
+        (status = 200, description = "System healthy or minimal", body = HealthResponse, examples((
+            "Healthy" = (
+                summary = "正常例",
+                value = json!({
+                    "status": "healthy",
+                    "timestamp": "2025-09-05T12:00:00Z",
+                    "services": {
+                        "database": {"status": "healthy"},
+                        "cache": {"status": "healthy"},
+                        "search": {"status": "healthy"},
+                        "auth": {"status": "healthy"}
+                    },
+                    "system": {"version": "2.0.0", "uptime_seconds": 1234, "rust_version": "stable", "build_profile": "debug"}
+                })
+            )
+        ))),
         (status = 503, description = "System degraded or unhealthy", body = HealthResponse)
     )
 )]
@@ -263,7 +278,12 @@ async fn check_search_health(state: &AppState) -> ServiceStatus {
 // Auth health is checked via AppState wrapper `auth_health_check` now.
 
 /// Liveness probe (simple check)
-#[utoipa::path(get, path = "/api/v1/health/liveness", tag = "Health", responses((status = 200, description = "Liveness OK")))]
+#[utoipa::path(get, path = "/api/v1/health/liveness", tag = "Health", responses((status = 200, description = "Liveness OK", examples((
+    "Alive" = (
+        summary = "Liveness例",
+        value = json!({"status": "alive", "timestamp": "2025-09-05T12:00:00Z"})
+    )
+)))))]
 pub async fn liveness() -> impl IntoResponse {
     ApiOk(json!({
         "status": "alive",
@@ -272,7 +292,12 @@ pub async fn liveness() -> impl IntoResponse {
 }
 
 /// Readiness probe (check if ready to serve traffic)
-#[utoipa::path(get, path = "/api/v1/health/readiness", tag = "Health", responses((status = 200, description = "Readiness status JSON")))]
+#[utoipa::path(get, path = "/api/v1/health/readiness", tag = "Health", responses((status = 200, description = "Readiness status JSON", examples((
+    "Ready" = (
+        summary = "Readiness例",
+        value = json!({"status": "ready", "timestamp": "2025-09-05T12:00:00Z"})
+    )
+)))))]
 pub async fn readiness(State(state): State<AppState>) -> Result<impl IntoResponse> {
     // Quick checks to see if essential services are ready
     let mut ready = true;

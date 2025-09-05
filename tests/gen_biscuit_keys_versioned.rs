@@ -1,6 +1,5 @@
-use assert_cmd::cargo::CommandCargoExt;
 use assert_cmd::Command;
-use predicates::prelude::*;
+use predicates::str::contains;
 use tempfile::tempdir;
 use std::fs;
 use std::io::Read;
@@ -8,8 +7,9 @@ use serde_json::Value;
 use std::collections::HashSet;
 
 // Number of versioned generations to perform before checking prune retention.
-const GENERATIONS: usize = 5; // keep small to limit test time
-const PRUNE_KEEP: usize = 3;
+// Reduced to speed up CI while still exercising prune & manifest logic
+const GENERATIONS: usize = 3;
+const PRUNE_KEEP: usize = 2;
 
 #[test]
 fn versioned_keys_manifest_and_prune() {
@@ -65,7 +65,7 @@ fn versioned_keys_manifest_and_prune() {
         .arg("--list");
     list_cmd.assert()
         .success()
-        .stdout(predicates::str::contains("Found versions"));
+        .stdout(contains("Found versions"));
 }
 
 // Re-implement parse_version from the binary for test-side inspection.

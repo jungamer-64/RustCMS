@@ -1,5 +1,4 @@
 use assert_cmd::Command;
-use predicates::prelude::*;
 use std::fs;
 use tempfile::tempdir;
 
@@ -21,7 +20,7 @@ fn compress_creates_gz_backup() {
         .arg("--force");
     cmd.assert().success();
 
-    // run again with compress
+    // run again with compress (no artificial delay; binary should be fast)
     let mut cmd = Command::new("cargo");
     cmd.arg("run").arg("--manifest-path").arg("Cargo.toml").arg("--bin").arg("gen_biscuit_keys").arg("--")
         .arg("--format").arg("files")

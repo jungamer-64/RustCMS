@@ -38,7 +38,29 @@ pub struct UserQuery {
     params(UserQuery),
     security(("BearerAuth" = [])),
     responses(
-    (status=200, body=Paginated<UserInfo>),
+    (status=200, body=Paginated<UserInfo>, examples((
+        "UserList" = (
+            summary="ユーザ一覧",
+            value = json!({
+                "success": true,
+                "data": {
+                    "items": [{
+                        "id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "username": "alice",
+                        "email": "alice@example.com",
+                        "role": "subscriber"
+                    }],
+                    "page": 1,
+                    "per_page": 20,
+                    "total": 1,
+                    "total_pages": 1
+                },
+                "message": null,
+                "error": null,
+                "validation_errors": null
+            })
+        )
+    ))),
         (status=500, description="Server error")
     )
 )]
@@ -87,7 +109,23 @@ pub async fn get_users(
     tag = "Users",
     security(("BearerAuth" = [])),
     responses(
-        (status=200, body=UserInfo),
+        (status=200, body=UserInfo, examples((
+            "User" = (
+                summary="ユーザ取得",
+                value = json!({
+                    "success": true,
+                    "data": {
+                        "id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "username": "alice",
+                        "email": "alice@example.com",
+                        "role": "subscriber"
+                    },
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))),
         (status=404, description="User not found"),
         (status=500, description="Server error")
     )
@@ -117,7 +155,23 @@ pub async fn get_user(
     tag = "Users",
     security(("BearerAuth" = [])),
     responses(
-        (status=200, body=UserInfo),
+        (status=200, body=UserInfo, examples((
+            "Updated" = (
+                summary="更新成功",
+                value = json!({
+                    "success": true,
+                    "data": {
+                        "id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "username": "alice",
+                        "email": "alice@example.com",
+                        "role": "editor"
+                    },
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))),
     (status=400, description="Validation error", body=crate::utils::api_types::ApiResponse<serde_json::Value>),
         (status=404, description="User not found"),
         (status=500, description="Server error")
@@ -149,7 +203,18 @@ pub async fn update_user(
     tag = "Users",
     security(("BearerAuth" = [])),
     responses(
-        (status=200, description="User deactivated"),
+        (status=200, description="User deactivated", examples((
+            "Deactivated" = (
+                summary="無効化成功",
+                value = json!({
+                    "success": true,
+                    "data": {"message": "User deactivated successfully"},
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))),
         (status=404, description="User not found"),
         (status=500, description="Server error")
     )
@@ -185,7 +250,33 @@ pub async fn delete_user(
     params(crate::handlers::posts::PostQuery),
     security(("BearerAuth" = [])),
     responses(
-    (status=200, body=crate::utils::api_types::ApiResponse<crate::models::pagination::Paginated<crate::handlers::posts::PostResponse>>),
+    (status=200, body=crate::utils::api_types::ApiResponse<crate::models::pagination::Paginated<crate::handlers::posts::PostResponse>>, examples((
+        "UserPosts" = (
+            summary="ユーザ投稿一覧",
+            value = json!({
+                "success": true,
+                "data": {
+                    "items": [{
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "title": "Hello World",
+                        "content": "First post body...",
+                        "author_id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "status": "published",
+                        "tags": ["intro"],
+                        "created_at": "2025-09-05T12:00:00Z",
+                        "updated_at": "2025-09-05T12:05:00Z"
+                    }],
+                    "page": 1,
+                    "per_page": 20,
+                    "total": 1,
+                    "total_pages": 1
+                },
+                "message": null,
+                "error": null,
+                "validation_errors": null
+            })
+        )
+    ))),
         (status=404, description="User not found"),
         (status=500, description="Server error")
     )
@@ -247,7 +338,23 @@ pub async fn get_user_posts(
     tag = "Users",
     security(("BearerAuth" = [])),
     responses(
-        (status=200, body=UserInfo),
+        (status=200, body=UserInfo, examples((
+            "RoleChanged" = (
+                summary="ロール変更成功",
+                value = json!({
+                    "success": true,
+                    "data": {
+                        "id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "username": "alice",
+                        "email": "alice@example.com",
+                        "role": "admin"
+                    },
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))),
         (status=400, description="Invalid role value"),
         (status=404, description="User not found"),
         (status=500, description="Server error")
