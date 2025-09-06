@@ -11,7 +11,7 @@ use utoipa::ToSchema;
 use serde_json::json;
 use std::time::Duration;
 
-// removed unused ok helper after migrating to IntoApiOk
+// Using ApiOk newtype for unified success responses
 use crate::utils::response_ext::ApiOk;
 use crate::{AppState, Result};
 
@@ -111,6 +111,12 @@ pub async fn search(
     State(state): State<AppState>,
     Query(query): Query<SearchQuery>,
 ) -> Result<impl IntoResponse> {
+    // Normalize pagination controls
+    let mut limit = query.limit.unwrap_or(20);
+    if limit == 0 { limit = 20; }
+    if limit > 100 { limit = 100; }
+    let offset = query.offset.unwrap_or(0);
+
     // Build search request
     let search_request = SearchRequest {
         query: query.q.clone(),
@@ -122,8 +128,8 @@ pub async fn search(
             }]
         }),
         facets: None,
-        limit: query.limit,
-        offset: query.offset,
+        limit: Some(limit),
+        offset: Some(offset),
         sort_by: query.sort_by,
         sort_order: query
             .sort_order
@@ -137,8 +143,8 @@ pub async fn search(
     // Try cache first
     let cache_key = crate::utils::cache_key::CacheKeyBuilder::new("search")
         .kv("q", &query.q)
-        .kv("limit", query.limit.unwrap_or(20))
-        .kv("offset", query.offset.unwrap_or(0))
+        .kv("limit", limit)
+        .kv("offset", offset)
         .kv("type", query.doc_type.as_deref().unwrap_or("all"))
         .build();
 
@@ -198,7 +204,9 @@ pub async fn suggest(
     State(state): State<AppState>,
     Query(query): Query<SuggestQuery>,
 ) -> Result<impl IntoResponse> {
-    let limit = query.limit.unwrap_or(10);
+    let mut limit = query.limit.unwrap_or(20);
+    if limit == 0 { limit = 20; }
+    if limit > 100 { limit = 100; }
 
     // Try cache first
     let cache_key = crate::utils::cache_key::CacheKeyBuilder::new("suggest")
@@ -277,7 +285,7 @@ pub async fn search_stats(State(state): State<AppState>) -> Result<impl IntoResp
     if let Err(e) = state
         .cache
         .set(
-            cache_key.to_string(),
+            cache_key,
             &stats,
             Some(Duration::from_secs(300)),
         )

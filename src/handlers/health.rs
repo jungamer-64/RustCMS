@@ -11,7 +11,7 @@ use serde::Serialize;
 use utoipa::ToSchema;
 use serde_json::json;
 
-// removed unused ok helper after migrating to IntoApiOk
+// Using ApiOk newtype for unified success responses
 use crate::utils::response_ext::ApiOk;
 use crate::{AppState, Result};
 
