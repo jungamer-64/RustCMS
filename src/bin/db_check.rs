@@ -1,6 +1,5 @@
 use clap::Parser;
 use cms_backend::{Result};
-use diesel::prelude::*;
 use serde_json::json;
 
 #[derive(Parser, Debug)]
@@ -26,19 +25,12 @@ async fn main() -> Result<()> {
 
     // Initialize common app state (includes database)
     let state = cms_backend::utils::init::init_app_state().await?;
-    let mut conn = state.get_conn()?;
-
-    use cms_backend::database::schema::posts::dsl as posts_dsl;
-    use cms_backend::database::schema::users::dsl as users_dsl;
-    use cms_backend::models::User;
 
     // If delete_post provided, attempt deletion and exit
     if let Some(id_str) = args.delete_post {
         match uuid::Uuid::parse_str(&id_str) {
             Ok(uuid) => {
-                let deleted = diesel::delete(posts_dsl::posts.filter(posts_dsl::id.eq(uuid)))
-                    .execute(&mut conn)
-                    .map_err(cms_backend::AppError::Database)?;
+                state.db_admin_delete_post(uuid).await?;
 
                 if args.json {
                     println!("{}", json!({"deleted": deleted}));
@@ -55,62 +47,26 @@ async fn main() -> Result<()> {
     }
 
     // Count users
-    let users_count: i64 = users_dsl::users
-        .count()
-        .get_result(&mut conn)
-    .map_err(cms_backend::AppError::Database)?;
+    let users_count: i64 = state.db_admin_users_count().await?;
 
     // Check for admin user
-    let admin_user: Option<User> = users_dsl::users
-        .filter(users_dsl::username.eq("admin"))
-        .first::<User>(&mut conn)
-        .optional()
-    .map_err(cms_backend::AppError::Database)?;
+    let admin_user = state.db_admin_find_admin_user().await?;
 
     // Count posts
-    let posts_count: i64 = posts_dsl::posts
-        .count()
-        .get_result(&mut conn)
-    .map_err(cms_backend::AppError::Database)?;
+    let posts_count: i64 = state.db_admin_posts_count().await?;
 
     // Recent posts via query
-    #[derive(QueryableByName, Debug)]
-    struct PostRow {
-        #[diesel(sql_type = diesel::sql_types::Uuid)]
-        id: uuid::Uuid,
-        #[diesel(sql_type = diesel::sql_types::Text)]
-        title: String,
-        #[diesel(sql_type = diesel::sql_types::Uuid)]
-        author_id: uuid::Uuid,
-        #[diesel(sql_type = diesel::sql_types::Text)]
-        status: String,
-        #[diesel(sql_type = diesel::sql_types::Timestamptz)]
-        created_at: chrono::DateTime<chrono::Utc>,
-    }
-
-    let q = format!(
-        "SELECT id, title, author_id, status, created_at FROM posts ORDER BY created_at DESC LIMIT {}",
-        args.limit
-    );
-
-    let recent: Vec<PostRow> = diesel::sql_query(q)
-        .load(&mut conn)
-    .map_err(cms_backend::AppError::Database)?;
+    let recent = state.db_admin_list_recent_posts(args.limit).await?;
 
     if args.json {
         let admin = admin_user.map(|u| json!({"username": u.username, "email": u.email}));
-        let posts_json: Vec<_> = recent
-            .into_iter()
-            .map(|p| {
-                json!({
-                    "id": p.id.to_string(),
-                    "title": p.title,
-                    "author_id": p.author_id.to_string(),
-                    "status": p.status,
-                    "created_at": p.created_at.to_rfc3339(),
-                })
-            })
-            .collect();
+        let posts_json: Vec<_> = recent.into_iter().map(|p| json!({
+            "id": p.id,
+            "title": p.title,
+            "author_id": p.author_id,
+            "status": p.status,
+            "created_at": p.created_at,
+        })).collect();
 
         println!(
             "{}",
@@ -128,12 +84,7 @@ async fn main() -> Result<()> {
             println!("No posts found.");
         } else {
             println!("Recent posts:");
-            for p in recent {
-                println!(
-                    "- {} | {} | author={} | {} | {}",
-                    p.id, p.title, p.author_id, p.status, p.created_at
-                );
-            }
+            for p in recent { println!("- {} | {} | author={} | {} | {}", p.id, p.title, p.author_id, p.status, p.created_at); }
         }
     }
 

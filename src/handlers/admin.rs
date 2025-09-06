@@ -1,5 +1,5 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
-use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
+// diesel traits are not needed here anymore; all DB ops go through AppState wrappers
 use serde::Deserialize;
 
 use crate::utils::{auth_utils, common_types::PostSummary};
@@ -19,36 +19,7 @@ pub async fn list_posts(
         return Err(crate::AppError::Authentication("missing token".to_string()));
     }
 
-    let mut conn = state.get_conn()?;
-
-    #[derive(diesel::QueryableByName, Debug)]
-    struct PostRow {
-        #[diesel(sql_type = diesel::sql_types::Uuid)]
-        id: uuid::Uuid,
-        #[diesel(sql_type = diesel::sql_types::Text)]
-        title: String,
-        #[diesel(sql_type = diesel::sql_types::Uuid)]
-        author_id: uuid::Uuid,
-        #[diesel(sql_type = diesel::sql_types::Text)]
-        status: String,
-        #[diesel(sql_type = diesel::sql_types::Timestamptz)]
-        created_at: chrono::DateTime<chrono::Utc>,
-    }
-
-    let rows: Vec<PostRow> = diesel::sql_query("SELECT id, title, author_id, status, created_at FROM posts ORDER BY created_at DESC LIMIT 100")
-        .load(&mut conn)
-    .map_err(crate::AppError::Database)?;
-
-    let out: Vec<PostSummary> = rows
-        .into_iter()
-        .map(|r| PostSummary {
-            id: r.id.to_string(),
-            title: r.title,
-            author_id: r.author_id.to_string(),
-            status: r.status,
-            created_at: r.created_at.to_rfc3339(),
-        })
-        .collect();
+    let out: Vec<PostSummary> = state.db_admin_list_recent_posts(100).await?;
 
     Ok(ApiOk(out))
 }
@@ -117,16 +88,6 @@ pub async fn delete_post(
 
     let uuid = uuid::Uuid::parse_str(&id)
         .map_err(|_| crate::AppError::BadRequest("invalid uuid".to_string()))?;
-    let mut conn = state.get_conn()?;
-
-    use crate::database::schema::posts::dsl as posts_dsl;
-    let deleted = diesel::delete(posts_dsl::posts.filter(posts_dsl::id.eq(uuid)))
-        .execute(&mut conn)
-    .map_err(crate::AppError::Database)?;
-
-    if deleted == 0 {
-        return Err(crate::AppError::NotFound("post not found".to_string()));
-    }
-
+    state.db_admin_delete_post(uuid).await?;
     Ok(StatusCode::NO_CONTENT)
 }

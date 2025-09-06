@@ -886,6 +886,141 @@ impl AppState {
             Ok(None)
         })
     }
+
+    // --- Admin-specific DB helpers (to avoid direct Diesel in handlers) ---
+    #[cfg(feature = "database")]
+    pub async fn db_admin_list_recent_posts(&self, limit: i64) -> crate::Result<Vec<crate::utils::common_types::PostSummary>> {
+        use diesel::prelude::*;
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+
+            #[derive(diesel::QueryableByName)]
+            struct Row {
+                #[diesel(sql_type = diesel::sql_types::Uuid)]
+                id: uuid::Uuid,
+                #[diesel(sql_type = diesel::sql_types::Text)]
+                title: String,
+                #[diesel(sql_type = diesel::sql_types::Uuid)]
+                author_id: uuid::Uuid,
+                #[diesel(sql_type = diesel::sql_types::Text)]
+                status: String,
+                #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+                created_at: chrono::DateTime<chrono::Utc>,
+            }
+
+            let rows: Vec<Row> = diesel::sql_query(
+                "SELECT id, title, author_id, status, created_at FROM posts ORDER BY created_at DESC LIMIT $1",
+            )
+            .bind::<diesel::sql_types::BigInt, _>(limit)
+            .load(&mut conn)?;
+
+            let out = rows
+                .into_iter()
+                .map(|r| crate::utils::common_types::PostSummary {
+                    id: r.id.to_string(),
+                    title: r.title,
+                    author_id: r.author_id.to_string(),
+                    status: r.status,
+                    created_at: r.created_at.to_rfc3339(),
+                })
+                .collect();
+
+            Ok(out)
+        })
+    }
+
+    #[cfg(feature = "database")]
+    pub async fn db_admin_delete_post(&self, post_id: uuid::Uuid) -> crate::Result<()> {
+        use diesel::prelude::*;
+        use crate::database::schema::posts::dsl as posts_dsl;
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            let affected = diesel::delete(posts_dsl::posts.filter(posts_dsl::id.eq(post_id)))
+                .execute(&mut conn)?;
+            if affected == 0 {
+                return Err(crate::AppError::NotFound("post not found".into()));
+            }
+            Ok(())
+        })
+    }
+
+    #[cfg(feature = "database")]
+    pub async fn db_admin_users_count(&self) -> crate::Result<i64> {
+        use diesel::prelude::*;
+        use crate::database::schema::users::dsl as users_dsl;
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            let count: i64 = users_dsl::users.count().get_result(&mut conn)?;
+            Ok(count)
+        })
+    }
+
+    #[cfg(feature = "database")]
+    pub async fn db_admin_posts_count(&self) -> crate::Result<i64> {
+        use diesel::prelude::*;
+        use crate::database::schema::posts::dsl as posts_dsl;
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            let count: i64 = posts_dsl::posts.count().get_result(&mut conn)?;
+            Ok(count)
+        })
+    }
+
+    #[cfg(feature = "database")]
+    pub async fn db_admin_find_admin_user(&self) -> crate::Result<Option<crate::models::User>> {
+        use diesel::prelude::*;
+        use crate::database::schema::users::dsl as users_dsl;
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            let user = users_dsl::users
+                .filter(users_dsl::username.eq("admin"))
+                .first::<crate::models::User>(&mut conn)
+                .optional()?;
+            Ok(user)
+        })
+    }
+
+    /// Execute a raw SQL statement and return affected rows
+    #[cfg(feature = "database")]
+    pub async fn db_execute_sql(&self, sql: &str) -> crate::Result<usize> {
+        use diesel::prelude::*;
+        let sql = sql.to_string();
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            let n = diesel::sql_query(&sql).execute(&mut conn)?;
+            Ok(n)
+        })
+    }
+
+    /// Fetch applied migration versions from schema_migrations or __diesel_schema_migrations
+    #[cfg(feature = "database")]
+    pub async fn db_fetch_applied_migrations(&self) -> crate::Result<Vec<String>> {
+        use diesel::prelude::*;
+        #[derive(diesel::QueryableByName)]
+        struct MigrationVersion { #[diesel(sql_type = diesel::sql_types::Text)] version: String }
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+        let try_primary: std::result::Result<Vec<MigrationVersion>, diesel::result::Error> =
+                diesel::sql_query("SELECT version FROM schema_migrations ORDER BY version ASC").load(&mut conn);
+            let rows = match try_primary {
+                Ok(r) => r,
+                Err(_) => diesel::sql_query("SELECT version FROM __diesel_schema_migrations ORDER BY version ASC")
+                    .load(&mut conn)
+            .map_err(|e| crate::AppError::Internal(e.to_string()))?,
+            };
+            Ok(rows.into_iter().map(|r| r.version).collect())
+        })
+    }
+
+    /// Ensure schema_migrations exists and copy rows from legacy table
+    #[cfg(feature = "database")]
+    pub async fn db_ensure_schema_migrations_compat(&self) -> crate::Result<()> {
+        let create_sql = "CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());";
+        let copy_sql = "INSERT INTO schema_migrations(version, applied_at) SELECT version, run_on FROM __diesel_schema_migrations WHERE version NOT IN (SELECT version FROM schema_migrations);";
+        let _ = self.db_execute_sql(create_sql).await?;
+        let _ = self.db_execute_sql(copy_sql).await?;
+        Ok(())
+    }
 }
 
 /// Application environment setup
