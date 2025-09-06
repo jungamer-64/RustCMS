@@ -56,11 +56,7 @@ mod _search_shim {
         Equals,
     }
 
-    #[derive(Debug)]
-    pub enum SortOrder {
-        Asc,
-        Desc,
-    }
+    pub type SortOrder = crate::utils::api_types::SortOrder;
 }
 
 #[cfg(not(feature = "search"))]
@@ -139,13 +135,12 @@ pub async fn search(
     };
 
     // Try cache first
-    let cache_key = format!(
-        "search:{}:{}:{}:{}",
-        query.q,
-        query.limit.unwrap_or(20),
-        query.offset.unwrap_or(0),
-        query.doc_type.as_deref().unwrap_or("all")
-    );
+    let cache_key = crate::utils::cache_key::CacheKeyBuilder::new("search")
+        .kv("q", &query.q)
+        .kv("limit", query.limit.unwrap_or(20))
+        .kv("offset", query.offset.unwrap_or(0))
+        .kv("type", query.doc_type.as_deref().unwrap_or("all"))
+        .build();
 
     #[cfg(feature = "cache")]
     {
@@ -206,7 +201,10 @@ pub async fn suggest(
     let limit = query.limit.unwrap_or(10);
 
     // Try cache first
-    let cache_key = format!("suggest:{}:{}", query.prefix, limit);
+    let cache_key = crate::utils::cache_key::CacheKeyBuilder::new("suggest")
+        .kv("prefix", &query.prefix)
+        .kv("limit", limit)
+        .build();
     #[cfg(feature = "cache")]
     {
         if let Ok(Some(cached)) = state.cache.get::<Vec<String>>(&cache_key).await {
@@ -256,12 +254,12 @@ pub async fn suggest(
 )]
 pub async fn search_stats(State(state): State<AppState>) -> Result<impl IntoResponse> {
     // Try cache first
-    let cache_key = "search:stats";
+    let cache_key = crate::utils::cache_key::CacheKeyBuilder::new("search:stats").build();
     #[cfg(feature = "cache")]
     {
         if let Ok(Some(cached)) = state
             .cache
-            .get::<crate::search::SearchStats>(cache_key)
+            .get::<crate::search::SearchStats>(&cache_key)
             .await
         {
     return Ok(ApiOk(cached));

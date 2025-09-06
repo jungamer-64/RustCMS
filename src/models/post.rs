@@ -282,9 +282,7 @@ fn default_page() -> usize {
     1
 }
 
-fn default_limit() -> usize {
-    10
-}
+fn default_limit() -> usize { 20 }
 
 impl Post {
     /// Generate excerpt from content if not provided
@@ -412,15 +410,10 @@ impl CreatePostRequest {
 impl PostFilter {
     /// Validate and sanitize filter parameters
     pub fn validate_and_sanitize(&mut self) {
-        // Ensure page is at least 1
-        if self.page == 0 {
-            self.page = 1;
-        }
-
-        // Limit page size for performance
-        if self.limit == 0 || self.limit > 100 {
-            self.limit = 10;
-        }
+    // Normalize page/limit using shared helper
+    let (p, l) = crate::models::pagination::normalize_page_limit(Some(self.page as u32), Some(self.limit as u32));
+    self.page = p as usize;
+    self.limit = l as usize;
 
         // Sanitize search query
         if let Some(search) = &self.search {
@@ -449,25 +442,10 @@ impl PostFilter {
     }
 }
 
-/// Generate URL-friendly slug from title
+/// Generate URL-friendly slug from title (centralized)
+/// Delegates to utils::url_encoding::generate_safe_slug to avoid duplicated logic.
 pub fn generate_slug(title: &str) -> String {
-    title
-        .to_lowercase()
-        .chars()
-        .filter_map(|c| {
-            if c.is_alphanumeric() {
-                Some(c)
-            } else if c.is_whitespace() || c == '-' {
-                Some('-')
-            } else {
-                None
-            }
-        })
-        .collect::<String>()
-        .split('-')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
+    crate::utils::url_encoding::generate_safe_slug(title)
 }
 
 /// Strip HTML tags from content (basic implementation)
