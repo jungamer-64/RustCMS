@@ -183,7 +183,7 @@ pub async fn update_user(
     Json(request): Json<UpdateUserRequest>,
 ) -> Result<impl IntoResponse> {
     // Update in database (record DB timing)
-    let user = state.database.update_user(id, request).await?;
+    let user = state.db_update_user(id, request).await?;
 
     // Update search index
     #[cfg(feature = "search")]
@@ -226,7 +226,7 @@ pub async fn delete_user(
     // Soft delete by deactivating
     let update_request = UpdateUserRequest::deactivate();
 
-    let _user = state.database.update_user(id, update_request).await?;
+    let _user = state.db_update_user(id, update_request).await?;
 
     // Remove from search index
     #[cfg(feature = "search")]
@@ -308,7 +308,7 @@ pub async fn get_user_posts(
                     query.sort.clone(),
                 )
                 .await?;
-            let total = state.database.count_posts_by_author(id).await?;
+            let total = state.db_count_posts_by_author(id).await?;
             Ok(crate::models::pagination::Paginated::new(posts.iter().map(crate::handlers::posts::PostResponse::from).collect(), total, page, limit))
         }).await?;
     return Ok(ApiOk(response));
@@ -325,7 +325,7 @@ pub async fn get_user_posts(
                 query.sort,
             )
             .await?;
-        let total = state.database.count_posts_by_author(id).await?;
+    let total = state.db_count_posts_by_author(id).await?;
     let response = crate::models::pagination::Paginated::new(posts.iter().map(crate::handlers::posts::PostResponse::from).collect(), total, page, limit);
     return Ok(ApiOk(response));
     }
@@ -378,7 +378,7 @@ pub async fn change_user_role(
 
     let update_request = UpdateUserRequest::with_role(role_enum);
 
-    let user = state.database.update_user(id, update_request).await?;
+    let user = state.db_update_user(id, update_request).await?;
 
     // Clear cache
     #[cfg(feature = "cache")]

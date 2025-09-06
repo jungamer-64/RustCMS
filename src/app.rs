@@ -697,6 +697,27 @@ impl AppState {
     timed_op!(self, "db", self.database.update_last_login(id))
     }
 
+    // Additional user helpers used by handlers/CLI
+    #[cfg(feature = "database")]
+    pub async fn db_get_user_by_username(&self, username: &str) -> crate::Result<crate::models::User> {
+    timed_op!(self, "db", self.database.get_user_by_username(username))
+    }
+
+    #[cfg(feature = "database")]
+    pub async fn db_update_user(&self, id: uuid::Uuid, request: crate::models::UpdateUserRequest) -> crate::Result<crate::models::User> {
+    timed_op!(self, "db", self.database.update_user(id, request))
+    }
+
+    #[cfg(feature = "database")]
+    pub async fn db_delete_user(&self, id: uuid::Uuid) -> crate::Result<()> {
+    timed_op!(self, "db", self.database.delete_user(id))
+    }
+
+    #[cfg(feature = "database")]
+    pub async fn db_reset_user_password(&self, id: uuid::Uuid, new_password: &str) -> crate::Result<()> {
+    timed_op!(self, "db", self.database.reset_user_password(id, new_password))
+    }
+
     #[cfg(feature = "database")]
     pub async fn db_count_users(&self) -> crate::Result<usize> {
     timed_op!(self, "db", self.database.count_users())
@@ -730,6 +751,11 @@ impl AppState {
     #[cfg(feature = "database")]
     pub async fn db_count_posts(&self, tag: Option<&str>) -> crate::Result<usize> {
     timed_op!(self, "db", self.database.count_posts(tag))
+    }
+
+    #[cfg(feature = "database")]
+    pub async fn db_count_posts_by_author(&self, author_id: uuid::Uuid) -> crate::Result<usize> {
+    timed_op!(self, "db", self.database.count_posts_by_author(author_id))
     }
 
     // --- API Key wrappers ---

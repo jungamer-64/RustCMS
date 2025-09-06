@@ -85,9 +85,11 @@ impl Database {
     }
 
     /// Get user by username helper used by admin CLI (stub)
-    pub async fn get_user_by_username(&self, _username: &str) -> Result<User> {
-        // Placeholder: not implemented, return NotFound
-        Err(crate::AppError::NotFound("User not found".to_string()))
+    pub async fn get_user_by_username(&self, username_str: &str) -> Result<User> {
+        let mut conn = self.get_connection()?;
+        let user = User::find_by_username(&mut conn, username_str)
+            .map_err(|_| crate::AppError::NotFound("User not found".to_string()))?;
+        Ok(user)
     }
 
     pub async fn get_user_by_id(&self, _id: Uuid) -> Result<User> {
@@ -126,9 +128,11 @@ impl Database {
         Ok(vec![])
     }
 
-    pub async fn update_user(&self, _id: Uuid, _request: UpdateUserRequest) -> Result<User> {
-        // Placeholder implementation
-        Err(crate::AppError::Internal("Not implemented".to_string()))
+    pub async fn update_user(&self, id: Uuid, request: UpdateUserRequest) -> Result<User> {
+        let mut conn = self.get_connection()?;
+        let updated = User::update(&mut conn, id, &request)
+            .map_err(|e| crate::AppError::Internal(format!("Failed to update user: {}", e)))?;
+        Ok(updated)
     }
 
     pub async fn count_users(&self) -> Result<usize> {
@@ -200,20 +204,38 @@ impl Database {
         Ok(0)
     }
 
-    pub async fn count_posts_by_author(&self, _author_id: Uuid) -> Result<usize> {
-        // Placeholder implementation
-        Ok(0)
+    pub async fn count_posts_by_author(&self, author: Uuid) -> Result<usize> {
+        use diesel::prelude::*;
+        use crate::database::schema::posts::dsl as posts_dsl;
+        let mut conn = self.get_connection()?;
+        let total: i64 = posts_dsl::posts
+            .filter(posts_dsl::author_id.eq(author))
+            .count()
+            .get_result(&mut conn)
+            .map_err(|e| crate::AppError::Internal(format!("Failed to count posts by author: {}", e)))?;
+        Ok(total as usize)
     }
 
     /// Delete a user by ID
-    pub async fn delete_user(&self, _id: Uuid) -> Result<()> {
-        // Placeholder - would delete user from database
+    pub async fn delete_user(&self, id: Uuid) -> Result<()> {
+        let mut conn = self.get_connection()?;
+        let affected = User::delete(&mut conn, id)
+            .map_err(|e| crate::AppError::Internal(format!("Failed to delete user: {}", e)))?;
+        if affected == 0 { return Err(crate::AppError::NotFound("User not found".to_string())); }
         Ok(())
     }
 
-    /// Reset user password helper used by admin CLI (stub)
-    pub async fn reset_user_password(&self, _id: Uuid, _new_password: &str) -> Result<()> {
-        // Placeholder: noop
+    /// Reset user password helper used by admin CLI
+    pub async fn reset_user_password(&self, id: Uuid, new_password: &str) -> Result<()> {
+        use diesel::prelude::*;
+        use crate::database::schema::users::dsl as users_dsl;
+        let mut conn = self.get_connection()?;
+        let hash = crate::utils::password::hash_password(new_password)?;
+        let affected = diesel::update(users_dsl::users.find(id))
+            .set((users_dsl::password_hash.eq(Some(hash)), users_dsl::updated_at.eq(chrono::Utc::now())))
+            .execute(&mut conn)
+            .map_err(|e| crate::AppError::Internal(format!("Failed to reset password: {}", e)))?;
+        if affected == 0 { return Err(crate::AppError::NotFound("User not found".to_string())); }
         Ok(())
     }
 

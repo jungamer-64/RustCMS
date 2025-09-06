@@ -129,7 +129,7 @@ async fn main() -> Result<()> {
                 status: Some(cms_backend::models::PostStatus::Published),
             };
 
-            state.database.create_post(sample_post).await?;
+            state.db_create_post(sample_post).await?;
             println!("Sample post created");
         }
         Commands::EnvCheck => {

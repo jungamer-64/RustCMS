@@ -349,9 +349,9 @@ async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> 
             let existing_user = if user.parse::<uuid::Uuid>().is_ok() {
                 let id = uuid::Uuid::parse_str(&user)
                     .map_err(|e| cms_backend::AppError::BadRequest(e.to_string()))?;
-                state.database.get_user_by_id(id).await?
+                state.db_get_user_by_id(id).await?
             } else {
-                state.database.get_user_by_username(&user).await?
+                state.db_get_user_by_username(&user).await?
             };
 
             // Convert Option<String> -> Option<UserRole>
@@ -369,7 +369,7 @@ async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> 
                 is_active: active,
             };
 
-            let updated_user = state.database.update_user(existing_user.id, update).await?;
+            let updated_user = state.db_update_user(existing_user.id, update).await?;
 
             info!("✅ User updated successfully:");
             println!("  ID: {}", updated_user.id);
@@ -383,9 +383,9 @@ async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> 
             let existing_user = if user.parse::<uuid::Uuid>().is_ok() {
                 let id = uuid::Uuid::parse_str(&user)
                     .map_err(|e| cms_backend::AppError::BadRequest(e.to_string()))?;
-                state.database.get_user_by_id(id).await?
+                state.db_get_user_by_id(id).await?
             } else {
-                state.database.get_user_by_username(&user).await?
+                state.db_get_user_by_username(&user).await?
             };
 
             if !force {
@@ -406,7 +406,7 @@ async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> 
                 }
             }
 
-            state.database.delete_user(existing_user.id).await?;
+            state.db_delete_user(existing_user.id).await?;
             info!("✅ User deleted successfully");
         }
 
@@ -414,9 +414,9 @@ async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> 
             let existing_user = if user.parse::<uuid::Uuid>().is_ok() {
                 let id = uuid::Uuid::parse_str(&user)
                     .map_err(|e| cms_backend::AppError::BadRequest(e.to_string()))?;
-                state.database.get_user_by_id(id).await?
+                state.db_get_user_by_id(id).await?
             } else {
-                state.database.get_user_by_username(&user).await?
+                state.db_get_user_by_username(&user).await?
             };
 
             let new_password = password.clone().unwrap_or_else(|| {
@@ -424,10 +424,7 @@ async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> 
                     .unwrap_or_else(|_| generate_random_password())
             });
 
-            state
-                .database
-                .reset_user_password(existing_user.id, &new_password)
-                .await?;
+            state.db_reset_user_password(existing_user.id, &new_password).await?;
 
             info!(
                 "✅ Password reset successfully for user: {}",
