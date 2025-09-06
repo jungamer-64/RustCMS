@@ -88,6 +88,7 @@ pub struct QueryParams {
 
 // Use shared API types
 use crate::utils::api_types::{ApiResponse, Pagination};
+use crate::utils::url_encoding::generate_safe_slug;
 
 // インメモリストレージ
 #[derive(Debug, Clone)]
@@ -149,17 +150,7 @@ impl InMemoryStore {
 }
 
 // ヘルパー関数
-fn generate_slug(title: &str) -> String {
-    title
-        .to_lowercase()
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '-' })
-        .collect::<String>()
-        .split('-')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
-}
+fn generate_slug(title: &str) -> String { generate_safe_slug(title) }
 
 fn paginate<T: Clone>(items: &[T], page: usize, per_page: usize) -> (Vec<T>, Pagination) {
     let total = items.len();
@@ -213,7 +204,9 @@ async fn get_posts(
 
     // ページネーション
     let page = params.page.unwrap_or(1).max(1);
-    let limit = params.limit.unwrap_or(10).min(100);
+    let mut limit = params.limit.unwrap_or(20);
+    if limit == 0 { limit = 20; }
+    if limit > 100 { limit = 100; }
     let (paginated_posts, pagination) = paginate(&post_list, page, limit);
 
     Json(ApiResponse::success(crate::utils::api_types::PaginatedResponse { data: paginated_posts, pagination }))

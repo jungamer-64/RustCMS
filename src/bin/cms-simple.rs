@@ -125,7 +125,7 @@ struct UpdatePostRequest {
     status: Option<PostStatus>,
 }
 
-use cms_backend::utils::api_types::{ApiResponse, PaginationQuery};
+use cms_backend::utils::api_types::{ApiResponse, Pagination, PaginatedResponse, PaginationQuery};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -247,7 +247,7 @@ async fn health_check(State(store): State<InMemoryStore>) -> Json<ApiResponse<se
 async fn get_posts(
     State(store): State<InMemoryStore>,
     Query(pagination): Query<PaginationQuery>,
-) -> Json<ApiResponse<serde_json::Value>> {
+) -> Json<ApiResponse<PaginatedResponse<Post>>> {
     let posts = store.posts.lock().unwrap();
     let mut pagination = pagination;
     // 共通バリデーション
@@ -267,17 +267,13 @@ async fn get_posts(
         Vec::new()
     };
 
-    Json(ApiResponse::success(json!({
-        "posts": paginated_posts,
-        "pagination": {
-            "page": page,
-            "per_page": per_page,
-            "total": total,
-            "total_pages": (total as f64 / per_page as f64).ceil() as u32,
-            "has_next": end < total,
-            "has_prev": page > 1
-        }
-    })))
+    let pagination = Pagination {
+        page,
+        per_page,
+        total: total as u64,
+        total_pages: ((total as f64) / (per_page as f64)).ceil() as u32,
+    };
+    Json(ApiResponse::success(PaginatedResponse { data: paginated_posts, pagination }))
 }
 
 async fn get_post(
