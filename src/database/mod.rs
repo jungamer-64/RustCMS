@@ -172,8 +172,19 @@ impl Database {
     }
 
     pub async fn get_post_by_id(&self, _id: Uuid) -> Result<Post> {
-        // Placeholder implementation
-        Err(crate::AppError::NotFound("Post not found".to_string()))
+        use diesel::prelude::*;
+        use crate::database::schema::posts::dsl as posts_dsl;
+
+        let mut conn = self.get_connection()?;
+        let post = posts_dsl::posts
+            .find(_id)
+            .first::<Post>(&mut conn)
+            .map_err(|e| match e {
+                diesel::result::Error::NotFound => crate::AppError::NotFound("Post not found".to_string()),
+                other => crate::AppError::Internal(format!("Failed to fetch post: {}", other)),
+            })?;
+
+        Ok(post)
     }
 
     pub async fn get_posts(
@@ -185,23 +196,157 @@ impl Database {
         _tag: Option<String>,
         _sort: Option<String>,
     ) -> Result<Vec<Post>> {
-        // Placeholder implementation
-        Ok(vec![])
+        use diesel::prelude::*;
+    // no raw SQL needed
+        use crate::database::schema::posts::dsl as posts_dsl;
+
+        let mut conn = self.get_connection()?;
+
+        // Pagination guards
+        let page = if _page == 0 { 1 } else { _page } as i64;
+        let limit = match _limit {
+            0 => 10,
+            n if n > 100 => 100,
+            n => n,
+        } as i64;
+        let offset = (page - 1) * limit;
+
+        let mut query = posts_dsl::posts.into_boxed();
+
+        if let Some(status) = _status.as_ref() {
+            query = query.filter(posts_dsl::status.eq(status));
+        }
+        if let Some(author) = _author.as_ref() {
+            query = query.filter(posts_dsl::author_id.eq(author));
+        }
+        if let Some(tag) = _tag.as_ref() {
+            // tags @> ARRAY[tag]
+            // Prefer Diesel array contains if available; fallback to SQL fragment
+            #[allow(unused_imports)]
+            use diesel::PgArrayExpressionMethods;
+            query = query.filter(posts_dsl::tags.contains(vec![tag.clone()]));
+        }
+
+        // Sort parsing: support "created_at", "updated_at", "published_at", "title" and optional "-" prefix for DESC
+        let (sort_col, desc) = match _sort.as_deref() {
+            Some(s) if s.starts_with('-') => (&s[1..], true),
+            Some(s) => (s, false),
+            None => ("created_at", true),
+        };
+
+        query = match (sort_col, desc) {
+            ("created_at", true) => query.order(posts_dsl::created_at.desc()),
+            ("created_at", false) => query.order(posts_dsl::created_at.asc()),
+            ("updated_at", true) => query.order(posts_dsl::updated_at.desc()),
+            ("updated_at", false) => query.order(posts_dsl::updated_at.asc()),
+            // Emulate NULLS LAST/FIRST using a composite order
+            ("published_at", true) => query.order((posts_dsl::published_at.is_null().asc(), posts_dsl::published_at.desc())),
+            ("published_at", false) => query.order((posts_dsl::published_at.is_null().desc(), posts_dsl::published_at.asc())),
+            ("title", true) => query.order(posts_dsl::title.desc()),
+            ("title", false) => query.order(posts_dsl::title.asc()),
+            _ => query.order(posts_dsl::created_at.desc()),
+        };
+
+        let results = query
+            .offset(offset)
+            .limit(limit)
+            .load::<Post>(&mut conn)
+            .map_err(|e| crate::AppError::Internal(format!("Failed to list posts: {}", e)))?;
+
+        Ok(results)
     }
 
     pub async fn update_post(&self, _id: Uuid, _request: UpdatePostRequest) -> Result<Post> {
-        // Placeholder implementation
-        Err(crate::AppError::Internal("Not implemented".to_string()))
+        use diesel::prelude::*;
+        use crate::database::schema::posts::dsl as posts_dsl;
+
+        let mut conn = self.get_connection()?;
+
+        // Load existing to compute derived fields and keep unchanged values
+    let existing = posts_dsl::posts
+            .find(_id)
+            .first::<Post>(&mut conn)
+            .map_err(|e| match e {
+                diesel::result::Error::NotFound => crate::AppError::NotFound("Post not found".to_string()),
+                other => crate::AppError::Internal(format!("Failed to fetch post: {}", other)),
+            })?;
+
+        // Compute new values
+        let new_title = _request.title.as_ref().cloned().unwrap_or_else(|| existing.title.clone());
+        let new_slug = _request.slug.as_ref().cloned().unwrap_or_else(|| existing.slug.clone());
+        let new_content = _request.content.as_ref().cloned().unwrap_or_else(|| existing.content.clone());
+        let new_excerpt = if _request.excerpt.is_some() { _request.excerpt.clone() } else { existing.excerpt.clone() };
+        let new_tags = _request.tags.clone().unwrap_or_else(|| existing.tags.clone());
+        let new_categories = match &_request.category {
+            Some(cat) => vec![cat.trim().to_lowercase()],
+            None => existing.categories.clone(),
+        };
+        let new_meta_title = if _request.meta_title.is_some() { _request.meta_title.clone() } else { existing.meta_title.clone() };
+        let new_meta_description = if _request.meta_description.is_some() { _request.meta_description.clone() } else { existing.meta_description.clone() };
+
+        // status / published_at handling
+        let mut new_status = if let Some(st) = &_request.status { st.to_string() } else { existing.status.clone() };
+        let mut new_published_at = if _request.published_at.is_some() { _request.published_at } else { existing.published_at };
+        if let Some(published) = _request.published {
+            if published {
+                new_status = "published".to_string();
+                if new_published_at.is_none() { new_published_at = Some(chrono::Utc::now()); }
+            } else {
+                new_status = "draft".to_string();
+            }
+        }
+
+        let now = chrono::Utc::now();
+
+        let updated = diesel::update(posts_dsl::posts.find(_id))
+            .set((
+                posts_dsl::title.eq(new_title),
+                posts_dsl::slug.eq(new_slug),
+                posts_dsl::content.eq(new_content),
+                posts_dsl::excerpt.eq(new_excerpt),
+                posts_dsl::tags.eq(new_tags),
+                posts_dsl::categories.eq(new_categories),
+                posts_dsl::meta_title.eq(new_meta_title),
+                posts_dsl::meta_description.eq(new_meta_description),
+                posts_dsl::status.eq(new_status),
+                posts_dsl::published_at.eq(new_published_at),
+                posts_dsl::updated_at.eq(now),
+            ))
+            .get_result::<Post>(&mut conn)
+            .map_err(|e| crate::AppError::Internal(format!("Failed to update post: {}", e)))?;
+
+        Ok(updated)
     }
 
     pub async fn delete_post(&self, _id: Uuid) -> Result<()> {
-        // Placeholder implementation
+        use diesel::prelude::*;
+        use crate::database::schema::posts::dsl as posts_dsl;
+        let mut conn = self.get_connection()?;
+        let affected = diesel::delete(posts_dsl::posts.find(_id))
+            .execute(&mut conn)
+            .map_err(|e| crate::AppError::Internal(format!("Failed to delete post: {}", e)))?;
+        if affected == 0 {
+            return Err(crate::AppError::NotFound("Post not found".to_string()));
+        }
         Ok(())
     }
 
     pub async fn count_posts(&self, _tag: Option<&str>) -> Result<usize> {
-        // Placeholder implementation
-        Ok(0)
+        use diesel::prelude::*;
+        use crate::database::schema::posts::dsl as posts_dsl;
+        let mut conn = self.get_connection()?;
+
+        let mut query = posts_dsl::posts.into_boxed();
+        if let Some(tag) = _tag {
+            #[allow(unused_imports)]
+            use diesel::PgArrayExpressionMethods;
+            query = query.filter(posts_dsl::tags.contains(vec![tag.to_string()]));
+        }
+        let total: i64 = query
+            .count()
+            .get_result(&mut conn)
+            .map_err(|e| crate::AppError::Internal(format!("Failed to count posts: {}", e)))?;
+        Ok(total as usize)
     }
 
     pub async fn count_posts_by_author(&self, author: Uuid) -> Result<usize> {
