@@ -5,7 +5,6 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 use validator::{ValidationError, ValidationErrors};
-use base64::Engine; // for URL_SAFE_NO_PAD.encode
 
 use crate::database::schema::api_keys;
 use crate::AppError;
@@ -220,12 +219,7 @@ impl ApiKey {
     /// ルックアップ用の決定的ハッシュ (衝突耐性と高速性重視 / 再計算可能)。
     /// 生キーが漏れてもハッシュ逆算は困難だが、オフライン総当りは可能なので rate-limit 前提。
     pub fn lookup_hash(key: &str) -> String {
-        use sha2::{Digest, Sha256};
-        let mut hasher = Sha256::new();
-        hasher.update(key.as_bytes());
-        let digest = hasher.finalize();
-        // URL safe base64 (no padding) で保存長を抑える
-        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest)
+    crate::utils::hash::sha256_b64url(key.as_bytes())
     }
 
     pub fn verify_key(&self, key: &str) -> Result<bool, AppError> {

@@ -20,7 +20,7 @@
 //! - refresh 時は version をインクリメントし旧 refresh トークンを無効化
 //! - セッション状態はメモリ (HashMap) 管理 (分散構成向けには外部ストアへ差し替え予定)
 
-use argon2::{Argon2, PasswordHash, PasswordVerifier};
+use argon2::Argon2;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use biscuit_auth::{KeyPair, PrivateKey, PublicKey, builder::BiscuitBuilder, error::Format as BiscuitFormat, Algorithm as BiscuitAlgorithm};
@@ -332,12 +332,11 @@ impl AuthService {
 
         // Verify password
         if let Some(password_hash) = &user.password_hash {
-            let parsed_hash = PasswordHash::new(password_hash)
-                .map_err(|e| AuthError::PasswordHash(e.to_string()))?;
-
-            self.argon2
-                .verify_password(request.password.as_bytes(), &parsed_hash)
-                .map_err(|_| AuthError::InvalidCredentials)?;
+            match password::verify_password(&request.password, password_hash) {
+                Ok(true) => {}
+                Ok(false) => return Err(AuthError::InvalidCredentials.into()),
+                Err(e) => return Err(AuthError::PasswordHash(e.to_string()).into()),
+            }
         } else {
             return Err(AuthError::InvalidCredentials.into());
         }

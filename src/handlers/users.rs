@@ -250,7 +250,7 @@ pub async fn delete_user(
     params(crate::handlers::posts::PostQuery),
     security(("BearerAuth" = [])),
     responses(
-    (status=200, body=crate::utils::api_types::ApiResponse<crate::models::pagination::Paginated<crate::handlers::posts::PostResponse>>, examples((
+    (status=200, body=crate::utils::api_types::ApiResponse<crate::models::pagination::Paginated<crate::handlers::posts::PostDto>>, examples((
         "UserPosts" = (
             summary="ユーザ投稿一覧",
             value = json!({
@@ -297,7 +297,7 @@ pub async fn get_user_posts(
         .build();
     #[cfg(feature = "cache")]
     {
-        let response = state.cache_get_or_set::<crate::models::pagination::Paginated<crate::handlers::posts::PostResponse>, _, _>(&cache_key, std::time::Duration::from_secs(300), || async {
+    let response = state.cache_get_or_set::<crate::models::pagination::Paginated<crate::handlers::posts::PostDto>, _, _>(&cache_key, std::time::Duration::from_secs(300), || async {
             let posts = state
                 .db_get_posts(
                     page,
@@ -315,7 +315,7 @@ pub async fn get_user_posts(
                     query.tag.clone(),
                 )
                 .await?;
-            Ok(crate::models::pagination::Paginated::new(posts.iter().map(crate::handlers::posts::PostResponse::from).collect(), total, page, limit))
+            Ok(crate::models::pagination::Paginated::new(posts.iter().map(crate::handlers::posts::PostDto::from).collect(), total, page, limit))
         }).await?;
     return Ok(ApiOk(response));
     }
@@ -338,7 +338,7 @@ pub async fn get_user_posts(
     let total = state
         .db_count_posts_filtered(status, Some(id), tag)
         .await?;
-    let response = crate::models::pagination::Paginated::new(posts.iter().map(crate::handlers::posts::PostResponse::from).collect(), total, page, limit);
+    let response = crate::models::pagination::Paginated::new(posts.iter().map(crate::handlers::posts::PostDto::from).collect(), total, page, limit);
     return Ok(ApiOk(response));
     }
 }

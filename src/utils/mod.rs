@@ -5,6 +5,7 @@ pub mod common_types;
 pub mod date;
 pub mod error;
 pub mod file;
+pub mod hash;
 pub mod init;
 pub mod password;
 pub mod url_encoding;

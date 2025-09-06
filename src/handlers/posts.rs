@@ -32,9 +32,9 @@ pub struct PostQuery {
     pub sort: Option<String>,
 }
 
-/// Post response for API
+/// Post DTO for API (single post payload)
 #[derive(Debug, Serialize, Deserialize, ToSchema, Clone)]
-pub struct PostResponse {
+pub struct PostDto {
     pub id: Uuid,
     pub title: String,
     pub content: String,
@@ -48,7 +48,7 @@ pub struct PostResponse {
     pub published_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-impl From<&Post> for PostResponse {
+impl From<&Post> for PostDto {
     fn from(post: &Post) -> Self {
         Self {
             id: post.id,
@@ -70,7 +70,7 @@ impl From<&Post> for PostResponse {
     }
 }
 
-// Posts list now directly returns Paginated<PostResponse> instead of wrapper
+// Posts list now directly returns Paginated<PostDto> instead of wrapper
 
 /// Create a new post
 #[utoipa::path(
@@ -80,7 +80,7 @@ impl From<&Post> for PostResponse {
     security(("BearerAuth" = [])),
     request_body = CreatePostRequest,
     responses(
-    (status=201, body=crate::utils::api_types::ApiResponse<PostResponse>, description="Post created",
+    (status=201, body=crate::utils::api_types::ApiResponse<PostDto>, description="Post created",
         examples((
             "Created" = (
                 summary = "新規作成成功",
@@ -117,7 +117,7 @@ pub async fn create_post(
     state.cache_invalidate_prefix("posts:*").await;
     #[cfg(feature = "search")]
     state.search_index_post_safe(&post).await;
-    Ok((StatusCode::CREATED, ApiOk(PostResponse::from(&post))))
+    Ok((StatusCode::CREATED, ApiOk(PostDto::from(&post))))
 }
 
 /// Get post by ID
@@ -127,7 +127,7 @@ pub async fn create_post(
     tag = "Posts",
     security(("BearerAuth" = [])),
     responses(
-    (status=200, body=crate::utils::api_types::ApiResponse<PostResponse>,
+    (status=200, body=crate::utils::api_types::ApiResponse<PostDto>,
         examples((
             "Found" = (
                 summary = "取得成功",
@@ -161,16 +161,16 @@ pub async fn get_post(
     let cache_key = CacheKeyBuilder::new("post").kv("id", id).build();
     #[cfg(feature = "cache")]
     {
-        let response = state.cache_get_or_set::<PostResponse, _, _>(&cache_key, Duration::from_secs(300), || async {
+    let response = state.cache_get_or_set::<PostDto, _, _>(&cache_key, Duration::from_secs(300), || async {
             let post = state.db_get_post_by_id(id).await?;
-            Ok(PostResponse::from(&post))
+        Ok(PostDto::from(&post))
         }).await?;
     return Ok(ApiOk(response));
     }
     #[cfg(not(feature = "cache"))]
     {
         let post = state.db_get_post_by_id(id).await?;
-    return Ok(ApiOk(PostResponse::from(&post)));
+    return Ok(ApiOk(PostDto::from(&post)));
     }
 }
 
@@ -182,7 +182,7 @@ pub async fn get_post(
     params(PostQuery),
     security(("BearerAuth" = [])),
     responses(
-    (status=200, body=crate::utils::api_types::ApiResponse<Paginated<PostResponse>>,
+    (status=200, body=crate::utils::api_types::ApiResponse<Paginated<PostDto>>,
         examples((
             "List" = (
                 summary = "ページ付き一覧",
@@ -231,14 +231,14 @@ pub async fn get_posts(
         .build();
     #[cfg(feature = "cache")]
     {
-        let response = state.cache_get_or_set::<Paginated<PostResponse>, _, _>(&cache_key, Duration::from_secs(300), || async {
+        let response = state.cache_get_or_set::<Paginated<PostDto>, _, _>(&cache_key, Duration::from_secs(300), || async {
             let posts = state
                 .db_get_posts(page, limit, query.status.clone(), query.author, query.tag.clone(), query.sort.clone())
                 .await?;
             let total = state
                 .db_count_posts_filtered(query.status.clone(), query.author, query.tag.clone())
                 .await?;
-            let paginated = Paginated::new(posts.iter().map(PostResponse::from).collect(), total, page, limit);
+            let paginated = Paginated::new(posts.iter().map(PostDto::from).collect(), total, page, limit);
             Ok(paginated)
         }).await?;
     return Ok(ApiOk(response));
@@ -251,7 +251,7 @@ pub async fn get_posts(
         let total = state
             .db_count_posts_filtered(query.status.clone(), query.author, query.tag.clone())
             .await?;
-    let response = Paginated::new(posts.iter().map(PostResponse::from).collect(), total, page, limit);
+    let response = Paginated::new(posts.iter().map(PostDto::from).collect(), total, page, limit);
     return Ok(ApiOk(response));
     }
 }
@@ -264,7 +264,7 @@ pub async fn get_posts(
     request_body = UpdatePostRequest,
     security(("BearerAuth" = [])),
     responses(
-    (status=200, body=crate::utils::api_types::ApiResponse<PostResponse>,
+    (status=200, body=crate::utils::api_types::ApiResponse<PostDto>,
         examples((
             "Updated" = (
                 summary = "更新成功",
@@ -302,7 +302,7 @@ pub async fn update_post(
     state.search_index_post_safe(&post).await;
     #[cfg(feature = "cache")]
     state.invalidate_post_caches(id).await;
-    Ok(ApiOk(PostResponse::from(&post)))
+    Ok(ApiOk(PostDto::from(&post)))
 }
 
 /// Delete post
@@ -351,7 +351,7 @@ pub async fn delete_post(
     params(PostQuery),
     security(("BearerAuth" = [])),
     responses(
-    (status=200, body=Paginated<PostResponse>),
+    (status=200, body=crate::utils::api_types::ApiResponse<Paginated<PostDto>>),
         (status=500, description="Server error")
     )
 )]
@@ -371,7 +371,7 @@ pub async fn get_posts_by_tag(
     let total = state
         .db_count_posts_filtered(status, author, Some(tag.clone()))
         .await?;
-    let response = Paginated::new(posts.iter().map(PostResponse::from).collect(), total, page, limit);
+    let response = Paginated::new(posts.iter().map(PostDto::from).collect(), total, page, limit);
     Ok(ApiOk(response))
 }
 
@@ -382,7 +382,7 @@ pub async fn get_posts_by_tag(
     tag = "Posts",
     security(("BearerAuth" = [])),
     responses(
-    (status=200, body=crate::utils::api_types::ApiResponse<PostResponse>, examples((
+    (status=200, body=crate::utils::api_types::ApiResponse<PostDto>, examples((
         "Published" = (
             summary="公開成功",
             value = json!({
@@ -415,7 +415,7 @@ pub async fn publish_post(
     let post = state.db_update_post(id, update_request).await?;
     #[cfg(feature = "search")]
     state.search_index_post_safe(&post).await;
-    Ok(ApiOk(PostResponse::from(&post)))
+    Ok(ApiOk(PostDto::from(&post)))
 }
  
 

@@ -7,7 +7,8 @@ use flate2::{write::GzEncoder, Compression};
 use std::path::Path;
 use std::path::PathBuf;
 use clap::{Parser, ValueEnum};
-use sha2::{Digest, Sha256};
+// use crate when available (binary is in the same crate)
+use cms_backend::utils::hash;
 use serde::Serialize;
 
 // Extract version number from filenames like biscuit_private_v12.b64
@@ -38,12 +39,7 @@ fn next_version(dir: &Path) -> Option<u32> {
     Some(max_v + 1)
 }
 
-fn compute_sha256_hex(data: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    let digest = hasher.finalize();
-    hex::encode(digest)
-}
+// replaced by utils::hash::sha256_hex
 
 #[derive(Serialize)]
 struct Manifest<'a> {
@@ -439,8 +435,8 @@ fn main() {
 
             if args.versioned {
                 let v = parse_version(priv_path.file_name().unwrap().to_string_lossy().as_ref()).unwrap_or(0);
-                let priv_fp = compute_sha256_hex(priv_b64.as_bytes());
-                let pub_fp = compute_sha256_hex(pub_b64.as_bytes());
+                let priv_fp = hash::sha256_hex(priv_b64.as_bytes());
+                let pub_fp = hash::sha256_hex(pub_b64.as_bytes());
                 println!("private_fingerprint_sha256={} public_fingerprint_sha256={}", priv_fp, pub_fp);
                 if !args.no_manifest { update_manifest(path, v, &priv_fp, &pub_fp); }
                 if let Some(keep) = args.prune { prune_versions(path, keep); }
@@ -479,8 +475,8 @@ fn main() {
 
             if args.versioned {
                 let v = parse_version(priv_path.file_name().unwrap().to_string_lossy().as_ref()).unwrap_or(0);
-                let priv_fp = compute_sha256_hex(priv_b64.as_bytes());
-                let pub_fp = compute_sha256_hex(pub_b64.as_bytes());
+                let priv_fp = hash::sha256_hex(priv_b64.as_bytes());
+                let pub_fp = hash::sha256_hex(pub_b64.as_bytes());
                 println!("private_fingerprint_sha256={} public_fingerprint_sha256={}", priv_fp, pub_fp);
                 if !args.no_manifest { update_manifest(path, v, &priv_fp, &pub_fp); }
                 if let Some(keep) = args.prune { prune_versions(path, keep); }
@@ -521,8 +517,8 @@ fn main() {
 
             if args.versioned {
                 let v = parse_version(priv_path.file_name().unwrap().to_string_lossy().as_ref()).unwrap_or(0);
-                let priv_fp = compute_sha256_hex(priv_b64.as_bytes());
-                let pub_fp = compute_sha256_hex(pub_b64.as_bytes());
+                let priv_fp = hash::sha256_hex(priv_b64.as_bytes());
+                let pub_fp = hash::sha256_hex(pub_b64.as_bytes());
                 println!("private_fingerprint_sha256={} public_fingerprint_sha256={}", priv_fp, pub_fp);
                 if !args.no_manifest { update_manifest(path, v, &priv_fp, &pub_fp); }
                 if let Some(keep) = args.prune { prune_versions(path, keep); }

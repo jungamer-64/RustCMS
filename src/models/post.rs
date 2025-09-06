@@ -222,7 +222,7 @@ pub enum PostSortBy {
 pub type SortOrder = crate::utils::api_types::SortOrder;
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct PostResponse {
+pub struct PostsListResponse {
     pub posts: Vec<Post>,
     pub pagination: crate::models::pagination::PaginationInfo,
     pub filters: PostFilterMeta,
@@ -234,14 +234,10 @@ pub struct PostFilterMeta {
     pub total_drafts: usize,
     pub categories: Vec<String>,
     pub popular_tags: Vec<String>,
-    pub date_range: Option<DateRange>,
+    pub date_range: Option<crate::utils::date::DateRange>,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct DateRange {
-    pub earliest: DateTime<Utc>,
-    pub latest: DateTime<Utc>,
-}
+// Note: DateRange is unified at utils::date::DateRange
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct PostSummary {
@@ -467,7 +463,7 @@ mod tests {
         assert_eq!(generate_slug("Hello World"), "hello-world");
         assert_eq!(generate_slug("Hello, World!"), "hello-world");
         assert_eq!(generate_slug("Multiple   Spaces"), "multiple-spaces");
-        assert_eq!(generate_slug("Special@#$Characters"), "specialcharacters");
+    assert_eq!(generate_slug("Special@#$Characters"), "special-characters");
     }
 
     #[test]

@@ -17,7 +17,7 @@ use crate::{AppState, Result};
 
 #[cfg(feature = "search")]
 use crate::search::{
-    SearchRequest, SearchResults, SearchFilter, FilterOperator, SortOrder,
+    SearchRequest, SearchResults, SearchFilter, FilterOperator,
 };
 
 #[cfg(not(feature = "search"))]
@@ -70,7 +70,7 @@ pub struct SearchQuery {
     pub offset: Option<usize>,
     pub doc_type: Option<String>, // "post" or "user"
     pub sort_by: Option<String>,
-    pub sort_order: Option<String>,
+    pub sort_order: Option<crate::utils::api_types::SortOrder>,
 }
 
 /// Search suggestion query
@@ -130,14 +130,8 @@ pub async fn search(
         facets: None,
         limit: Some(limit),
         offset: Some(offset),
-        sort_by: query.sort_by,
-        sort_order: query
-            .sort_order
-            .and_then(|order| match order.to_lowercase().as_str() {
-                "asc" => Some(SortOrder::Asc),
-                "desc" => Some(SortOrder::Desc),
-                _ => None,
-            }),
+    sort_by: query.sort_by,
+    sort_order: query.sort_order,
     };
 
     // Try cache first
@@ -342,23 +336,12 @@ pub async fn reindex(State(_state): State<AppState>) -> Result<impl IntoResponse
     path = "/api/v1/search/health",
     tag = "Search",
     responses(
-        (status=200, description="Search health placeholder (ApiResponse<Error>)", examples((
-            "Health" = (
-                summary = "未実装例",
-                value = json!({
-                    "success": true,
-                    "data": {"error": "Search health check not implemented"},
-                    "message": null,
-                    "error": null,
-                    "validation_errors": null
-                })
-            )
-        ))),
+    (status=200, description="Search health (ApiResponse<ServiceHealth>)"),
         (status=500, description="Server error")
     )
 )]
-pub async fn search_health(State(_state): State<AppState>) -> Result<impl IntoResponse> {
-    Ok(ApiOk(json!({
-    "error": "Search health check not implemented"
-    })))
+pub async fn search_health(State(state): State<AppState>) -> Result<impl IntoResponse> {
+    // AppState の包括的なヘルスチェックから search 部分のみ返す
+    let h = state.health_check().await?;
+    Ok(ApiOk(h.search))
 }

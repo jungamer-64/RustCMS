@@ -75,8 +75,8 @@ use crate::app::{AppMetrics, HealthStatus, ServiceHealth};
             crate::handlers::auth::RefreshResponse,
             // Posts
             crate::handlers::posts::PostQuery,
-            crate::handlers::posts::PostResponse,
-            crate::models::pagination::Paginated<crate::handlers::posts::PostResponse>,
+            crate::handlers::posts::PostDto,
+            crate::models::pagination::Paginated<crate::handlers::posts::PostDto>,
             // Users
             crate::handlers::users::UserQuery,
             crate::models::pagination::Paginated<crate::utils::common_types::UserInfo>,
