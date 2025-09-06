@@ -2,15 +2,12 @@ use crate::database::schema::posts;
 use crate::error::{AppError, Result};
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 
-lazy_static::lazy_static! {
-    static ref SLUG_REGEX: Regex = Regex::new(r"^[a-z0-9-]+$").unwrap();
-}
+// Note: slug 検証用の正規表現は utils 側へ集約済み。ここでの個別定義は削除。
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub enum PostStatus {
@@ -221,13 +218,8 @@ pub enum PostSortBy {
     ViewCount,
 }
 
-#[derive(Debug, Deserialize, ToSchema, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum SortOrder {
-    #[default]
-    Desc,
-    Asc,
-}
+// 共有の SortOrder を使用して重複を排除
+pub type SortOrder = crate::utils::api_types::SortOrder;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct PostResponse {

@@ -158,7 +158,7 @@ pub struct SortQuery {
     pub order: SortOrder,
 }
 
-#[derive(Debug, Deserialize, Serialize, ToSchema, Default)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize, Serialize, ToSchema, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SortOrder {
     Asc,

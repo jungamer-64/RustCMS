@@ -79,12 +79,8 @@ pub struct SearchRequest {
     pub sort_order: Option<SortOrder>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SortOrder {
-    Asc,
-    Desc,
-}
+// 統一された SortOrder を利用
+pub type SortOrder = crate::utils::api_types::SortOrder;
 
 /// Search filter
 #[derive(Debug, Clone, Deserialize)]
