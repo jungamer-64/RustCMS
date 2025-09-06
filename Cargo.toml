@@ -100,7 +100,7 @@ thiserror = "2.0"
 metrics = { version = "0.24", optional = true }
 metrics-exporter-prometheus = { version = "0.17", optional = true }
 metrics-prometheus = { version = "0.11", optional = true }
-opentelemetry = { version = "0.20", features = ["rt-tokio"] }
+opentelemetry = { version = "0.30"}
 opentelemetry-jaeger = { version = "0.22", features = ["rt-tokio"] }
 prometheus = { version = "0.14", optional = true }
 tracing = { version = "0.1", features = ["log"] }

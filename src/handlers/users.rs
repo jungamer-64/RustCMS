@@ -84,18 +84,18 @@ pub async fn get_users(
         {
             state.cache_get_or_set::<Paginated<UserInfo>, _, _>(&cache_key, Duration::from_secs(300), || async {
                 let users = state
-                    .db_get_users(page, limit, query.role, query.active, query.sort)
+                    .db_get_users(page, limit, query.role.clone(), query.active, query.sort.clone())
                     .await?;
-                let total = state.db_count_users().await?;
+                let total = state.db_count_users_filtered(query.role.clone(), query.active).await?;
                 Ok(Paginated::new(users.iter().map(UserInfo::from).collect(), total, page, limit))
             }).await?
         }
         #[cfg(not(feature = "cache"))]
         {
             let users = state
-                .db_get_users(page, limit, query.role, query.active, query.sort)
+                .db_get_users(page, limit, query.role.clone(), query.active, query.sort.clone())
                 .await?;
-            let total = state.db_count_users().await?;
+            let total = state.db_count_users_filtered(query.role.clone(), query.active).await?;
             Paginated::new(users.iter().map(UserInfo::from).collect(), total, page, limit)
         }
     };
@@ -308,24 +308,36 @@ pub async fn get_user_posts(
                     query.sort.clone(),
                 )
                 .await?;
-            let total = state.db_count_posts_by_author(id).await?;
+            let total = state
+                .db_count_posts_filtered(
+                    query.status.clone(),
+                    Some(id),
+                    query.tag.clone(),
+                )
+                .await?;
             Ok(crate::models::pagination::Paginated::new(posts.iter().map(crate::handlers::posts::PostResponse::from).collect(), total, page, limit))
         }).await?;
     return Ok(ApiOk(response));
     }
     #[cfg(not(feature = "cache"))]
     {
+        // Avoid moving fields twice
+        let status = query.status.clone();
+        let tag = query.tag.clone();
+        let sort = query.sort.clone();
         let posts = state
             .db_get_posts(
                 page,
                 limit,
-                query.status,
+                status.clone(),
                 Some(id),
-                query.tag,
-                query.sort,
+                tag.clone(),
+                sort,
             )
             .await?;
-    let total = state.db_count_posts_by_author(id).await?;
+    let total = state
+        .db_count_posts_filtered(status, Some(id), tag)
+        .await?;
     let response = crate::models::pagination::Paginated::new(posts.iter().map(crate::handlers::posts::PostResponse::from).collect(), total, page, limit);
     return Ok(ApiOk(response));
     }

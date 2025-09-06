@@ -724,6 +724,11 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    pub async fn db_count_users_filtered(&self, role: Option<String>, active: Option<bool>) -> crate::Result<usize> {
+    timed_op!(self, "db", self.database.count_users_filtered(role, active))
+    }
+
+    #[cfg(feature = "database")]
     pub async fn db_create_post(&self, req: crate::models::CreatePostRequest) -> crate::Result<crate::models::Post> {
     timed_op!(self, "db", self.database.create_post(req))
     }
@@ -756,6 +761,11 @@ impl AppState {
     #[cfg(feature = "database")]
     pub async fn db_count_posts_by_author(&self, author_id: uuid::Uuid) -> crate::Result<usize> {
     timed_op!(self, "db", self.database.count_posts_by_author(author_id))
+    }
+
+    #[cfg(feature = "database")]
+    pub async fn db_count_posts_filtered(&self, status: Option<String>, author: Option<uuid::Uuid>, tag: Option<String>) -> crate::Result<usize> {
+    timed_op!(self, "db", self.database.count_posts_filtered(status, author, tag))
     }
 
     // --- API Key wrappers ---

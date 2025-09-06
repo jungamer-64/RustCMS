@@ -235,7 +235,9 @@ pub async fn get_posts(
             let posts = state
                 .db_get_posts(page, limit, query.status.clone(), query.author, query.tag.clone(), query.sort.clone())
                 .await?;
-            let total = state.db_count_posts(None).await?;
+            let total = state
+                .db_count_posts_filtered(query.status.clone(), query.author, query.tag.clone())
+                .await?;
             let paginated = Paginated::new(posts.iter().map(PostResponse::from).collect(), total, page, limit);
             Ok(paginated)
         }).await?;
@@ -246,7 +248,9 @@ pub async fn get_posts(
     let posts = state
             .db_get_posts(page, limit, query.status, query.author, query.tag, query.sort)
             .await?;
-        let total = state.db_count_posts(None).await?;
+        let total = state
+            .db_count_posts_filtered(query.status.clone(), query.author, query.tag.clone())
+            .await?;
     let response = Paginated::new(posts.iter().map(PostResponse::from).collect(), total, page, limit);
     return Ok(ApiOk(response));
     }
@@ -357,10 +361,16 @@ pub async fn get_posts_by_tag(
     Query(query): Query<PostQuery>,
 ) -> Result<impl IntoResponse> {
     let (page, limit) = normalize_page_limit(query.page, query.limit);
+    // Avoid moving fields twice
+    let status = query.status.clone();
+    let author = query.author;
+    let sort = query.sort.clone();
     let posts = state
-        .db_get_posts(page, limit, query.status, query.author, Some(tag.clone()), query.sort)
+        .db_get_posts(page, limit, status.clone(), author, Some(tag.clone()), sort)
         .await?;
-    let total = state.db_count_posts(Some(&tag)).await?;
+    let total = state
+        .db_count_posts_filtered(status, author, Some(tag.clone()))
+        .await?;
     let response = Paginated::new(posts.iter().map(PostResponse::from).collect(), total, page, limit);
     Ok(ApiOk(response))
 }

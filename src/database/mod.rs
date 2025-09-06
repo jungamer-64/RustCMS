@@ -124,8 +124,47 @@ impl Database {
         _active: Option<bool>,
         _sort: Option<String>,
     ) -> Result<Vec<User>> {
-        // Placeholder implementation
-        Ok(vec![])
+        use diesel::prelude::*;
+        use crate::database::schema::users::dsl as users_dsl;
+
+        let mut conn = self.get_connection()?;
+
+        let page = if _page == 0 { 1 } else { _page } as i64;
+        let limit = match _limit { 0 => 10, n if n > 100 => 100, n => n } as i64;
+        let offset = (page - 1) * limit;
+
+        let mut query = users_dsl::users.into_boxed();
+
+        if let Some(role) = _role.as_ref() {
+            query = query.filter(users_dsl::role.eq(role));
+        }
+        if let Some(active) = _active.as_ref() {
+            query = query.filter(users_dsl::is_active.eq(active));
+        }
+
+        let (sort_col, desc) = match _sort.as_deref() {
+            Some(s) if s.starts_with('-') => (&s[1..], true),
+            Some(s) => (s, false),
+            None => ("created_at", true),
+        };
+
+        query = match (sort_col, desc) {
+            ("created_at", true) => query.order(users_dsl::created_at.desc()),
+            ("created_at", false) => query.order(users_dsl::created_at.asc()),
+            ("updated_at", true) => query.order(users_dsl::updated_at.desc()),
+            ("updated_at", false) => query.order(users_dsl::updated_at.asc()),
+            ("username", true) => query.order(users_dsl::username.desc()),
+            ("username", false) => query.order(users_dsl::username.asc()),
+            _ => query.order(users_dsl::created_at.desc()),
+        };
+
+        let results = query
+            .offset(offset)
+            .limit(limit)
+            .load::<User>(&mut conn)
+            .map_err(|e| crate::AppError::Internal(format!("Failed to list users: {}", e)))?;
+
+        Ok(results)
     }
 
     pub async fn update_user(&self, id: Uuid, request: UpdateUserRequest) -> Result<User> {
@@ -136,8 +175,35 @@ impl Database {
     }
 
     pub async fn count_users(&self) -> Result<usize> {
-        // Placeholder implementation
-        Ok(0)
+        use diesel::prelude::*;
+        use crate::database::schema::users::dsl as users_dsl;
+        let mut conn = self.get_connection()?;
+        let total: i64 = users_dsl::users
+            .count()
+            .get_result(&mut conn)
+            .map_err(|e| crate::AppError::Internal(format!("Failed to count users: {}", e)))?;
+        Ok(total as usize)
+    }
+
+    /// Count users with optional filters (for accurate pagination totals)
+    pub async fn count_users_filtered(&self, _role: Option<String>, _active: Option<bool>) -> Result<usize> {
+        use diesel::prelude::*;
+        use crate::database::schema::users::dsl as users_dsl;
+        let mut conn = self.get_connection()?;
+
+        let mut query = users_dsl::users.into_boxed();
+        if let Some(role) = _role.as_ref() {
+            query = query.filter(users_dsl::role.eq(role));
+        }
+        if let Some(active) = _active.as_ref() {
+            query = query.filter(users_dsl::is_active.eq(active));
+        }
+
+        let total: i64 = query
+            .count()
+            .get_result(&mut conn)
+            .map_err(|e| crate::AppError::Internal(format!("Failed to count users (filtered): {}", e)))?;
+        Ok(total as usize)
     }
 
     // Post CRUD operations
@@ -346,6 +412,37 @@ impl Database {
             .count()
             .get_result(&mut conn)
             .map_err(|e| crate::AppError::Internal(format!("Failed to count posts: {}", e)))?;
+        Ok(total as usize)
+    }
+
+    /// Count posts with optional filters to match listing totals
+    pub async fn count_posts_filtered(
+        &self,
+        _status: Option<String>,
+        _author: Option<Uuid>,
+        _tag: Option<String>,
+    ) -> Result<usize> {
+        use diesel::prelude::*;
+        use crate::database::schema::posts::dsl as posts_dsl;
+        let mut conn = self.get_connection()?;
+
+        let mut query = posts_dsl::posts.into_boxed();
+        if let Some(status) = _status.as_ref() {
+            query = query.filter(posts_dsl::status.eq(status));
+        }
+        if let Some(author) = _author.as_ref() {
+            query = query.filter(posts_dsl::author_id.eq(author));
+        }
+        if let Some(tag) = _tag.as_ref() {
+            #[allow(unused_imports)]
+            use diesel::PgArrayExpressionMethods;
+            query = query.filter(posts_dsl::tags.contains(vec![tag.clone()]));
+        }
+
+        let total: i64 = query
+            .count()
+            .get_result(&mut conn)
+            .map_err(|e| crate::AppError::Internal(format!("Failed to count posts (filtered): {}", e)))?;
         Ok(total as usize)
     }
 
