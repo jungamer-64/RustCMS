@@ -67,7 +67,7 @@ RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
         fi
 
 # (Optional) List artifacts when DEBUG_BUILD_LIST=1
-RUN --mount=type=cache,id=cargo-target,target=/usr/local/cargo/target \
+RUN --mount=type=cache,id=cargo-target,target=/usr/local/cargo/target sh -c 'if cargo build --release --features "$FEATURES" --locked; then :; else cargo build --release --features "$FEATURES"; fi'
         if [ "${DEBUG_BUILD_LIST:-0}" = "1" ]; then \
             echo "=== /usr/local/cargo/target/release ===" && ls -la /usr/local/cargo/target/release || true; \
         fi
