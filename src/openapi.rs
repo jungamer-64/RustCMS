@@ -22,6 +22,8 @@ use crate::app::{AppMetrics, HealthStatus, ServiceHealth};
         crate::handlers::health::health_check,
         crate::handlers::health::liveness,
         crate::handlers::health::readiness,
+    // Metrics
+    crate::handlers::metrics::metrics,
         // Auth
         crate::handlers::auth::register,
         crate::handlers::auth::login,

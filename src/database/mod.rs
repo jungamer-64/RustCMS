@@ -142,13 +142,13 @@ impl Database {
             query = query.filter(users_dsl::is_active.eq(active));
         }
 
-        let (sort_col, desc) = match _sort.as_deref() {
-            Some(s) if s.starts_with('-') => (&s[1..], true),
-            Some(s) => (s, false),
-            None => ("created_at", true),
+        let (sort_col, desc) = {
+            let allowed = ["created_at", "updated_at", "username"];
+            let (c, d) = crate::utils::sort::parse_sort(_sort, "created_at", true, &allowed);
+            (c, d)
         };
 
-        query = match (sort_col, desc) {
+        query = match (sort_col.as_str(), desc) {
             ("created_at", true) => query.order(users_dsl::created_at.desc()),
             ("created_at", false) => query.order(users_dsl::created_at.asc()),
             ("updated_at", true) => query.order(users_dsl::updated_at.desc()),
@@ -293,14 +293,14 @@ impl Database {
             query = query.filter(posts_dsl::tags.contains(vec![tag.clone()]));
         }
 
-        // Sort parsing: support "created_at", "updated_at", "published_at", "title" and optional "-" prefix for DESC
-        let (sort_col, desc) = match _sort.as_deref() {
-            Some(s) if s.starts_with('-') => (&s[1..], true),
-            Some(s) => (s, false),
-            None => ("created_at", true),
+        // Sort parsing via common helper; supports created_at, updated_at, published_at, title and optional '-' prefix
+        let (sort_col, desc) = {
+            let allowed = ["created_at", "updated_at", "published_at", "title"];
+            let (c, d) = crate::utils::sort::parse_sort(_sort, "created_at", true, &allowed);
+            (c, d)
         };
 
-        query = match (sort_col, desc) {
+        query = match (sort_col.as_str(), desc) {
             ("created_at", true) => query.order(posts_dsl::created_at.desc()),
             ("created_at", false) => query.order(posts_dsl::created_at.asc()),
             ("updated_at", true) => query.order(posts_dsl::updated_at.desc()),
