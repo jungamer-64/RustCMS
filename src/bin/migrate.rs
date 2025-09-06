@@ -4,7 +4,6 @@
 
 use clap::{Parser, Subcommand};
 use cms_backend::{AppState, Result};
-use diesel::pg::PgConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use std::env;
 use tracing::{error, info, warn};

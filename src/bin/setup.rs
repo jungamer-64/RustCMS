@@ -20,15 +20,7 @@ async fn main() -> Result<()> {
 
     // Use the migrate/seed logic similar to the migration tool: if DB empty, seed it
     info!("🌱 Checking database for existing users...");
-    let mut conn = state.get_conn()?;
-
-    use cms_backend::database::schema::users::dsl::*;
-    use diesel::prelude::*;
-
-    let existing_users: i64 = users
-        .count()
-        .get_result(&mut conn)
-    .map_err(cms_backend::AppError::Database)?;
+    let existing_users: i64 = state.db_admin_users_count().await?;
 
     if existing_users > 0 {
         info!(
