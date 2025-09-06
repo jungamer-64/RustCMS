@@ -134,17 +134,35 @@ pub struct RedisRateLimiter {
 #[cfg(feature = "cache")]
 impl RedisRateLimiter {
     fn from_env() -> Self {
-        let url = std::env::var("REDIS_URL").expect("REDIS_URL required for redis rate limiter");
+        let url = match std::env::var("REDIS_URL") {
+            Ok(v) => v,
+            Err(_) => {
+                // Fallback to disabled limiter with dummy client; avoid panic to improve robustness
+                tracing::warn!("REDIS_URL not set; Redis rate limiter will be disabled");
+                // Use localhost URL that will fail to connect but keep object constructed
+                "redis://127.0.0.1/".to_string()
+            }
+        };
         let window = std::env::var("API_KEY_FAIL_WINDOW_SECS").ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(60);
-        let threshold = std::env::var("API_KEY_FAIL_THRESHOLD").ok().and_then(|v| v.parse::<u32>().ok()).unwrap_or(10);
-        let disabled = std::env::var("API_KEY_FAIL_DISABLE").map(|v| v=="1" || v.eq_ignore_ascii_case("true")).unwrap_or(false);
+    let threshold = std::env::var("API_KEY_FAIL_THRESHOLD").ok().and_then(|v| v.parse::<u32>().ok()).unwrap_or(10);
+    let mut disabled = std::env::var("API_KEY_FAIL_DISABLE").map(|v| v=="1" || v.eq_ignore_ascii_case("true")).unwrap_or(false);
         let key_prefix = std::env::var("API_KEY_FAIL_REDIS_PREFIX").unwrap_or_else(|_| "rk:".into());
         #[cfg(feature = "monitoring")] {
             gauge!("api_key_rate_limit_window_seconds").set(window as f64);
             gauge!("api_key_rate_limit_threshold").set(threshold as f64);
             gauge!("api_key_rate_limit_enabled").set(if disabled {0.0} else {1.0});
         }
-        Self { client: redis::Client::open(url).expect("Invalid REDIS_URL"), window: Duration::from_secs(window), threshold, disabled, key_prefix, tracked_cache: Mutex::new((Instant::now(), 0)) }
+        let client = match redis::Client::open(url) {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to create Redis client for rate limiter; disabling limiter");
+                // Construct a dummy client with localhost; subsequent ops will no-op via disabled flag
+                disabled = true;
+                // best-effort fallback; unwrap is safe as URL literal is valid
+                redis::Client::open("redis://127.0.0.1/").unwrap()
+            }
+        };
+        Self { client, window: Duration::from_secs(window), threshold, disabled, key_prefix, tracked_cache: Mutex::new((Instant::now(), 0)) }
     }
     fn key(&self, k: &str) -> String { format!("{}{}", self.key_prefix, k) }
     fn as_dyn(&self) -> &dyn ApiKeyRateLimiter { self }

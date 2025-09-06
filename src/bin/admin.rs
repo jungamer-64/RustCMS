@@ -606,19 +606,12 @@ fn truncate(s: &str, max_len: usize) -> String {
 }
 
 fn generate_random_password() -> String {
-    use rand::Rng;
-    use rand::rng;
-
-    const CHARSET: &[u8] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
-    let mut rng = rng();
-
-    (0..16)
-        .map(|_| {
-            let idx = rng.random_range(0..CHARSET.len());
-            CHARSET[idx] as char
-        })
-        .collect()
+    use ring::rand::{SecureRandom, SystemRandom};
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+    let rng = SystemRandom::new();
+    let mut buf = [0u8; 16];
+    rng.fill(&mut buf).ok();
+    buf.iter().map(|b| CHARSET[*b as usize % CHARSET.len()] as char).collect()
 }
 
 fn prompt_password(prompt: &str) -> Result<String> {

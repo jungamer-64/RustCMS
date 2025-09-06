@@ -5,6 +5,8 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 use validator::{ValidationError, ValidationErrors};
+use ring::rand::SecureRandom;
+use base64::Engine;
 
 use crate::database::schema::api_keys;
 use crate::AppError;
@@ -189,15 +191,23 @@ impl ApiKey {
     fn generate_key() -> String {
         // Prefixで種別を明示し、将来のローテ/種別拡張時に識別しやすくする
         const PREFIX: &str = "ak_"; // api key
-        const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"; // URL safe
-        use rand::{Rng, rng};
-        let mut r = rng();
-        let body: String = (0..56) // 56 chars + prefix ≒ 336 bits entropy (十分な強度)
-            .map(|_| {
-                let idx = r.random_range(0..CHARSET.len());
-                CHARSET[idx] as char
-            })
-            .collect();
+        // 42 bytes -> base64url(no pad) 56 chars
+        let mut bytes = [0u8; 42];
+        if ring::rand::SystemRandom::new()
+            .fill(&mut bytes)
+            .is_err()
+        {
+            // フォールバック: UUID v4 16bytes を繰り返し
+            let mut idx = 0;
+            while idx < bytes.len() {
+                let u = uuid::Uuid::new_v4();
+                let b = u.as_bytes();
+                let take = std::cmp::min(b.len(), bytes.len() - idx);
+                bytes[idx..idx + take].copy_from_slice(&b[..take]);
+                idx += take;
+            }
+        }
+        let body = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
         format!("{}{}", PREFIX, body)
     }
 

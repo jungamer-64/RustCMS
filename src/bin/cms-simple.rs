@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{CorsLayer, Any};
+use axum::http::HeaderValue;
 
 // インメモリデータストア（プロトタイプ用）
 #[derive(Clone)]
@@ -137,6 +138,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // インメモリストア初期化
     let store = InMemoryStore::new();
 
+    // CORS origins from env (comma separated). Default to localhost only in dev.
+    let cors_origins = std::env::var("CORS_ORIGINS").unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let origins: Vec<HeaderValue> = cors_origins
+        .split(',')
+        .filter_map(|s| HeaderValue::from_str(s.trim()).ok())
+        .collect();
+    let cors = if origins.is_empty() { CorsLayer::new().allow_origin(Any) } else { CorsLayer::new().allow_origin(origins) };
+
     // ルーター構築
     let app = Router::new()
         // システムエンドポイント
@@ -155,8 +164,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // 設定
         .route("/api/settings", get(get_settings))
         // 管理情報
-        .route("/api/admin/stats", get(admin_stats))
-        .layer(CorsLayer::permissive())
+    .route("/api/admin/stats", get(admin_stats))
+    .layer(cors)
         .with_state(store);
 
     // サーバー起動
