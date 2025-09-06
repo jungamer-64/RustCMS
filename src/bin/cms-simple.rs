@@ -125,13 +125,7 @@ struct UpdatePostRequest {
     status: Option<PostStatus>,
 }
 
-#[derive(Deserialize)]
-struct PaginationQuery {
-    page: Option<u32>,
-    per_page: Option<u32>,
-}
-
-use cms_backend::utils::api_types::ApiResponse;
+use cms_backend::utils::api_types::{ApiResponse, PaginationQuery};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -255,8 +249,11 @@ async fn get_posts(
     Query(pagination): Query<PaginationQuery>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     let posts = store.posts.lock().unwrap();
-    let page = pagination.page.unwrap_or(1);
-    let per_page = pagination.per_page.unwrap_or(10);
+    let mut pagination = pagination;
+    // 共通バリデーション
+    pagination.validate();
+    let page = pagination.page;
+    let per_page = pagination.per_page;
 
     let all_posts: Vec<_> = posts.values().cloned().collect();
     let total = all_posts.len();

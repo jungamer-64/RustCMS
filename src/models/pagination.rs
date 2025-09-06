@@ -58,36 +58,6 @@ impl From<ApiPagination> for PaginationInfo {
     }
 }
 
-#[derive(Debug, Deserialize)]
-pub struct PaginationQuery {
-    #[serde(default = "default_page")]
-    pub page: usize,
-
-    #[serde(default = "default_limit")]
-    pub limit: usize,
-}
-
-impl PaginationQuery {
-    pub fn validate(&mut self) {
-        if self.page == 0 {
-            self.page = 1;
-        }
-        if self.limit == 0 || self.limit > 100 {
-            self.limit = 20;
-        }
-    }
-
-    pub fn offset(&self) -> usize {
-        (self.page - 1) * self.limit
-    }
-}
-
-fn default_page() -> usize {
-    1
-}
-
-fn default_limit() -> usize { 20 }
-
 /// 共通 total_pages 計算 (ハンドラでは u32 を主に使用するため別途 helper)。
 pub fn calc_total_pages(total: usize, limit: u32) -> u32 {
     if limit == 0 { return 1; }
