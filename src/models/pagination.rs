@@ -100,6 +100,21 @@ impl<T> Paginated<T> {
     }
 }
 
+// Bridge to shared API types for responses
+impl<T> From<Paginated<T>> for crate::utils::api_types::PaginatedResponse<T> {
+    fn from(p: Paginated<T>) -> Self {
+        crate::utils::api_types::PaginatedResponse {
+            data: p.items,
+            pagination: crate::utils::api_types::Pagination {
+                page: p.page,
+                per_page: p.limit,
+                total: p.total as u64,
+                total_pages: p.total_pages,
+            },
+        }
+    }
+}
+
 /// 共通ハンドラ用ビルダ (チェーン可能)
 pub struct PaginatedBuilder<T> {
     items: Vec<T>,

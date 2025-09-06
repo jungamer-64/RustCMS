@@ -417,20 +417,27 @@ impl PostFilter {
 
     /// Convert to SQL ORDER BY clause
     pub fn to_order_clause(&self) -> String {
-        let column = match self.sort_by {
-            PostSortBy::CreatedAt => "created_at",
-            PostSortBy::UpdatedAt => "updated_at",
-            PostSortBy::PublishedAt => "published_at",
-            PostSortBy::Title => "title",
-            PostSortBy::ViewCount => "view_count",
+        // 共通パーサへ委譲してカラム許可と降順記法を統一
+        let allowed = [
+            "created_at",
+            "updated_at",
+            "published_at",
+            "title",
+            "view_count",
+        ];
+        let (sort_token, default_desc) = match self.sort_by {
+            PostSortBy::CreatedAt => ("created_at", true),
+            PostSortBy::UpdatedAt => ("updated_at", true),
+            PostSortBy::PublishedAt => ("published_at", true),
+            PostSortBy::Title => ("title", false),
+            PostSortBy::ViewCount => ("view_count", true),
         };
-
-        let direction = match self.sort_order {
-            SortOrder::Asc => "ASC",
-            SortOrder::Desc => "DESC",
+        let token = match self.sort_order {
+            SortOrder::Desc => format!("-{}", sort_token),
+            SortOrder::Asc => sort_token.to_string(),
         };
-
-        format!("{} {}", column, direction)
+        let (col, desc) = crate::utils::sort::parse_sort(Some(token), sort_token, default_desc, &allowed);
+        format!("{} {}", col, if desc { "DESC" } else { "ASC" })
     }
 }
 
