@@ -20,8 +20,7 @@
 
 use chrono::Utc;
 use clap::Parser;
-use diesel::prelude::*;
-use cms_backend::utils::init::{init_env};
+use cms_backend::utils::init::init_env;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Backfill/inspect api_key lookup hash state", long_about=None)]
@@ -68,21 +67,15 @@ async fn main() -> anyhow::Result<()> {
 
     #[cfg(all(feature = "database", feature="auth"))]
     {
-    let config = cms_backend::config::Config::from_env()?;
-    let state = cms_backend::AppState::from_config(config).await?;
+    let state = cms_backend::utils::init::init_app_state().await?;
 
-        use cms_backend::database::schema::api_keys::dsl::*;
-        let mut conn = state.database.get_connection()?;
-
-        // 取得: 空 lookup_hash の行
-        let rows: Vec<cms_backend::models::ApiKey> = api_keys.filter(api_key_lookup_hash.eq("")).load(&mut conn)?;
+        // 取得: 空 lookup_hash の行（AppState ラッパー）
+        let rows: Vec<cms_backend::models::ApiKey> = state.db_list_api_keys_missing_lookup().await?;
         let scanned_count = rows.len();
         let mut expired_marked = 0usize;
         if args.expire && !args.dry_run {
             let now = Utc::now();
-            expired_marked = diesel::update(api_keys.filter(api_key_lookup_hash.eq("")))
-                .set(expires_at.eq(now))
-                .execute(&mut conn)?;
+            expired_marked = state.db_expire_api_keys_missing_lookup(now).await?;
         }
 
         let report = Report {

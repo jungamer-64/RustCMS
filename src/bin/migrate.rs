@@ -4,7 +4,7 @@
 
 use clap::{Parser, Subcommand};
 use cms_backend::{AppState, Result};
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use diesel_migrations::{embed_migrations, EmbeddedMigrations};
 use std::env;
 use tracing::{error, info, warn};
 
@@ -129,25 +129,16 @@ async fn main() -> Result<()> {
 // `print_usage` was removed in favor of Clap-based automatic help generation.
 
 async fn run_migrations(state: &AppState) -> Result<()> {
-    let mut conn = state.get_conn()?;
-    conn.run_pending_migrations(MIGRATIONS)
-        .map_err(|e| cms_backend::AppError::Internal(e.to_string()))?;
-    Ok(())
+    state.db_run_pending_migrations(MIGRATIONS).await
 }
 
 async fn rollback_migrations(state: &AppState, steps: usize) -> Result<()> {
-    let mut conn = state.get_conn()?;
-
     for _ in 0..steps {
-        match conn.revert_last_migration(MIGRATIONS) {
+        match state.db_revert_last_migration(MIGRATIONS).await {
             Ok(_) => info!("✅ Reverted migration"),
-            Err(e) => {
-                error!("❌ Failed to revert migration: {}", e);
-                break;
-            }
+            Err(e) => { error!("❌ Failed to revert migration: {}", e); break; }
         }
     }
-
     Ok(())
 }
 
@@ -187,17 +178,8 @@ async fn reset_database(state: &AppState) -> Result<()> {
 }
 
 async fn seed_database(state: &AppState) -> Result<()> {
-    // Create initial admin user and default settings
-    let mut conn = state.get_conn()?;
-
-    // Check if already seeded
-    use cms_backend::database::schema::users::dsl::*;
-    use diesel::prelude::*;
-
-    let existing_users: i64 = users
-        .count()
-        .get_result(&mut conn)
-    .map_err(cms_backend::AppError::Database)?;
+    // Check if already seeded (use AppState wrapper)
+    let existing_users: i64 = state.db_admin_users_count().await?;
 
     if existing_users > 0 {
         info!("📊 Database already contains data, skipping seeding");
@@ -262,16 +244,13 @@ async fn check_migration_status(state: &AppState) -> Result<()> {
     }
 
     // Check for pending migrations
-    let mut conn = state.get_conn()?;
-    let pending = conn.pending_migrations(MIGRATIONS).map_err(|e| cms_backend::AppError::Internal(e.to_string()))?;
+    let pending = state.db_list_pending_migrations(MIGRATIONS).await?;
 
     if pending.is_empty() {
         info!("  ✅ No pending migrations");
     } else {
-        info!("  ⏳ Pending migrations: {}", pending.len());
-        for migration in pending {
-            info!("  ⏳ {}", migration.name());
-        }
+    info!("  ⏳ Pending migrations: {}", pending.len());
+    for name in pending { info!("  ⏳ {}", name); }
     }
 
     Ok(())

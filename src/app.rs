@@ -929,6 +929,34 @@ impl AppState {
         })
     }
 
+    // --- API Key maintenance helpers (legacy lookup_hash backfill visibility/ops) ---
+    #[cfg(all(feature = "database", feature = "auth"))]
+    pub async fn db_list_api_keys_missing_lookup(&self) -> crate::Result<Vec<crate::models::ApiKey>> {
+        use diesel::prelude::*;
+        use crate::database::schema::api_keys::dsl::*;
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            let rows: Vec<crate::models::ApiKey> = api_keys
+                .filter(api_key_lookup_hash.eq(""))
+                .load(&mut conn)?;
+            Ok(rows)
+        })
+    }
+
+    #[cfg(all(feature = "database", feature = "auth"))]
+    pub async fn db_expire_api_keys_missing_lookup(&self, now: chrono::DateTime<chrono::Utc>) -> crate::Result<usize> {
+        use diesel::prelude::*;
+        use crate::database::schema::api_keys::dsl::*;
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            // expires_at は NULL 許容の想定のため Some(now)
+            let affected = diesel::update(api_keys.filter(api_key_lookup_hash.eq("")))
+                .set(expires_at.eq(Some(now)))
+                .execute(&mut conn)?;
+            Ok(affected)
+        })
+    }
+
     #[cfg(feature = "database")]
     pub async fn db_admin_delete_post(&self, post_id: uuid::Uuid) -> crate::Result<()> {
         use diesel::prelude::*;
@@ -1020,6 +1048,50 @@ impl AppState {
         let _ = self.db_execute_sql(create_sql).await?;
         let _ = self.db_execute_sql(copy_sql).await?;
         Ok(())
+    }
+
+    // --- Diesel migrations helpers to avoid direct conn in bins ---
+    #[cfg(feature = "database")]
+    pub async fn db_run_pending_migrations(
+        &self,
+        migrations: diesel_migrations::EmbeddedMigrations,
+    ) -> crate::Result<()> {
+        use diesel_migrations::MigrationHarness;
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            conn.run_pending_migrations(migrations)
+                .map_err(|e| crate::AppError::Internal(e.to_string()))?;
+            Ok(())
+        })
+    }
+
+    #[cfg(feature = "database")]
+    pub async fn db_revert_last_migration(
+        &self,
+        migrations: diesel_migrations::EmbeddedMigrations,
+    ) -> crate::Result<()> {
+        use diesel_migrations::MigrationHarness;
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            conn.revert_last_migration(migrations)
+                .map_err(|e| crate::AppError::Internal(e.to_string()))?;
+            Ok(())
+        })
+    }
+
+    #[cfg(feature = "database")]
+    pub async fn db_list_pending_migrations(
+        &self,
+        migrations: diesel_migrations::EmbeddedMigrations,
+    ) -> crate::Result<Vec<String>> {
+        use diesel_migrations::MigrationHarness;
+        timed_op!(self, "db", async {
+            let mut conn = self.database.get_connection()?;
+            let list = conn
+                .pending_migrations(migrations)
+                .map_err(|e| crate::AppError::Internal(e.to_string()))?;
+            Ok(list.into_iter().map(|m| m.name().to_string()).collect())
+        })
     }
 }
 
