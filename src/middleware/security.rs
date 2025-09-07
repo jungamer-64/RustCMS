@@ -54,6 +54,8 @@ where
     }
 
     fn call(&mut self, request: Request<B>) -> Self::Future {
+        // Capture path before moving request into inner service so we can tailor CSP for docs
+        let path = request.uri().path().to_string();
         let mut service = self.service.clone();
 
         Box::pin(async move {
@@ -68,11 +70,7 @@ where
                 "nosniff",
             );
             add_security_header(headers, HeaderName::from_static("x-frame-options"), "DENY");
-            add_security_header(
-                headers,
-                HeaderName::from_static("x-xss-protection"),
-                "1; mode=block",
-            );
+            // 'X-XSS-Protection' is obsolete on modern browsers; prefer strong CSP instead
             add_security_header(
                 headers,
                 HeaderName::from_static("referrer-policy"),
@@ -83,6 +81,17 @@ where
                 HeaderName::from_static("permissions-policy"),
                 "geolocation=(), microphone=(), camera=()",
             );
+            // Additional hardening
+            add_security_header(
+                headers,
+                HeaderName::from_static("cross-origin-opener-policy"),
+                "same-origin",
+            );
+            add_security_header(
+                headers,
+                HeaderName::from_static("x-permitted-cross-domain-policies"),
+                "none",
+            );
 
             // Strict Transport Security (HSTS) for HTTPS
             add_security_header(
@@ -92,18 +101,23 @@ where
             );
 
             // Content Security Policy (CSP)
+            // Use a stricter CSP by default. Allow inline only for docs UI endpoints.
+            let is_docs = path.starts_with("/api/docs");
+            let csp = if is_docs {
+                // Swagger UI requires some inline styles/scripts; relax only for docs routes
+                "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'"
+            } else {
+                // No 'unsafe-inline' for app endpoints; add extra directives
+                "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'"
+            };
             add_security_header(
                 headers,
                 HeaderName::from_static("content-security-policy"),
-                "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'"
+                csp,
             );
 
             // Server identification
-            add_security_header(
-                headers,
-                HeaderName::from_static("server"),
-                "Enterprise-CMS/2.0",
-            );
+            // Avoid leaking server details; omit explicit Server header (some platforms add it anyway)
 
             Ok(response)
         })
