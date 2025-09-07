@@ -9,7 +9,7 @@ use axum::{
 use serde::Deserialize;
 use utoipa::ToSchema;
 use serde_json::json;
-use std::time::Duration;
+// std::time::Duration not needed after cache helper adoption
 
 // Using ApiOk newtype for unified success responses
 use crate::utils::response_ext::ApiOk;
@@ -17,7 +17,7 @@ use crate::{AppState, Result};
 
 #[cfg(feature = "search")]
 use crate::search::{
-    SearchRequest, SearchResults, SearchFilter, FilterOperator,
+    SearchRequest, SearchFilter, FilterOperator,
 };
 
 #[cfg(not(feature = "search"))]
@@ -140,10 +140,10 @@ pub async fn search(
         .build();
 
     let results = crate::utils::cache_helpers::cache_or_compute(
-        &state,
+        state.clone(),
         &cache_key,
         crate::utils::cache_ttl::CACHE_TTL_SHORT,
-        || async move {
+        move || async move {
             #[cfg(feature = "search")]
             { return state.search_execute(search_request).await; }
             #[cfg(not(feature = "search"))]
@@ -188,10 +188,10 @@ pub async fn suggest(
         .kv("limit", limit)
         .build();
     let suggestions: Vec<String> = crate::utils::cache_helpers::cache_or_compute(
-        &state,
+        state.clone(),
         &cache_key,
         crate::utils::cache_ttl::CACHE_TTL_LONG,
-        || async move {
+        move || async move {
             #[cfg(feature = "search")]
             { state.search_suggest(&query.prefix, limit).await }
             #[cfg(not(feature = "search"))]
@@ -227,10 +227,10 @@ pub async fn search_stats(State(state): State<AppState>) -> Result<impl IntoResp
     // Try cache first
     let cache_key = crate::utils::cache_key::CacheKeyBuilder::new("search:stats").build();
     let stats = crate::utils::cache_helpers::cache_or_compute(
-        &state,
+        state.clone(),
         &cache_key,
         crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
-        || async move {
+        move || async move {
             #[cfg(feature = "search")]
             { state.search_get_stats().await }
             #[cfg(not(feature = "search"))]
