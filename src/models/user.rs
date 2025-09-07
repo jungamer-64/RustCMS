@@ -223,34 +223,34 @@ impl User {
         update_sets.push("updated_at = NOW()".to_string());
 
         // Use conditional updates based on what fields are provided
-        if updates.username.is_some() {
+        if let Some(ref new_username) = updates.username {
             diesel::update(users.find(user_id))
-                .set(username.eq(updates.username.as_ref().unwrap()))
+                .set(username.eq(new_username))
                 .execute(conn)?;
         }
-        if updates.email.is_some() {
+        if let Some(ref new_email) = updates.email {
             diesel::update(users.find(user_id))
-                .set(email.eq(updates.email.as_ref().unwrap()))
+                .set(email.eq(new_email))
                 .execute(conn)?;
         }
-        if updates.first_name.is_some() {
+        if let Some(ref new_first_name) = updates.first_name {
             diesel::update(users.find(user_id))
-                .set(first_name.eq(updates.first_name.as_ref().unwrap()))
+                .set(first_name.eq(new_first_name))
                 .execute(conn)?;
         }
-        if updates.last_name.is_some() {
+        if let Some(ref new_last_name) = updates.last_name {
             diesel::update(users.find(user_id))
-                .set(last_name.eq(updates.last_name.as_ref().unwrap()))
+                .set(last_name.eq(new_last_name))
                 .execute(conn)?;
         }
-        if updates.role.is_some() {
+        if let Some(ref new_role) = updates.role {
             diesel::update(users.find(user_id))
-                .set(role.eq(updates.role.as_ref().unwrap().as_str()))
+                .set(role.eq(new_role.as_str()))
                 .execute(conn)?;
         }
-        if updates.is_active.is_some() {
+        if let Some(new_is_active) = updates.is_active {
             diesel::update(users.find(user_id))
-                .set(is_active.eq(updates.is_active.unwrap()))
+                .set(is_active.eq(new_is_active))
                 .execute(conn)?;
         }
 
