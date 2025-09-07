@@ -112,10 +112,7 @@ pub async fn search(
     Query(query): Query<SearchQuery>,
 ) -> Result<impl IntoResponse> {
     // Normalize pagination controls
-    let mut limit = query.limit.unwrap_or(20);
-    if limit == 0 { limit = 20; }
-    if limit > 100 { limit = 100; }
-    let offset = query.offset.unwrap_or(0);
+    let (limit, offset) = crate::models::pagination::normalize_limit_offset_usize(query.limit, query.offset);
 
     // Build search request
     let search_request = SearchRequest {
@@ -142,32 +139,17 @@ pub async fn search(
         .kv("type", query.doc_type.as_deref().unwrap_or("all"))
         .build();
 
-    #[cfg(feature = "cache")]
-    {
-        if let Ok(Some(cached)) = state
-            .cache
-            .get::<SearchResults<serde_json::Value>>(&cache_key)
-            .await
-        {
-    return Ok(ApiOk(cached));
-        }
-    }
-
-    // Perform search (record timing)
-    #[cfg(feature = "search")]
-    let results = state.search_execute(search_request).await?;
-    #[cfg(not(feature = "search"))]
-    let results: SearchResults<serde_json::Value> = SearchResults { results: vec![], total: 0 };
-
-    // Cache results for 2 minutes
-    #[cfg(feature = "cache")]
-    if let Err(e) = state
-        .cache
-        .set(cache_key, &results, Some(Duration::from_secs(120)))
-        .await
-    {
-        eprintln!("Failed to cache search results: {}", e);
-    }
+    let results = crate::utils::cache_helpers::cache_or_compute(
+        &state,
+        &cache_key,
+        crate::utils::cache_ttl::CACHE_TTL_SHORT,
+        || async move {
+            #[cfg(feature = "search")]
+            { return state.search_execute(search_request).await; }
+            #[cfg(not(feature = "search"))]
+            { Ok(SearchResults { results: vec![], total: 0 }) }
+        },
+    ).await?;
 
     Ok(ApiOk(results))
 }
@@ -198,37 +180,24 @@ pub async fn suggest(
     State(state): State<AppState>,
     Query(query): Query<SuggestQuery>,
 ) -> Result<impl IntoResponse> {
-    let mut limit = query.limit.unwrap_or(20);
-    if limit == 0 { limit = 20; }
-    if limit > 100 { limit = 100; }
+    let (limit, _offset) = crate::models::pagination::normalize_limit_offset_usize(query.limit, Some(0));
 
     // Try cache first
     let cache_key = crate::utils::cache_key::CacheKeyBuilder::new("suggest")
         .kv("prefix", &query.prefix)
         .kv("limit", limit)
         .build();
-    #[cfg(feature = "cache")]
-    {
-        if let Ok(Some(cached)) = state.cache.get::<Vec<String>>(&cache_key).await {
-    return Ok(ApiOk(json!({ "suggestions": cached })));
-        }
-    }
-
-    // Get suggestions (record timing)
-    #[cfg(feature = "search")]
-    let suggestions = state.search_suggest(&query.prefix, limit).await?;
-    #[cfg(not(feature = "search"))]
-    let suggestions: Vec<String> = Vec::new();
-
-    // Cache for 10 minutes
-    #[cfg(feature = "cache")]
-    if let Err(e) = state
-        .cache
-        .set(cache_key, &suggestions, Some(Duration::from_secs(600)))
-        .await
-    {
-        eprintln!("Failed to cache suggestions: {}", e);
-    }
+    let suggestions: Vec<String> = crate::utils::cache_helpers::cache_or_compute(
+        &state,
+        &cache_key,
+        crate::utils::cache_ttl::CACHE_TTL_LONG,
+        || async move {
+            #[cfg(feature = "search")]
+            { state.search_suggest(&query.prefix, limit).await }
+            #[cfg(not(feature = "search"))]
+            { Ok(Vec::new()) }
+        },
+    ).await?;
 
     Ok(ApiOk(json!({ "suggestions": suggestions })))
 }
@@ -257,36 +226,17 @@ pub async fn suggest(
 pub async fn search_stats(State(state): State<AppState>) -> Result<impl IntoResponse> {
     // Try cache first
     let cache_key = crate::utils::cache_key::CacheKeyBuilder::new("search:stats").build();
-    #[cfg(feature = "cache")]
-    {
-        if let Ok(Some(cached)) = state
-            .cache
-            .get::<crate::search::SearchStats>(&cache_key)
-            .await
-        {
-    return Ok(ApiOk(cached));
-        }
-    }
-
-    // Get fresh stats (record timing)
-    #[cfg(feature = "search")]
-    let stats = state.search_get_stats().await?;
-    #[cfg(not(feature = "search"))]
-    let stats = SearchStats::default();
-
-    // Cache for 5 minutes
-    #[cfg(feature = "cache")]
-    if let Err(e) = state
-        .cache
-        .set(
-            cache_key,
-            &stats,
-            Some(Duration::from_secs(300)),
-        )
-        .await
-    {
-        eprintln!("Failed to cache search stats: {}", e);
-    }
+    let stats = crate::utils::cache_helpers::cache_or_compute(
+        &state,
+        &cache_key,
+        crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
+        || async move {
+            #[cfg(feature = "search")]
+            { state.search_get_stats().await }
+            #[cfg(not(feature = "search"))]
+            { Ok(SearchStats::default()) }
+        },
+    ).await?;
 
     Ok(ApiOk(stats))
 }

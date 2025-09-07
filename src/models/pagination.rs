@@ -80,6 +80,16 @@ pub fn normalize_page_limit(page: Option<u32>, limit: Option<u32>) -> (u32, u32)
     (page, limit)
 }
 
+/// usize ベースの正規化（search など usize を使う箇所向け）
+pub const DEFAULT_LIMIT_USIZE: usize = DEFAULT_LIMIT_U32 as usize;
+pub fn normalize_limit_offset_usize(limit: Option<usize>, offset: Option<usize>) -> (usize, usize) {
+    let mut l = limit.unwrap_or(DEFAULT_LIMIT_USIZE);
+    if l == 0 { l = DEFAULT_LIMIT_USIZE; }
+    if l > 100 { l = 100; }
+    let off = offset.unwrap_or(0);
+    (l, off)
+}
+
 // ---------------- Generic Paginated<T> helper (new) ----------------
 #[derive(Debug, Serialize, Deserialize, ToSchema, Clone)]
 pub struct Paginated<T> {
