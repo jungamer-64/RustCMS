@@ -97,7 +97,9 @@ pub async fn openapi_json() -> impl IntoResponse {
         components.insert("x-apiKey-permissions".to_string(), json!(perms));
     }
     // ルートのグローバル security は使わず削除 (個別操作に OR 条件を付与)
-    v.as_object_mut().unwrap().remove("security");
+    if let Some(obj) = v.as_object_mut() {
+        obj.remove("security");
+    }
 
     // 公開（認証不要）エンドポイント一覧 (path, method)
     use std::collections::HashSet;
