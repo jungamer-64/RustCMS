@@ -1,5 +1,10 @@
 # 🚀 エンタープライズ向け CMS バックエンド
 
+![CI](https://github.com/jungamer-64/RustCMS/actions/workflows/ci.yml/badge.svg)
+![Docker Build](https://github.com/jungamer-64/RustCMS/actions/workflows/ci-docker-build.yml/badge.svg)
+![Docker Release](https://github.com/jungamer-64/RustCMS/actions/workflows/docker-release.yml/badge.svg)
+![Security Audit](https://github.com/jungamer-64/RustCMS/actions/workflows/security.yml/badge.svg)
+
 高性能で本番運用に耐えるコンテンツ管理システム（CMS）API。Rust と Axum を用いて構築され、大規模トラフィックを想定したエンタープライズ向け機能を備えています。
 
 ## 🚀 主な特徴
@@ -14,11 +19,13 @@
 
 ### セキュリティ
 
-- **JWT 認証**: トークンベースの安全な認証方式
+- **Biscuit トークン (Capability ベース)**: Ed25519 署名付き権限デリゲーション。柔軟なポリシー表現とファクト駆動の権限管理を提供。
 - **ロールベースアクセス制御**: 詳細な権限管理
 - **入力検証**: リクエストの包括的なバリデーション
 - **CORS 設定**: クロスオリジン制御の設定が可能
 - **SQL インジェクション防止**: パラメタライズドクエリと型安全性
+- **リフレッシュトークンローテーション**: セッションごとに refresh_version をインクリメントし使い捨て化、再利用攻撃を軽減。
+- **API キー認証 (X-API-Key)**: サーバ生成の長期利用向けキー。Argon2 での秘密ハッシュ + SHA-256 (base64url) 決定的 lookup hash により O(1) 検索が可能。キー管理エンドポイントはユーザ認証 (Biscuit) 後に作成/一覧/失効操作を提供。
 
 ### モニタリングと可観測性
 
@@ -33,6 +40,78 @@
 - **型安全性**: Rust の型システムによる実行時エラーの低減
 - **モダンな非同期処理**: Tokio ベースの async ランタイム
 - **Docker サポート**: 本番対応のコンテナ化
+
+### API レスポンス統一 & コントラクトテスト
+
+全エンドポイントは共通構造 `ApiResponse<T>` を返します。
+
+```jsonc
+// 成功
+{
+  "success": true,
+  "data": { /* 任意のペイロード */ },
+  "message": null,
+  "error": null,
+  "validation_errors": null
+}
+
+// バリデーションエラー
+{
+  "success": false,
+  "data": null,
+  "message": null,
+  "error": "validation failed",
+  "validation_errors": [
+    {"field": "title", "message": "must not be empty"}
+  ]
+}
+```
+
+簡易な成功パスはハンドラで `ApiOk(payload)` を返すだけです。従来の `ok/err/ok_message` ヘルパは非推奨 (将来削除)。
+
+#### スナップショット (contract) テスト
+`tests/contract_snapshots.rs` で代表的な 4 パターン (成功 / 成功+message / エラー / バリデーションエラー) を `insta` で固定化しています。破壊的変更があると CI で差分が検出されます。
+
+追加で `/health` エンドポイント形状を監視する **統合スナップショット** (`tests/integration_health_snapshot.rs`) を導入しています。これは本物のサービス初期化に依存せず、決定的なダミー `HealthStatus` を生成しタイムスタンプを `<redacted>` にマスクすることでインフラ非依存 & 変動値排除を実現しています。
+
+拡張方針:
+
+- 他エンドポイントを追加する際も「実サービス呼び出しを避けた合成データ or 最小スタブ」を返すテストハーネスを用意し、`insta::assert_json_snapshot!` で `ApiResponse` 形状 (特に `data` 部) を固定化。
+- 不安定なフィールド (時刻 / ランダム ID / 並列で順序変動) は事前に書き換え or 削除してください。
+
+実行例:
+
+```powershell
+# 既存スナップショットを含む全チェック
+cargo insta test
+
+# health のみ (普通の cargo test 経由)
+cargo test snapshot_health_endpoint -- --exact
+```
+
+新規追加 → 差分確認 → 受け入れのフローは従来と同じです。
+
+更新フロー:
+```powershell
+# 変更検証
+cargo insta test
+
+# 差分を確認 (対話)
+cargo insta review
+
+# 全て受け入れる (非推奨: 内容確認後に実行)
+cargo insta accept
+```
+
+#### 重い鍵生成テストの高速化
+`FAST_KEY_TESTS=1` を設定すると高速版圧縮テストのみ実行し、フルバックアップ/圧縮テストをスキップする CI マトリクス構成が可能です。
+例: GitHub Actions でのステップ:
+
+```yaml
+- name: Fast tests
+  run: FAST_KEY_TESTS=1 cargo test --all --no-fail-fast
+```
+長時間走る完全テストは nightly ジョブに分離する運用を推奨します。
 
 ## 📊 アーキテクチャ
 
@@ -116,6 +195,234 @@ cargo run --no-default-features --features "dev-tools,auth,database" --bin cms-s
 - `cms-admin` : 管理・運用用 CLI（ユーザ作成など）
 - `cms-migrate`: DB マイグレーション実行
 
+Developer 補助ツール:
+
+- `gen_biscuit_keys` : Biscuit トークン用の鍵ペアを生成するユーティリティ。生成した鍵は標準出力へ base64 で出力されます。ファイルや `.env` へ書き込むオプションもあり、安全に保存することを推奨します。
+  - バージョン管理 (`--versioned`) で `biscuit_private_v<N>.b64` / `biscuit_public_v<N>.b64` を連番保存し、`--latest-alias` で常に最新を `biscuit_private.b64` / `biscuit_public.b64` として同期。
+  - `manifest.json` に最新バージョン番号と fingerprint (SHA-256) を記録。
+  - `--prune <N>` で最新 N バージョンのみ保持、古いものを自動削除。
+  - `--list` で存在するバージョン列挙。
+  - バックアップ系: `--backup` (上書き前に `.bak.<unix_ts>` へ退避), `--max-backups N`, `--backup-compress` (gzip 圧縮 & 元削除), `--backup-dir DIR`。
+  - 出力モード: `--format stdout|files|env|both` (未指定時は従来: 指定ターゲットのみ)。
+
+使い方（簡易）:
+
+```powershell
+# stdout に出力のみ
+cargo run --bin gen_biscuit_keys
+
+# 鍵ファイルを書き出す（ディレクトリ: keys）
+cargo run --bin gen_biscuit_keys -- --format files --out-dir keys
+
+# .env に追記（デフォルト: .env）
+cargo run --bin gen_biscuit_keys -- --format env --env-file .env
+
+# 両方に出力して既存を上書き（強制）
+cargo run --bin gen_biscuit_keys -- --format both --out-dir keys --env-file .env --force
+
+# 既存をバックアップしてから上書き（バックアップは .bak.<unix_ts>）
+cargo run --bin gen_biscuit_keys -- --format files --out-dir keys --backup --force
+
+# バックアップを作成して最新2個だけ保持する
+cargo run --bin gen_biscuit_keys -- --format files --out-dir keys --backup --max-backups 2 --force
+
+# バックアップを作成して gzip 圧縮（元ファイルは削除され .gz が残る）
+cargo run --bin gen_biscuit_keys -- --format files --out-dir keys --backup --backup-compress --force
+
+# バージョン付きで 3 個だけ保持し manifest 更新、最新 alias も更新
+cargo run --bin gen_biscuit_keys -- --format files --out-dir keys --versioned --latest-alias --prune 3 --force
+
+# 既存バージョン列挙
+cargo run --bin gen_biscuit_keys -- --out-dir keys --list
+```
+
+セキュリティ注意点:
+
+- 生成された秘密鍵は厳重に管理してください。パスワード管理ツールや本番では Doppler / Vault 等のシークレットストアを利用してください。
+- リポジトリやコミットに鍵を含めないでください。`.env` をコミットしない（`.gitignore` に含める）か、環境シークレット管理を用いてください。
+- バージョン運用時は古い秘密鍵が不要になったタイミングで安全に破棄 (安全な削除/秘匿ストレージ除外) してください。
+
+### API キー認証の概要
+
+| 項目 | 内容 |
+|------|------|
+| ヘッダ | `X-API-Key: ak_<ランダム>` |
+| 保存方式 | Argon2 ハッシュ (秘密) + ルックアップ用 SHA-256(base64url) |
+| 失効 | Revoke (DB で削除 / expired_at 設定) |
+| パーミッション | 文字列配列 (OpenAPI 拡張で列挙) |
+| 所有者検証 | Revoke / List は作成ユーザのみ |
+| セキュリティ | 生キーは一度しか返さない (クライアント安全保管必須) |
+
+API キーは長期自動処理 (CI / バッチ / 外部統合) 用。ユーザ認証後に管理エンドポイントで発行し、生キーはそのレスポンス以外では再取得不可。DB では **復号不能** (Argon2) かつ検索高速化のための決定的 `lookup_hash` (衝突極小) を持ちます。
+
+#### レガシー行バックフィル
+初期段階で `lookup_hash` 空の行が存在する場合、ミドルウェアは検証成功時にその行へハッシュを後書きし徐々に移行します。運用 CLI (backfill) により一括同定・失効も可能です。
+
+`backfill_api_key_lookup` バイナリ:
+
+```powershell
+cargo run --features "database,auth" --bin backfill_api_key_lookup
+```
+
+オプション:
+
+| フラグ | 説明 |
+|--------|------|
+| `--expire` | 対象レガシーキーの `expires_at` を即時に設定して失効させる |
+| `--dry-run` | 書き込みを行わずスキャン結果のみ表示 (レポートは常に JSON) |
+| `--pretty` | 整形 JSON で出力 |
+
+出力例:
+
+```json
+{
+  "scanned": 2,
+  "legacy_missing_lookup": 2,
+  "expired_marked": 0,
+  "rows": [
+    {"id":"...","name":"ci-bot","user_id":"...","created_at":"2025-09-04T08:10:22Z"},
+    {"id":"...","name":"legacy-agent","user_id":"...","created_at":"2025-09-03T11:44:55Z"}
+  ],
+  "expire_mode": false,
+  "dry_run": true
+}
+```
+
+推奨運用フロー:
+
+1. `--dry-run --pretty` で影響範囲を確認
+2. 問題なければ `--expire` を付与して失効 (再発行を促す)
+3. メトリクス / ログでアクセス失敗が急増しないか監視
+
+注意: raw API キーは保存していないためこのツールで再計算はできません (完全な後付け再構築は不可能)。
+
+#### レート制限 (失敗回数ベース: In-Memory / Redis)
+
+60 秒ウィンドウで同一 lookup hash に紐づく認証失敗 (not_found / hash_mismatch / malformed / expired など) が **10 回** を超えると 429 (Too Many Requests) を返し短期ブルートフォースを緩和します。
+
+バックエンド:
+
+| backend | 指定 | 特徴 |
+|---------|------|------|
+| In-Memory (デフォルト) | `API_KEY_FAIL_BACKEND=memory` または未設定 | ライト・単一プロセス向け。高速、プロセス間共有なし。|
+| Redis | `API_KEY_FAIL_BACKEND=redis` (要 feature `cache`) | 分散 / 水平スケール対応。各失敗は Redis `INCR` + `EXPIRE` (固定ウィンドウ擬似) でカウント。|
+
+Redis バックエンド時の注意:
+
+1. `REDIS_URL` が必須。
+2. TTL はウィンドウ秒で `EXPIRE`。閾値超過判定は `INCR` 後の値が `threshold` を超えたかで実施。
+3. `tracked_len` メトリクスは 15 秒キャッシュされた SCAN 結果。大量キー環境ではオーバーヘッド低減のため頻度を抑制。
+4. キープレフィックスは `API_KEY_FAIL_REDIS_PREFIX` (デフォルト `rk:`) で変更可能。衝突回避のためサービス毎に prefix 設定推奨。
+
+
+成功時にはそのキーの失敗カウンタを即座に削除し (in-memory: map remove / redis: DEL) 正常利用を阻害しません。
+
+環境変数 (未設定時はデフォルト):
+
+| 変数 | デフォルト | 説明 |
+|------|------------|------|
+| `API_KEY_FAIL_WINDOW_SECS` | `60` | 固定ウィンドウ秒数 |
+| `API_KEY_FAIL_THRESHOLD` | `10` | ウィンドウ内の許容失敗回数 (超過で 429) |
+| `API_KEY_FAIL_MAX_TRACKED` | `5000` | (memory) 失敗カウンタを保持する lookup_hash の最大件数 (超過時は古いエントリを削除) |
+| `API_KEY_FAIL_DISABLE` | `false` | `true`/`1` でレート制限ロジックを無効化 (計測は一部継続) |
+| `API_KEY_FAIL_BACKEND` | `memory` | `memory` / `redis` を選択 (redis 利用には feature `cache` + `REDIS_URL`) |
+| `API_KEY_FAIL_REDIS_PREFIX` | `rk:` | Redis backend で使用するキー prefix (衝突回避用) |
+
+容量制御挙動: 追跡件数が最大の 90% を超えた時点でウィンドウ外の古いエントリを opportunistic に掃除し、なお超過する場合は最も古いエントリを 1 件強制削除します。
+
+## ✅ 統一レスポンス仕様 (Unified API Response Layer)
+
+すべての成功レスポンスは `ApiResponse<T>` へ正規化され、ハンドラでは `ApiOk(value)` を返すだけで以下 JSON 形状になります:
+
+```json
+{
+  "success": true,
+  "data": { /* value */ },
+  "message": null,
+  "error": null,
+  "validation_errors": null
+}
+```
+
+バリデーション / ドメインエラー時は:
+
+```json
+{
+  "success": false,
+  "data": null,
+  "message": null,
+  "error": "Invalid input",
+  "validation_errors": [
+    {"field": "title", "message": "must not be empty"}
+  ]
+}
+```
+
+### 利用パターン
+
+| 目的 | ハンドラ戻り値例 | 備考 |
+|------|-----------------|------|
+| 通常成功 | `ApiOk(entity)` | `entity` は `Serialize` |
+| 作成 (201) | `(StatusCode::CREATED, ApiOk(created))` | タプルで任意ステータス |
+| ページング | `ApiOk(Paginated<T>)` | 内部 `data` にそのまま格納 |
+| メッセージのみ | `ApiOk(json!({"message":"Done"}))` | シンプルテキストラップ不要 |
+
+### 廃止予定 API
+
+| 項目 | 状態 | 代替 |
+|------|------|------|
+| `IntoApiOk` トレイト | deprecated | `ApiOk(...)` |
+| 直接 `ok(value)` ヘルパ | 移行段階 | `ApiOk(value)` |
+
+### 実装メモ (開発者向け)
+
+1. `ApiOk<T>` は `IntoResponse` 実装を持ち `ApiResponse::success(T)` を包む。
+2. エラー (`AppError`) は `IntoResponse` 実装内で同じ `ApiResponse` 形状へ統一。
+3. OpenAPI では `ApiResponse<serde_json::Value>` + `ApiResponseExample` をスキーマ提供。
+4. バリデーション詳細は `validation_errors` 配列 (省略時非表示)。
+
+将来: `IntoApiOk` は段階的に削除予定。コードベース内に存在する場合は PR で置換してください。
+
+### メトリクス (主要抜粋)
+
+| 名前 | ラベル | 説明 |
+|------|--------|------|
+| `http_requests_total` | method, path | 全リクエスト数 |
+| `http_requests_success_total` | status_class | 2xx 成功数 |
+| `http_requests_client_error_total` | – | 4xx 数 |
+| `http_requests_server_error_total` | – | 5xx 数 |
+| `database_queries_total` | model, op | DB クエリ回数 |
+| `api_key_auth_attempts_total` | – | API キー認証試行 |
+| `api_key_auth_success_total` | – | API キー成功 |
+| `api_key_auth_failure_total` | reason | API キー失敗 (missing_header / malformed / not_found / hash_mismatch / expired / rate_limited / invalid_header_encoding) |
+| `rate_limit_violations_total` | scope | (他レートリミット用) |
+
+Prometheus 例 (簡易):
+
+```text
+api_key_auth_attempts_total 42
+api_key_auth_failure_total{reason="not_found"} 7
+api_key_auth_success_total 35
+```
+
+ダッシュボードでは (success / attempts) 比率や reason 別失敗をウォッチし、異常増加 (例: not_found 連続増) 時にアラート設定することを推奨します。
+
+サンプル Alert ルール: `docs/alerts/prometheus_rules_example.yml` に API キー関連のスパイク検出・成功率低下・期限切れ利用・rate_limited 連発検知の例を用意しています。環境のトラフィック特性に合わせて閾値を調整してください。
+
+関連メトリクス (monitoring feature 有効時):
+
+| メトリクス | 説明 |
+|------------|------|
+| `api_key_rate_limit_window_seconds` | 現在のウィンドウ秒数 |
+| `api_key_rate_limit_threshold` | 閾値 (失敗許容回数) |
+| `api_key_rate_limit_max_tracked` | memory backend の最大トラック件数 |
+| `api_key_rate_limit_tracked_keys` | 現在追跡中のキー件数 (redis backend は SCAN キャッシュ) |
+| `api_key_rate_limit_enabled` | 有効=1 / 無効=0 |
+| `api_key_rate_limit_max_tracked` | 最大追跡キー数 |
+| `api_key_rate_limit_tracked_keys` | 現在追跡中キー数 (動的) |
+| `api_key_rate_limit_enabled` | 1=有効 / 0=無効 (`API_KEY_FAIL_DISABLE` 反映) |
+
+
 デフォルト起動バイナリは `cms-server`（`Cargo.toml` の `default-run` 設定に依存）。
 
 ### Docker デプロイ
@@ -149,11 +456,21 @@ docker-compose up -d --scale cms-backend=3
 
 ### 認証
 
-保護されたエンドポイントは Authorization ヘッダに JWT トークンを必要とします:
+保護されたエンドポイントは Authorization ヘッダに Biscuit アクセストークン (Bearer) を必要とします:
 
 ```http
-Authorization: Bearer <your-jwt-token>
+Authorization: Bearer <your-biscuit-token>
 ```
+
+または Biscuit を利用する場合:
+
+```http
+Authorization: Biscuit <base64-biscuit-token>
+```
+
+OpenAPI では多くの保護エンドポイントで `security` 配列に `[ {"BearerAuth": []}, {"BiscuitAuth": []} ]` が付与されており、クライアントはどちらか一方を提示すれば認証が成立します (OR 条件)。公開エンドポイント (login / register / refresh / search など) は `security` 無しです。
+
+より高度な Biscuit のスコープ/ケイパビリティ定義例は `docs/BISCUIT.md` を参照してください。
 
 ### リクエスト例（主要ルート）
 
@@ -235,10 +552,11 @@ curl "http://localhost:3000/api/v1/search?q=rust"
 
 ### ✅ セキュリティ改善
 
-- **JWT 認証**: 安全なトークンベース認証
+- **Biscuit 認証**: Capability ベースのトークン認証 (単一方式に統一)
 - **入力検証**: カスタムエラーハンドリングを含む包括的な検証
 - **SQL インジェクション防止**: パラメタライズドクエリと型安全性
 - **CORS 保護**: 設定可能なクロスオリジン制御
+- **Refresh Token Rotation**: 盗難リフレッシュトークン無効化のためのバージョン付き JTI 戦略
 
 ### ✅ スケーラビリティ機能
 

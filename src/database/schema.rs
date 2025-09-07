@@ -5,6 +5,7 @@ diesel::table! {
         id -> Uuid,
         name -> Varchar,
         key_hash -> Varchar,
+    api_key_lookup_hash -> Varchar,
         user_id -> Uuid,
         permissions -> Jsonb,
         created_at -> Timestamptz,

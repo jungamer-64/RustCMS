@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
+use validator::{ValidationError, ValidationErrors};
+use ring::rand::SecureRandom;
+use base64::Engine;
 
 use crate::database::schema::api_keys;
 use crate::AppError;
@@ -14,6 +17,8 @@ pub struct ApiKey {
     pub id: Uuid,
     pub name: String,
     pub key_hash: String,
+    /// APIキーの高速ルックアップ用 (deterministic, non-salted). SHA-256(base64url) など。
+    pub api_key_lookup_hash: String,
     pub user_id: Uuid,
     pub permissions: serde_json::Value,
     pub created_at: DateTime<Utc>,
@@ -35,22 +40,61 @@ pub struct ApiKeyResponse {
     pub id: Uuid,
     pub name: String,
     pub permissions: Vec<String>,
+    pub user_id: Uuid,
     pub created_at: DateTime<Utc>,
     pub expires_at: Option<DateTime<Utc>>,
     pub last_used_at: Option<DateTime<Utc>>,
 }
 
 impl ApiKey {
+    /// 利用可能なパーミッション列挙（将来必要になれば拡張）
+    pub const ALLOWED_PERMISSIONS: &'static [&'static str] = &[
+        "posts:read",
+        "posts:write",
+        "users:read",
+        "users:write",
+        "search:reindex",
+    ];
+
+    fn validate_permissions(perms: &[String]) -> Result<(), crate::AppError> {
+        if perms.is_empty() {
+            return Ok(()); // 空は許可（最小権限）
+        }
+        let mut invalid: Vec<String> = perms
+            .iter()
+            .filter(|p| !Self::ALLOWED_PERMISSIONS.contains(&p.as_str()))
+            .cloned()
+            .collect();
+        if invalid.is_empty() {
+            return Ok(());
+        }
+        let mut errors = ValidationErrors::new();
+        for inv in invalid.drain(..) {
+            let mut ve = ValidationError::new("invalid_permission");
+            ve.add_param("value".into(), &inv);
+            errors.add("permissions", ve);
+        }
+        Err(crate::AppError::Validation(errors))
+    }
+
+    /// バリデーション付きコンストラクタ
+    pub fn new_validated(name: String, user_id: Uuid, permissions: Vec<String>) -> Result<(Self, String), crate::AppError> {
+        Self::validate_permissions(&permissions)?;
+        Ok(Self::new(name, user_id, permissions))
+    }
+
     pub fn new(name: String, user_id: Uuid, permissions: Vec<String>) -> (Self, String) {
         let now = Utc::now();
-        let raw_key = Self::generate_key();
-        let key_hash = Self::hash_key(&raw_key);
+    let raw_key = Self::generate_key();
+    let key_hash = Self::hash_key(&raw_key);
+    let api_key_lookup_hash = Self::lookup_hash(&raw_key);
 
         let api_key = Self {
             id: Uuid::new_v4(),
             name,
             key_hash,
             user_id,
+            api_key_lookup_hash,
             permissions: serde_json::to_value(permissions).unwrap_or_default(),
             created_at: now,
             updated_at: now,
@@ -94,6 +138,17 @@ impl ApiKey {
             .map_err(AppError::from)
     }
 
+    pub fn find_by_lookup_hash(
+        conn: &mut crate::database::PooledConnection,
+        lookup: &str,
+    ) -> Result<ApiKey, AppError> {
+        use crate::database::schema::api_keys::dsl::*;
+        api_keys
+            .filter(api_key_lookup_hash.eq(lookup))
+            .first(conn)
+            .map_err(AppError::from)
+    }
+
     pub fn delete(
         conn: &mut crate::database::PooledConnection,
         api_key_id: Uuid,
@@ -115,32 +170,66 @@ impl ApiKey {
         Ok(())
     }
 
-    fn generate_key() -> String {
-        use rand::Rng;
-        const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
-                                abcdefghijklmnopqrstuvwxyz\
-                                0123456789";
-        let mut rng = rand::thread_rng();
-
-        (0..64)
-            .map(|_| {
-                let idx = rng.gen_range(0..CHARSET.len());
-                CHARSET[idx] as char
-            })
-            .collect()
+    pub fn list_for_user(
+        conn: &mut crate::database::PooledConnection,
+        target_user_id: Uuid,
+        include_expired: bool,
+    ) -> Result<Vec<ApiKey>, AppError> {
+        use crate::database::schema::api_keys::dsl::*;
+        let mut query = api_keys.filter(user_id.eq(target_user_id)).into_boxed();
+        if !include_expired {
+            let now = Utc::now();
+            // keep rows where expires_at is null OR expires_at > now
+            query = query.filter(expires_at.is_null().or(expires_at.gt(now)));
+        }
+        query
+            .order(created_at.desc())
+            .load::<ApiKey>(conn)
+            .map_err(AppError::from)
     }
 
-    fn hash_key(key: &str) -> String {
+    fn generate_key() -> String {
+        // Prefixで種別を明示し、将来のローテ/種別拡張時に識別しやすくする
+        const PREFIX: &str = "ak_"; // api key
+        // 42 bytes -> base64url(no pad) 56 chars
+        let mut bytes = [0u8; 42];
+        if ring::rand::SystemRandom::new()
+            .fill(&mut bytes)
+            .is_err()
+        {
+            // フォールバック: UUID v4 16bytes を繰り返し
+            let mut idx = 0;
+            while idx < bytes.len() {
+                let u = uuid::Uuid::new_v4();
+                let b = u.as_bytes();
+                let take = std::cmp::min(b.len(), bytes.len() - idx);
+                bytes[idx..idx + take].copy_from_slice(&b[..take]);
+                idx += take;
+            }
+        }
+        let body = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
+        format!("{}{}", PREFIX, body)
+    }
+
+    pub(crate) fn hash_key(key: &str) -> String {
         use argon2::password_hash::{rand_core::OsRng, SaltString};
         use argon2::{Argon2, PasswordHasher};
 
         let salt = SaltString::generate(&mut OsRng);
         let argon2 = Argon2::default();
 
+        // NOTE: 現状は毎回新規 salt + 再ハッシュとなるため 生キー→保存済ハッシュ の照合には不向き。
+        // Middleware での検索用には KDF を固定化 (pepper + deterministic) する別カラム導入を検討。
         argon2
             .hash_password(key.as_bytes(), &salt)
             .map(|hash| hash.to_string())
             .unwrap_or_default()
+    }
+
+    /// ルックアップ用の決定的ハッシュ (衝突耐性と高速性重視 / 再計算可能)。
+    /// 生キーが漏れてもハッシュ逆算は困難だが、オフライン総当りは可能なので rate-limit 前提。
+    pub fn lookup_hash(key: &str) -> String {
+    crate::utils::hash::sha256_b64url(key.as_bytes())
     }
 
     pub fn verify_key(&self, key: &str) -> Result<bool, AppError> {
@@ -164,5 +253,29 @@ impl ApiKey {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// 期限切れかどうか (expires_at があり、それが現在時刻を過ぎている)
+    pub fn is_expired(&self, now: DateTime<Utc>) -> bool {
+        self.expires_at.map(|e| e <= now).unwrap_or(false)
+    }
+
+    /// 応答用構造体へ変換
+    pub fn to_response(&self) -> ApiKeyResponse {
+        ApiKeyResponse {
+            id: self.id,
+            name: self.name.clone(),
+            permissions: self.get_permissions(),
+            user_id: self.user_id,
+            created_at: self.created_at,
+            expires_at: self.expires_at,
+            last_used_at: self.last_used_at,
+        }
+    }
+
+    /// ログ出力や監査向けにキー本体を暴露しない短縮表示
+    pub fn mask_raw(raw: &str) -> String {
+        if raw.len() <= 10 { return "***".into(); }
+        format!("{}…{}", &raw[..6], &raw[raw.len()-4..])
     }
 }

@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tokio;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{CorsLayer, Any};
+use axum::http::HeaderValue;
 
 // インメモリデータストア（プロトタイプ用）
 #[derive(Clone)]
@@ -126,13 +126,7 @@ struct UpdatePostRequest {
     status: Option<PostStatus>,
 }
 
-#[derive(Deserialize)]
-struct PaginationQuery {
-    page: Option<u32>,
-    per_page: Option<u32>,
-}
-
-use cms_backend::utils::api_types::ApiResponse;
+use cms_backend::utils::api_types::{ApiResponse, Pagination, PaginatedResponse, PaginationQuery};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -143,6 +137,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // インメモリストア初期化
     let store = InMemoryStore::new();
+
+    // CORS origins from env (comma separated). Default to localhost only in dev.
+    let cors_origins = std::env::var("CORS_ORIGINS").unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let origins: Vec<HeaderValue> = cors_origins
+        .split(',')
+        .filter_map(|s| HeaderValue::from_str(s.trim()).ok())
+        .collect();
+    let cors = if origins.is_empty() { CorsLayer::new().allow_origin(Any) } else { CorsLayer::new().allow_origin(origins) };
 
     // ルーター構築
     let app = Router::new()
@@ -162,8 +164,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // 設定
         .route("/api/settings", get(get_settings))
         // 管理情報
-        .route("/api/admin/stats", get(admin_stats))
-        .layer(CorsLayer::permissive())
+    .route("/api/admin/stats", get(admin_stats))
+    .layer(cors)
         .with_state(store);
 
     // サーバー起動
@@ -254,10 +256,13 @@ async fn health_check(State(store): State<InMemoryStore>) -> Json<ApiResponse<se
 async fn get_posts(
     State(store): State<InMemoryStore>,
     Query(pagination): Query<PaginationQuery>,
-) -> Json<ApiResponse<serde_json::Value>> {
+) -> Json<ApiResponse<PaginatedResponse<Post>>> {
     let posts = store.posts.lock().unwrap();
-    let page = pagination.page.unwrap_or(1);
-    let per_page = pagination.per_page.unwrap_or(10);
+    let mut pagination = pagination;
+    // 共通バリデーション
+    pagination.validate();
+    let page = pagination.page;
+    let per_page = pagination.per_page;
 
     let all_posts: Vec<_> = posts.values().cloned().collect();
     let total = all_posts.len();
@@ -271,17 +276,13 @@ async fn get_posts(
         Vec::new()
     };
 
-    Json(ApiResponse::success(json!({
-        "posts": paginated_posts,
-        "pagination": {
-            "page": page,
-            "per_page": per_page,
-            "total": total,
-            "total_pages": (total as f64 / per_page as f64).ceil() as u32,
-            "has_next": end < total,
-            "has_prev": page > 1
-        }
-    })))
+    let pagination = Pagination {
+        page,
+        per_page,
+        total: total as u64,
+        total_pages: ((total as f64) / (per_page as f64)).ceil() as u32,
+    };
+    Json(ApiResponse::success(PaginatedResponse { data: paginated_posts, pagination }))
 }
 
 async fn get_post(

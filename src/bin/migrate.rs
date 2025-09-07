@@ -4,9 +4,7 @@
 
 use clap::{Parser, Subcommand};
 use cms_backend::{AppState, Result};
-use diesel::pg::PgConnection;
-use diesel::RunQueryDsl;
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use diesel_migrations::{embed_migrations, EmbeddedMigrations};
 use std::env;
 use tracing::{error, info, warn};
 
@@ -131,25 +129,16 @@ async fn main() -> Result<()> {
 // `print_usage` was removed in favor of Clap-based automatic help generation.
 
 async fn run_migrations(state: &AppState) -> Result<()> {
-    let mut conn = state.get_conn()?;
-    conn.run_pending_migrations(MIGRATIONS)
-        .map_err(|e| cms_backend::AppError::Internal(e.to_string()))?;
-    Ok(())
+    state.db_run_pending_migrations(MIGRATIONS).await
 }
 
 async fn rollback_migrations(state: &AppState, steps: usize) -> Result<()> {
-    let mut conn = state.get_conn()?;
-
     for _ in 0..steps {
-        match conn.revert_last_migration(MIGRATIONS) {
+        match state.db_revert_last_migration(MIGRATIONS).await {
             Ok(_) => info!("✅ Reverted migration"),
-            Err(e) => {
-                error!("❌ Failed to revert migration: {}", e);
-                break;
-            }
+            Err(e) => { error!("❌ Failed to revert migration: {}", e); break; }
         }
     }
-
     Ok(())
 }
 
@@ -157,8 +146,6 @@ async fn reset_database(state: &AppState) -> Result<()> {
     info!("🗑️  Dropping all tables...");
 
     // This is a simplified version - in production you'd want more sophisticated schema dropping
-    let mut conn = state.get_conn()?;
-
     // Drop all tables (order matters due to foreign keys)
     let drop_statements = vec![
         "DROP TABLE IF EXISTS audit_logs CASCADE",
@@ -179,36 +166,20 @@ async fn reset_database(state: &AppState) -> Result<()> {
         "DROP TABLE IF EXISTS schema_migrations CASCADE",
     ];
 
-    for statement in drop_statements {
-        if let Err(e) = diesel::sql_query(statement).execute(&mut conn) {
-            warn!("Failed to execute: {} - {}", statement, e);
-        }
-    }
+    for statement in drop_statements { let _ = state.db_execute_sql(statement).await.map_err(|e| { warn!("Failed to execute: {} - {}", statement, e); e }); }
 
     info!("🔄 Recreating schema...");
     run_migrations(state).await?;
 
     // Ensure compatibility between possible diesel migration table names
-    {
-    let mut conn = state.get_conn()?;
-        ensure_schema_migrations_compat(&mut conn)?;
-    }
+    state.db_ensure_schema_migrations_compat().await?;
 
     Ok(())
 }
 
 async fn seed_database(state: &AppState) -> Result<()> {
-    // Create initial admin user and default settings
-    let mut conn = state.get_conn()?;
-
-    // Check if already seeded
-    use cms_backend::database::schema::users::dsl::*;
-    use diesel::prelude::*;
-
-    let existing_users: i64 = users
-        .count()
-        .get_result(&mut conn)
-    .map_err(cms_backend::AppError::Database)?;
+    // Check if already seeded (use AppState wrapper)
+    let existing_users: i64 = state.db_admin_users_count().await?;
 
     if existing_users > 0 {
         info!("📊 Database already contains data, skipping seeding");
@@ -260,50 +231,10 @@ async fn seed_database(state: &AppState) -> Result<()> {
 
 /// Fetch applied migration versions from either `schema_migrations` or
 /// `__diesel_schema_migrations` (fallback). Returns versions ordered asc.
-fn fetch_applied_versions(conn: &mut PgConnection) -> Result<Vec<String>> {
-    use diesel::prelude::*;
-    #[derive(diesel::QueryableByName)]
-    struct MigrationVersion {
-        #[diesel(sql_type = diesel::sql_types::Text)]
-        version: String,
-    }
-
-    let rows: Vec<MigrationVersion> =
-        match diesel::sql_query("SELECT version FROM schema_migrations ORDER BY version ASC")
-            .load(conn)
-        {
-            Ok(r) => r,
-            Err(_) => diesel::sql_query(
-                "SELECT version FROM __diesel_schema_migrations ORDER BY version ASC",
-            )
-            .load(conn)
-            .map_err(|e| cms_backend::AppError::Internal(e.to_string()))?,
-        };
-
-    Ok(rows.into_iter().map(|r| r.version).collect())
-}
-
-/// Ensure `schema_migrations` exists and copy rows from `__diesel_schema_migrations` if present.
-fn ensure_schema_migrations_compat(conn: &mut PgConnection) -> Result<()> {
-    use diesel::prelude::*;
-
-    let create_sql = "CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());";
-    if let Err(e) = diesel::sql_query(create_sql).execute(conn) {
-        warn!("Failed to ensure schema_migrations table: {}", e);
-    }
-
-    let copy_sql = "INSERT INTO schema_migrations(version, applied_at) SELECT version, run_on FROM __diesel_schema_migrations WHERE version NOT IN (SELECT version FROM schema_migrations);";
-    if let Err(e) = diesel::sql_query(copy_sql).execute(conn) {
-        warn!("Could not copy migration rows to schema_migrations: {}", e);
-    }
-
-    Ok(())
-}
 
 async fn check_migration_status(state: &AppState) -> Result<()> {
-    let mut conn = state.get_conn()?;
     // Use helper to fetch applied migration versions (handles both table names)
-    let applied = fetch_applied_versions(&mut conn)?;
+    let applied = state.db_fetch_applied_migrations().await?;
 
     info!("📊 Migration Status:");
     info!("  Applied migrations: {}", applied.len());
@@ -313,17 +244,13 @@ async fn check_migration_status(state: &AppState) -> Result<()> {
     }
 
     // Check for pending migrations
-    let pending = conn
-        .pending_migrations(MIGRATIONS)
-        .map_err(|e| cms_backend::AppError::Internal(e.to_string()))?;
+    let pending = state.db_list_pending_migrations(MIGRATIONS).await?;
 
     if pending.is_empty() {
         info!("  ✅ No pending migrations");
     } else {
-        info!("  ⏳ Pending migrations: {}", pending.len());
-        for migration in pending {
-            info!("  ⏳ {}", migration.name());
-        }
+    info!("  ⏳ Pending migrations: {}", pending.len());
+    for name in pending { info!("  ⏳ {}", name); }
     }
 
     Ok(())

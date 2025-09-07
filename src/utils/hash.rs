@@ -1,24 +1,21 @@
-//! Legacy password hashing utilities (SHA256-based)
-//! 
-//! DEPRECATED: This module provides legacy SHA256-based hashing.
-//! New code should use the `password` module which provides Argon2-based hashing.
-//! 
-//! This module is kept for backward compatibility only.
+//! Hash utilities (SHA-256 helpers)
 
-use sha2::{Sha256, Digest};
-use hex;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
+use sha2::{Digest, Sha256};
 
-/// Hash password using SHA256 (DEPRECATED - use utils::password::hash_password instead)
-#[deprecated(note = "Use utils::password::hash_password for secure Argon2 hashing")]
-pub fn hash_password(password: &str, salt: &str) -> String {
+/// Compute SHA-256 digest and return as lowercase hex string
+pub fn sha256_hex(data: &[u8]) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(password.as_bytes());
-    hasher.update(salt.as_bytes());
-    hex::encode(hasher.finalize())
+    hasher.update(data);
+    let digest = hasher.finalize();
+    hex::encode(digest)
 }
 
-/// Verify password using SHA256 (DEPRECATED - use utils::password::verify_password instead)
-#[deprecated(note = "Use utils::password::verify_password for secure Argon2 verification")]
-pub fn verify_password(password: &str, salt: &str, hash: &str) -> bool {
-    hash_password(password, salt) == hash
+/// Compute SHA-256 digest and return as base64url (no padding)
+pub fn sha256_b64url(data: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    let digest = hasher.finalize();
+    URL_SAFE_NO_PAD.encode(digest)
 }

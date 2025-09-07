@@ -1,5 +1,6 @@
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 /// 日付時刻のフォーマット定数
 pub const DATE_FORMAT: &str = "%Y-%m-%d";
@@ -66,7 +67,7 @@ pub fn humanize_duration(datetime: &DateTime<Utc>) -> String {
 }
 
 /// 日付範囲を表すヘルパー構造体
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct DateRange {
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,

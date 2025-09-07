@@ -54,9 +54,11 @@ where
         let request_id = Uuid::new_v4().to_string();
 
         // Add request ID to headers
+        let header_value = HeaderValue::from_str(&request_id)
+            .unwrap_or_else(|_| HeaderValue::from_static("unknown"));
         request
             .headers_mut()
-            .insert("X-Request-ID", HeaderValue::from_str(&request_id).unwrap());
+            .insert("X-Request-ID", header_value.clone());
 
         let mut service = self.service.clone();
         Box::pin(async move {
@@ -65,7 +67,7 @@ where
             // Add request ID to response headers
             response
                 .headers_mut()
-                .insert("X-Request-ID", HeaderValue::from_str(&request_id).unwrap());
+                .insert("X-Request-ID", HeaderValue::from_str(&request_id).unwrap_or_else(|_| HeaderValue::from_static("unknown")));
 
             Ok(response)
         })

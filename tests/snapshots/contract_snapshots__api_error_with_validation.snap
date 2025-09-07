@@ -1,0 +1,20 @@
+---
+source: tests/contract_snapshots.rs
+expression: resp
+---
+{
+  "success": false,
+  "data": null,
+  "message": null,
+  "error": "validation failed",
+  "validation_errors": [
+    {
+      "field": "email",
+      "message": "invalid format"
+    },
+    {
+      "field": "password",
+      "message": "too short"
+    }
+  ]
+}

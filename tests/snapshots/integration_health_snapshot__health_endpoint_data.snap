@@ -1,0 +1,32 @@
+---
+source: tests/integration_health_snapshot.rs
+expression: "json[\"data\"].clone()"
+---
+{
+  "status": "healthy",
+  "database": {
+    "status": "up",
+    "response_time_ms": 1.0,
+    "error": null,
+    "details": {}
+  },
+  "cache": {
+    "status": "not_configured",
+    "response_time_ms": 0.0,
+    "error": null,
+    "details": {}
+  },
+  "search": {
+    "status": "not_configured",
+    "response_time_ms": 0.0,
+    "error": null,
+    "details": {}
+  },
+  "auth": {
+    "status": "not_configured",
+    "response_time_ms": 0.0,
+    "error": null,
+    "details": {}
+  },
+  "timestamp": "<redacted>"
+}

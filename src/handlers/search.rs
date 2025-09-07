@@ -4,18 +4,20 @@
 
 use axum::{
     extract::{Query, State},
-    response::{IntoResponse, Json},
+    response::IntoResponse,
 };
 use serde::Deserialize;
+use utoipa::ToSchema;
 use serde_json::json;
 use std::time::Duration;
 
-use crate::utils::api_types::ApiResponse;
+// Using ApiOk newtype for unified success responses
+use crate::utils::response_ext::ApiOk;
 use crate::{AppState, Result};
 
 #[cfg(feature = "search")]
 use crate::search::{
-    SearchRequest, SearchResults, SearchFilter, FilterOperator, SortOrder,
+    SearchRequest, SearchResults, SearchFilter, FilterOperator,
 };
 
 #[cfg(not(feature = "search"))]
@@ -54,39 +56,67 @@ mod _search_shim {
         Equals,
     }
 
-    #[derive(Debug)]
-    pub enum SortOrder {
-        Asc,
-        Desc,
-    }
+    pub type SortOrder = crate::utils::api_types::SortOrder;
 }
 
 #[cfg(not(feature = "search"))]
 use _search_shim::{FilterOperator, SearchFilter, SearchRequest, SearchResults, SearchStats, SortOrder};
 
 /// Search query parameters
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams, ToSchema)]
 pub struct SearchQuery {
     pub q: String,
     pub limit: Option<usize>,
     pub offset: Option<usize>,
     pub doc_type: Option<String>, // "post" or "user"
     pub sort_by: Option<String>,
-    pub sort_order: Option<String>,
+    pub sort_order: Option<crate::utils::api_types::SortOrder>,
 }
 
 /// Search suggestion query
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams, ToSchema)]
 pub struct SuggestQuery {
     pub prefix: String,
     pub limit: Option<usize>,
 }
 
 /// Search endpoint
+#[utoipa::path(
+    get,
+    path = "/api/v1/search",
+    tag = "Search",
+    params(SearchQuery),
+    responses(
+        (status=200, description="Search results (ApiResponse<SearchResults>)", examples((
+            "SearchResults" = (
+                summary = "検索結果例",
+                value = json!({
+                    "success": true,
+                    "data": {
+                        "results": [
+                            {"id": "550e8400-e29b-41d4-a716-446655440000", "title": "Hello World", "doc_type": "post"}
+                        ],
+                        "total": 1
+                    },
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn search(
     State(state): State<AppState>,
     Query(query): Query<SearchQuery>,
 ) -> Result<impl IntoResponse> {
+    // Normalize pagination controls
+    let mut limit = query.limit.unwrap_or(20);
+    if limit == 0 { limit = 20; }
+    if limit > 100 { limit = 100; }
+    let offset = query.offset.unwrap_or(0);
+
     // Build search request
     let search_request = SearchRequest {
         query: query.q.clone(),
@@ -98,26 +128,19 @@ pub async fn search(
             }]
         }),
         facets: None,
-        limit: query.limit,
-        offset: query.offset,
-        sort_by: query.sort_by,
-        sort_order: query
-            .sort_order
-            .and_then(|order| match order.to_lowercase().as_str() {
-                "asc" => Some(SortOrder::Asc),
-                "desc" => Some(SortOrder::Desc),
-                _ => None,
-            }),
+        limit: Some(limit),
+        offset: Some(offset),
+    sort_by: query.sort_by,
+    sort_order: query.sort_order,
     };
 
     // Try cache first
-    let cache_key = format!(
-        "search:{}:{}:{}:{}",
-        query.q,
-        query.limit.unwrap_or(20),
-        query.offset.unwrap_or(0),
-        query.doc_type.as_deref().unwrap_or("all")
-    );
+    let cache_key = crate::utils::cache_key::CacheKeyBuilder::new("search")
+        .kv("q", &query.q)
+        .kv("limit", limit)
+        .kv("offset", offset)
+        .kv("type", query.doc_type.as_deref().unwrap_or("all"))
+        .build();
 
     #[cfg(feature = "cache")]
     {
@@ -126,7 +149,7 @@ pub async fn search(
             .get::<SearchResults<serde_json::Value>>(&cache_key)
             .await
         {
-            return Ok(Json(ApiResponse::success(cached)));
+    return Ok(ApiOk(cached));
         }
     }
 
@@ -138,32 +161,56 @@ pub async fn search(
 
     // Cache results for 2 minutes
     #[cfg(feature = "cache")]
+    if let Err(e) = state
+        .cache
+        .set(cache_key, &results, Some(Duration::from_secs(120)))
+        .await
     {
-        if let Err(e) = state
-            .cache
-            .set(cache_key, &results, Some(Duration::from_secs(120)))
-            .await
-        {
-            eprintln!("Failed to cache search results: {}", e);
-        }
+        eprintln!("Failed to cache search results: {}", e);
     }
 
-    Ok(Json(ApiResponse::success(results)))
+    Ok(ApiOk(results))
 }
 
 /// Search suggestions endpoint
+#[utoipa::path(
+    get,
+    path = "/api/v1/search/suggest",
+    tag = "Search",
+    params(SuggestQuery),
+    responses(
+        (status=200, description="Suggestions list (ApiResponse<{ suggestions: string[] }>)", examples((
+            "Suggestions" = (
+                summary = "サジェスト例",
+                value = json!({
+                    "success": true,
+                    "data": {"suggestions": ["hel", "hello", "hello world"]},
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn suggest(
     State(state): State<AppState>,
     Query(query): Query<SuggestQuery>,
 ) -> Result<impl IntoResponse> {
-    let limit = query.limit.unwrap_or(10);
+    let mut limit = query.limit.unwrap_or(20);
+    if limit == 0 { limit = 20; }
+    if limit > 100 { limit = 100; }
 
     // Try cache first
-    let cache_key = format!("suggest:{}:{}", query.prefix, limit);
+    let cache_key = crate::utils::cache_key::CacheKeyBuilder::new("suggest")
+        .kv("prefix", &query.prefix)
+        .kv("limit", limit)
+        .build();
     #[cfg(feature = "cache")]
     {
         if let Ok(Some(cached)) = state.cache.get::<Vec<String>>(&cache_key).await {
-            return Ok(Json(ApiResponse::success(json!({ "suggestions": cached }))));
+    return Ok(ApiOk(json!({ "suggestions": cached })));
         }
     }
 
@@ -175,33 +222,49 @@ pub async fn suggest(
 
     // Cache for 10 minutes
     #[cfg(feature = "cache")]
+    if let Err(e) = state
+        .cache
+        .set(cache_key, &suggestions, Some(Duration::from_secs(600)))
+        .await
     {
-        if let Err(e) = state
-            .cache
-            .set(cache_key, &suggestions, Some(Duration::from_secs(600)))
-            .await
-        {
-            eprintln!("Failed to cache suggestions: {}", e);
-        }
+        eprintln!("Failed to cache suggestions: {}", e);
     }
 
-    Ok(Json(ApiResponse::success(
-        json!({ "suggestions": suggestions }),
-    )))
+    Ok(ApiOk(json!({ "suggestions": suggestions })))
 }
 
 /// Search statistics endpoint
+#[utoipa::path(
+    get,
+    path = "/api/v1/search/stats",
+    tag = "Search",
+    responses(
+        (status=200, description="Search stats (ApiResponse<SearchStats>)", examples((
+            "Stats" = (
+                summary = "統計例",
+                value = json!({
+                    "success": true,
+                    "data": {"index_size": 12345, "documents": 42},
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn search_stats(State(state): State<AppState>) -> Result<impl IntoResponse> {
     // Try cache first
-    let cache_key = "search:stats";
+    let cache_key = crate::utils::cache_key::CacheKeyBuilder::new("search:stats").build();
     #[cfg(feature = "cache")]
     {
         if let Ok(Some(cached)) = state
             .cache
-            .get::<crate::search::SearchStats>(cache_key)
+            .get::<crate::search::SearchStats>(&cache_key)
             .await
         {
-            return Ok(Json(ApiResponse::success(cached)));
+    return Ok(ApiOk(cached));
         }
     }
 
@@ -213,24 +276,43 @@ pub async fn search_stats(State(state): State<AppState>) -> Result<impl IntoResp
 
     // Cache for 5 minutes
     #[cfg(feature = "cache")]
+    if let Err(e) = state
+        .cache
+        .set(
+            cache_key,
+            &stats,
+            Some(Duration::from_secs(300)),
+        )
+        .await
     {
-        if let Err(e) = state
-            .cache
-            .set(
-                cache_key.to_string(),
-                &stats,
-                Some(Duration::from_secs(300)),
-            )
-            .await
-        {
-            eprintln!("Failed to cache search stats: {}", e);
-        }
+        eprintln!("Failed to cache search stats: {}", e);
     }
 
-    Ok(Json(ApiResponse::success(stats)))
+    Ok(ApiOk(stats))
 }
 
 /// Reindex all content
+#[utoipa::path(
+    post,
+    path = "/api/v1/search/reindex",
+    tag = "Search",
+    security(("BearerAuth" = [])),
+    responses(
+        (status=200, description="Reindex triggered (ApiResponse<{ message: string }>)", examples((
+            "Reindex" = (
+                summary = "再インデックス開始",
+                value = json!({
+                    "success": true,
+                    "data": {"message": "Reindexing started - this would be implemented as a background task"},
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn reindex(State(_state): State<AppState>) -> Result<impl IntoResponse> {
     // This would be an admin-only endpoint in production
     // For now, return a placeholder response
@@ -242,15 +324,24 @@ pub async fn reindex(State(_state): State<AppState>) -> Result<impl IntoResponse
     // 4. Re-index all content
     // 5. Clear search-related cache
 
-    Ok(Json(ApiResponse::success(json!({
+    Ok(ApiOk(json!({
         "success": true,
         "message": "Reindexing started - this would be implemented as a background task"
-    }))))
+    })))
 }
 
 /// Search index health check
-pub async fn search_health(State(_state): State<AppState>) -> Result<impl IntoResponse> {
-    Ok(Json(ApiResponse::<()>::error(
-        "Search health check not implemented".to_string(),
-    )))
+#[utoipa::path(
+    get,
+    path = "/api/v1/search/health",
+    tag = "Search",
+    responses(
+    (status=200, description="Search health (ApiResponse<ServiceHealth>)"),
+        (status=500, description="Server error")
+    )
+)]
+pub async fn search_health(State(state): State<AppState>) -> Result<impl IntoResponse> {
+    // AppState の包括的なヘルスチェックから search 部分のみ返す
+    let h = state.health_check().await?;
+    Ok(ApiOk(h.search))
 }

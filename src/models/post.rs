@@ -2,15 +2,12 @@ use crate::database::schema::posts;
 use crate::error::{AppError, Result};
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 
-lazy_static::lazy_static! {
-    static ref SLUG_REGEX: Regex = Regex::new(r"^[a-z0-9-]+$").unwrap();
-}
+// Note: slug 検証用の正規表現は utils 側へ集約済み。ここでの個別定義は削除。
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub enum PostStatus {
@@ -176,6 +173,17 @@ pub struct UpdatePostRequest {
     pub status: Option<PostStatus>,
 }
 
+// Builder-style convenience constructors to remove repetitive None initializations in handlers
+impl UpdatePostRequest {
+    pub fn empty() -> Self { Self { title: None, content: None, excerpt: None, slug: None, published: None, tags: None, category: None, featured_image: None, meta_title: None, meta_description: None, published_at: None, status: None } }
+    pub fn publish_now(mut self) -> Self {
+        self.published = Some(true);
+        self.status = Some(PostStatus::Published);
+        self.published_at = Some(chrono::Utc::now());
+        self
+    }
+}
+
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct PostFilter {
     #[serde(default = "default_page")]
@@ -210,16 +218,11 @@ pub enum PostSortBy {
     ViewCount,
 }
 
-#[derive(Debug, Deserialize, ToSchema, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum SortOrder {
-    #[default]
-    Desc,
-    Asc,
-}
+// 共有の SortOrder を使用して重複を排除
+pub type SortOrder = crate::utils::api_types::SortOrder;
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct PostResponse {
+pub struct PostsListResponse {
     pub posts: Vec<Post>,
     pub pagination: crate::models::pagination::PaginationInfo,
     pub filters: PostFilterMeta,
@@ -231,14 +234,10 @@ pub struct PostFilterMeta {
     pub total_drafts: usize,
     pub categories: Vec<String>,
     pub popular_tags: Vec<String>,
-    pub date_range: Option<DateRange>,
+    pub date_range: Option<crate::utils::date::DateRange>,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct DateRange {
-    pub earliest: DateTime<Utc>,
-    pub latest: DateTime<Utc>,
-}
+// Note: DateRange is unified at utils::date::DateRange
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct PostSummary {
@@ -271,9 +270,7 @@ fn default_page() -> usize {
     1
 }
 
-fn default_limit() -> usize {
-    10
-}
+fn default_limit() -> usize { 20 }
 
 impl Post {
     /// Generate excerpt from content if not provided
@@ -401,15 +398,10 @@ impl CreatePostRequest {
 impl PostFilter {
     /// Validate and sanitize filter parameters
     pub fn validate_and_sanitize(&mut self) {
-        // Ensure page is at least 1
-        if self.page == 0 {
-            self.page = 1;
-        }
-
-        // Limit page size for performance
-        if self.limit == 0 || self.limit > 100 {
-            self.limit = 10;
-        }
+    // Normalize page/limit using shared helper
+    let (p, l) = crate::models::pagination::normalize_page_limit(Some(self.page as u32), Some(self.limit as u32));
+    self.page = p as usize;
+    self.limit = l as usize;
 
         // Sanitize search query
         if let Some(search) = &self.search {
@@ -421,42 +413,34 @@ impl PostFilter {
 
     /// Convert to SQL ORDER BY clause
     pub fn to_order_clause(&self) -> String {
-        let column = match self.sort_by {
-            PostSortBy::CreatedAt => "created_at",
-            PostSortBy::UpdatedAt => "updated_at",
-            PostSortBy::PublishedAt => "published_at",
-            PostSortBy::Title => "title",
-            PostSortBy::ViewCount => "view_count",
+        // 共通パーサへ委譲してカラム許可と降順記法を統一
+        let allowed = [
+            "created_at",
+            "updated_at",
+            "published_at",
+            "title",
+            "view_count",
+        ];
+        let (sort_token, default_desc) = match self.sort_by {
+            PostSortBy::CreatedAt => ("created_at", true),
+            PostSortBy::UpdatedAt => ("updated_at", true),
+            PostSortBy::PublishedAt => ("published_at", true),
+            PostSortBy::Title => ("title", false),
+            PostSortBy::ViewCount => ("view_count", true),
         };
-
-        let direction = match self.sort_order {
-            SortOrder::Asc => "ASC",
-            SortOrder::Desc => "DESC",
+        let token = match self.sort_order {
+            SortOrder::Desc => format!("-{}", sort_token),
+            SortOrder::Asc => sort_token.to_string(),
         };
-
-        format!("{} {}", column, direction)
+        let (col, desc) = crate::utils::sort::parse_sort(Some(token), sort_token, default_desc, &allowed);
+        format!("{} {}", col, if desc { "DESC" } else { "ASC" })
     }
 }
 
-/// Generate URL-friendly slug from title
+/// Generate URL-friendly slug from title (centralized)
+/// Delegates to utils::url_encoding::generate_safe_slug to avoid duplicated logic.
 pub fn generate_slug(title: &str) -> String {
-    title
-        .to_lowercase()
-        .chars()
-        .filter_map(|c| {
-            if c.is_alphanumeric() {
-                Some(c)
-            } else if c.is_whitespace() || c == '-' {
-                Some('-')
-            } else {
-                None
-            }
-        })
-        .collect::<String>()
-        .split('-')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
+    crate::utils::url_encoding::generate_safe_slug(title)
 }
 
 /// Strip HTML tags from content (basic implementation)
@@ -479,7 +463,7 @@ mod tests {
         assert_eq!(generate_slug("Hello World"), "hello-world");
         assert_eq!(generate_slug("Hello, World!"), "hello-world");
         assert_eq!(generate_slug("Multiple   Spaces"), "multiple-spaces");
-        assert_eq!(generate_slug("Special@#$Characters"), "specialcharacters");
+    assert_eq!(generate_slug("Special@#$Characters"), "special-characters");
     }
 
     #[test]

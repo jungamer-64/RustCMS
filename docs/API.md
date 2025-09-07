@@ -180,3 +180,20 @@ Select-String -Path "**\*.rs" -Pattern "\.0\.len\(" -SimpleMatch
 
 ---
 更新: 2025-08-20
+
+## 一覧APIのフィルタ/ソート仕様（追記）
+
+以下の一覧APIでは、指定されたフィルタ条件に一致する総件数（total）が返却されます。総件数はフィルタを無視せず、ページネーションの精度を保証します。
+
+- GET /api/posts
+  - クエリ: page, limit, status, author, tag, sort
+  - sort の値: "created_at", "updated_at", "published_at", "title"（先頭に '-' で降順: 例 "-created_at"）
+  - 注意: published_at の NULL は安定した順序になるよう内部で補助キーを併用
+
+- GET /api/users
+  - クエリ: page, limit, role, active, sort
+  - sort の値: "created_at", "updated_at", "username"（同上で '-' で降順）
+
+返却形式は従来どおり `ApiResponse<PaginatedResponse<T>>`。`pagination.total` は各 API で適用されたフィルタ後の件数です。
+
+更新: 2025-09-07

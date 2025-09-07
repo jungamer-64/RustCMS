@@ -1,0 +1,48 @@
+# Example Prometheus alerting rules for API key auth & rate limiting
+# Adjust 'for' durations and thresholds to match your environment traffic baseline.
+
+groups:
+  - name: api-key-auth
+    interval: 30s
+    rules:
+      - alert: ApiKeyAuthFailureSpike
+        expr: |
+          increase(api_key_auth_failure_total[5m]) > 50
+          and (increase(api_key_auth_failure_total{reason="not_found"}[5m]) / ignoring(reason) increase(api_key_auth_attempts_total[5m])) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API Key auth failure spike (not_found dominated)"
+          description: "More than 50 failures in 5m and >50% are not_found. Possible brute force or stale clients."
+
+      - alert: ApiKeyRateLimitedFlood
+        expr: increase(api_key_auth_failure_total{reason="rate_limited"}[5m]) > 20
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High rate-limited API key attempts"
+          description: "Over 20 rate-limited events in 5m – investigate attack or misconfigured client."
+
+      - alert: LowApiKeySuccessRatio
+        expr: |
+          (increase(api_key_auth_success_total[10m]) + 1)
+          /
+          (increase(api_key_auth_attempts_total[10m]) + 1) < 0.2
+          and increase(api_key_auth_attempts_total[10m]) > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API key success ratio degraded"
+          description: "Success/Attempt ratio <20% over 10m (attempts >30). Clients may be failing authentication."
+
+      - alert: ExpiredApiKeyUsage
+        expr: increase(api_key_auth_failure_total{reason="expired"}[15m]) > 5
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "Expired API keys still in use"
+          description: "More than 5 expired key attempts over 15m. Prompt rotation or cleanup."

@@ -1,9 +1,9 @@
 use axum::Router;
-use std::{net::SocketAddr, sync::Arc};
+use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tracing::{error, info};
 
-use cms_backend::{config::Config, routes::create_router, AppState};
+use cms_backend::routes::create_router;
 
 async fn shutdown_signal() {
     // Wait for CTRL+C

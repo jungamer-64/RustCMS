@@ -1,0 +1,10 @@
+---
+source: tests/contract_snapshots.rs
+expression: resp
+---
+{
+  "success": false,
+  "data": null,
+  "message": null,
+  "error": "something went wrong"
+}

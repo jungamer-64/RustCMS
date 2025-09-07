@@ -1,4 +1,4 @@
-use crate::utils::error::{AppError, AppResult};
+use crate::error::AppError;
 use percent_encoding::{percent_decode_str, utf8_percent_encode, AsciiSet, CONTROLS};
 use urlencoding::{decode, encode};
 
@@ -46,7 +46,7 @@ pub fn encode_url_param(input: &str) -> String {
 }
 
 /// URLパラメータの安全なデコード
-pub fn decode_url_param(input: &str) -> AppResult<String> {
+pub fn decode_url_param(input: &str) -> crate::Result<String> {
     percent_decode_str(input)
         .decode_utf8()
         .map_err(|e| AppError::BadRequest(format!("Invalid URL encoding: {}", e)))
@@ -63,7 +63,7 @@ pub fn encode_slug(input: &str) -> String {
 }
 
 /// スラッグの安全なデコード
-pub fn decode_slug(input: &str) -> AppResult<String> {
+pub fn decode_slug(input: &str) -> crate::Result<String> {
     percent_decode_str(input)
         .decode_utf8()
         .map_err(|e| AppError::BadRequest(format!("Invalid slug encoding: {}", e)))
@@ -76,7 +76,7 @@ pub fn url_encode(input: &str) -> String {
 }
 
 /// 簡易URLデコード（完全互換）
-pub fn url_decode(input: &str) -> AppResult<String> {
+pub fn url_decode(input: &str) -> crate::Result<String> {
     decode(input)
         .map_err(|e| AppError::BadRequest(format!("URL decode error: {}", e)))
         .map(|cow| cow.into_owned())
@@ -100,7 +100,7 @@ fn is_already_encoded(input: &str) -> bool {
 }
 
 /// パラメーター長さのバリデーション
-pub fn validate_param_length(param: &str, max_length: usize, param_name: &str) -> AppResult<()> {
+pub fn validate_param_length(param: &str, max_length: usize, param_name: &str) -> crate::Result<()> {
     if param.len() > max_length {
         return Err(AppError::BadRequest(format!(
             "{} is too long: {} characters (max: {})",
@@ -140,7 +140,7 @@ pub fn generate_safe_slug(title: &str) -> String {
 }
 
 /// URL安全性の検証
-pub fn validate_url_param(input: &str) -> AppResult<()> {
+pub fn validate_url_param(input: &str) -> crate::Result<()> {
     // 最大長チェック
     if input.len() > 2048 {
         return Err(AppError::BadRequest("URL parameter too long".to_string()));
@@ -160,7 +160,7 @@ pub fn validate_url_param(input: &str) -> AppResult<()> {
 }
 
 /// スラッグ安全性の検証
-pub fn validate_slug(input: &str) -> AppResult<()> {
+pub fn validate_slug(input: &str) -> crate::Result<()> {
     // 最大長チェック
     if input.len() > 255 {
         return Err(AppError::BadRequest("Slug too long".to_string()));

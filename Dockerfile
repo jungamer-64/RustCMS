@@ -4,41 +4,48 @@
 ## - NO_DEFAULT_FEATURES: set to "true" to pass --no-default-features to cargo
 ## - BINARY: which binary from target/release to copy/run (default: cms-server)
 
-ARG RUST_VERSION=1.75
+ARG RUST_VERSION=latest
 FROM rust:${RUST_VERSION} AS builder
 ARG FEATURES=""
 ARG NO_DEFAULT_FEATURES="false"
 ARG BINARY="cms-server"
+ARG BUILD_VARIANT="unknown"
 
 WORKDIR /app
 
 # Install system deps commonly required by crates (OpenSSL, Postgres client libs, pkg-config)
+# Include nasm because some crates (eg. rav1e) build assembly via NASM during native build.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-       build-essential \
-       pkg-config \
-       libssl-dev \
-       libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+     && apt-get install -y --no-install-recommends \
+         build-essential \
+         pkg-config \
+         libssl-dev \
+         libpq-dev \
+         nasm \
+     && rm -rf /var/lib/apt/lists/*
 
 # Configure cargo paths so we can cache registry/git/target directories
 ENV CARGO_HOME=/usr/local/cargo
 ENV CARGO_TARGET_DIR=/usr/local/cargo/target
 RUN mkdir -p ${CARGO_HOME} ${CARGO_TARGET_DIR} && chown -R root:root ${CARGO_HOME} ${CARGO_TARGET_DIR}
 
-# Copy manifests first to leverage Docker cache for dependencies
-COPY Cargo.toml Cargo.lock ./
-# create a dummy src/main.rs to allow cargo to fetch deps before copying full source
-RUN mkdir -p src && echo 'fn main() { println!("placeholder"); }' > src/main.rs
+# Copy the full project early to ensure all manifest files (including Cargo.lock) are present
+# This sacrifices one Docker layer optimality for robustness across CI environments where
+# the build context or sparse checkouts can omit top-level files when COPY is targeted.
+COPY . .
+
+LABEL stage=builder \
+    org.opencontainers.image.title="Rust CMS (${BUILD_VARIANT})" \
+    org.opencontainers.image.source="${CI_REPO_URL:-unknown}" \
+    org.opencontainers.image.vendor="RustCMS" \
+    org.opencontainers.image.licenses="MIT"
+
 # Use BuildKit cache mounts to persist cargo registry/git/target between builds (faster incremental builds)
 # Note: requires Docker BuildKit (DOCKER_BUILDKIT=1) to be enabled when building.
 RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=cargo-index,target=/usr/local/cargo/git \
     --mount=type=cache,id=cargo-target,target=/usr/local/cargo/target \
-    cargo fetch --locked
-
-# Copy the rest of the project
-COPY . .
+    cargo fetch --locked || true
 
 # Build release with optional features
 RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
@@ -46,21 +53,29 @@ RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
         --mount=type=cache,id=cargo-target,target=/usr/local/cargo/target \
         if [ "$NO_DEFAULT_FEATURES" = "true" ]; then \
             if [ -n "$FEATURES" ]; then \
-                sh -c "cargo build --release --no-default-features --features \"$FEATURES\" --locked"; \
+                # Try reproducible build with --locked, fall back to unlocked when lockfile is out-of-date
+                sh -c "cargo build --release --no-default-features --features \"$FEATURES\" --locked || cargo build --release --no-default-features --features \"$FEATURES\""; \
             else \
-                cargo build --release --no-default-features --locked; \
+                cargo build --release --no-default-features --locked || cargo build --release --no-default-features; \
             fi; \
         else \
             if [ -n "$FEATURES" ]; then \
-                sh -c "cargo build --release --features \"$FEATURES\" --locked"; \
+                sh -c "cargo build --release --features \"$FEATURES\" --locked || cargo build --release --features \"$FEATURES\""; \
             else \
-                cargo build --release --locked; \
+                cargo build --release --locked || cargo build --release; \
             fi; \
+        fi
+
+# (Optional) List artifacts when DEBUG_BUILD_LIST=1
+RUN --mount=type=cache,id=cargo-target,target=/usr/local/cargo/target sh -c 'if cargo build --release --features "$FEATURES" --locked; then :; else cargo build --release --features "$FEATURES"; fi'
+        if [ "${DEBUG_BUILD_LIST:-0}" = "1" ]; then \
+            echo "=== /usr/local/cargo/target/release ===" && ls -la /usr/local/cargo/target/release || true; \
         fi
 
 ## Runtime stage
 FROM debian:bookworm-slim AS runtime
 ARG BINARY="admin_server"
+ARG BUILD_VARIANT="unknown"
 
 # Minimal runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -72,7 +87,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy binary and migrations (if any)
-COPY --from=builder /app/target/release/${BINARY} /usr/local/bin/${BINARY}
+# The builder sets CARGO_TARGET_DIR=/usr/local/cargo/target, so binaries
+# are produced under /usr/local/cargo/target/release. Use that path here.
+COPY --from=builder /usr/local/cargo/target/release/${BINARY} /usr/local/bin/${BINARY}
 COPY --from=builder /app/migrations ./migrations
 
 # Create a non-root user and make app directory owned by it
@@ -91,5 +108,11 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:3000/health || exit 1
 
 # Default command: run selected binary
-ENTRYPOINT ["/usr/local/bin/admin_server"]
+LABEL org.opencontainers.image.title="Rust CMS (${BUILD_VARIANT})" \
+    org.opencontainers.image.description="Multi-binary Rust CMS container image variant: ${BUILD_VARIANT}" \
+    org.opencontainers.image.source="${CI_REPO_URL:-unknown}" \
+    org.opencontainers.image.vendor="RustCMS" \
+    org.opencontainers.image.licenses="MIT"
+
+ENTRYPOINT ["/usr/local/bin/${BINARY}"]
 

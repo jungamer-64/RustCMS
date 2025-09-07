@@ -1,18 +1,12 @@
-use opentelemetry_jaeger::new_agent_pipeline;
-use tracing_opentelemetry::OpenTelemetryLayer;
+// telemetry temporarily minimized; re-expand later
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+#[cfg(feature = "monitoring")]
+use opentelemetry::global;
 
 /// Initialize comprehensive telemetry for enterprise monitoring
 pub fn init_telemetry() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize OpenTelemetry tracer for distributed tracing
-    let tracer = new_agent_pipeline()
-    .with_service_name(format!("enterprise-cms-{}", env!("CARGO_PKG_VERSION")))
-        .with_auto_split_batch(true)
-        .with_max_packet_size(9216)
-        .install_batch(opentelemetry::runtime::Tokio)?;
-
-    // Create OpenTelemetry layer
-    let opentelemetry_layer = OpenTelemetryLayer::new(tracer);
+    // (Temporarily disabled Jaeger pipeline — reintroduce after dependency stabilization)
 
     // Environment filter for log levels
     let env_filter = EnvFilter::try_from_default_env()
@@ -29,7 +23,7 @@ pub fn init_telemetry() -> Result<(), Box<dyn std::error::Error>> {
                 .with_line_number(true)
                 .json(), // Structured logging for production
         )
-        .with(opentelemetry_layer)
+    // telemetry exporter layer temporarily removed
         .init();
 
     // Initialize Prometheus metrics registry
@@ -49,7 +43,6 @@ fn init_metrics() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(feature = "monitoring")]
-
 /// Gracefully shutdown telemetry systems
 pub fn shutdown_telemetry() {
     global::shutdown_tracer_provider();

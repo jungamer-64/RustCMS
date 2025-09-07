@@ -2,12 +2,7 @@
 //!
 //! Creates an initial admin user and a sample post if the database is empty.
 
-use cms_backend::{
-    config::Config,
-    database::Database,
-    models::{CreatePostRequest, CreateUserRequest, PostStatus, UserRole},
-    Result,
-};
+use cms_backend::{models::{CreatePostRequest, CreateUserRequest, PostStatus, UserRole}, Result};
 use tracing::{info, warn};
 
 #[tokio::main]
@@ -25,15 +20,7 @@ async fn main() -> Result<()> {
 
     // Use the migrate/seed logic similar to the migration tool: if DB empty, seed it
     info!("🌱 Checking database for existing users...");
-    let mut conn = state.get_conn()?;
-
-    use cms_backend::database::schema::users::dsl::*;
-    use diesel::prelude::*;
-
-    let existing_users: i64 = users
-        .count()
-        .get_result(&mut conn)
-        .map_err(|e| cms_backend::AppError::Database(e))?;
+    let existing_users: i64 = state.db_admin_users_count().await?;
 
     if existing_users > 0 {
         info!(

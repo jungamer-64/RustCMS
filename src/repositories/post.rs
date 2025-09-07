@@ -186,7 +186,7 @@ impl PostRepository {
                 page: filter.page,
                 limit: filter.limit,
                 total: total_count as usize,
-                total_pages: ((total_count as f64) / (filter.limit as f64)).ceil() as usize,
+                total_pages: crate::models::pagination::calc_total_pages(total_count as usize, filter.limit as u32) as usize,
             },
         };
 
@@ -331,22 +331,4 @@ impl PostRepository {
     }
 }
 
-fn generate_slug(title: &str) -> String {
-    title
-        .to_lowercase()
-        .chars()
-        .filter_map(|c| {
-            if c.is_alphanumeric() {
-                Some(c)
-            } else if c.is_whitespace() {
-                Some('-')
-            } else {
-                None
-            }
-        })
-        .collect::<String>()
-        .split('-')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
-}
+fn generate_slug(title: &str) -> String { crate::utils::url_encoding::generate_safe_slug(title) }

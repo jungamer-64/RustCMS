@@ -2,28 +2,27 @@
 //!
 //! Handles CRUD operations for blog posts and content management
 
-//! Post Handlers
-//!
-//! Handles CRUD operations for blog posts and content management
-
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Json},
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use serde_json::json;
 use std::time::Duration;
 use uuid::Uuid;
 
-use crate::utils::api_types::ApiResponse;
+use crate::utils::{cache_key::CacheKeyBuilder};
+use crate::utils::response_ext::ApiOk;
 use crate::{
     models::{CreatePostRequest, Post, UpdatePostRequest},
     AppState, Result,
 };
+use crate::models::pagination::{normalize_page_limit, Paginated};
 
 /// Post query parameters
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema, utoipa::IntoParams)]
 pub struct PostQuery {
     pub page: Option<u32>,
     pub limit: Option<u32>,
@@ -33,9 +32,9 @@ pub struct PostQuery {
     pub sort: Option<String>,
 }
 
-/// Post response for API
-#[derive(Debug, Serialize, Deserialize)]
-pub struct PostResponse {
+/// Post DTO for API (single post payload)
+#[derive(Debug, Serialize, Deserialize, ToSchema, Clone)]
+pub struct PostDto {
     pub id: Uuid,
     pub title: String,
     pub content: String,
@@ -49,7 +48,7 @@ pub struct PostResponse {
     pub published_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-impl From<&Post> for PostResponse {
+impl From<&Post> for PostDto {
     fn from(post: &Post) -> Self {
         Self {
             id: post.id,
@@ -71,103 +70,228 @@ impl From<&Post> for PostResponse {
     }
 }
 
-/// Paginated posts response
-#[derive(Debug, Serialize, Deserialize)]
-pub struct PostsResponse {
-    pub posts: Vec<PostResponse>,
-    pub total: usize,
-    pub page: u32,
-    pub limit: u32,
-    pub total_pages: u32,
-}
+// Posts list now directly returns Paginated<PostDto> instead of wrapper
 
 /// Create a new post
+#[utoipa::path(
+    post,
+    path = "/api/v1/posts",
+    tag = "Posts",
+    security(("BearerAuth" = [])),
+    request_body = CreatePostRequest,
+    responses(
+    (status=201, body=crate::utils::api_types::ApiResponse<PostDto>, description="Post created",
+        examples((
+            "Created" = (
+                summary = "新規作成成功",
+                value = json!({
+                    "success": true,
+                    "data": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "title": "Hello World",
+                        "content": "First post body...",
+                        "author_id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "status": "draft",
+                        "tags": ["intro"],
+                        "created_at": "2025-09-05T12:00:00Z",
+                        "updated_at": "2025-09-05T12:00:00Z"
+                    },
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))
+    ),
+    (status=400, description="Validation error", body=crate::utils::api_types::ApiResponse<serde_json::Value>),
+        (status=401, description="Unauthorized"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn create_post(
     State(state): State<AppState>,
     Json(request): Json<CreatePostRequest>,
 ) -> Result<impl IntoResponse> {
     let post = state.db_create_post(request).await?;
     #[cfg(feature = "cache")]
-    if let Err(e) = state.cache.delete("posts:*").await {
-        eprintln!("Failed to clear post cache: {}", e);
-    }
+    state.cache_invalidate_prefix("posts:*").await;
     #[cfg(feature = "search")]
-    if let Err(e) = state.search.index_post(&post).await {
-        eprintln!("Failed to index post for search: {}", e);
-    }
-    Ok((StatusCode::CREATED, Json(ApiResponse::success(PostResponse::from(&post)))))
+    state.search_index_post_safe(&post).await;
+    Ok((StatusCode::CREATED, ApiOk(PostDto::from(&post))))
 }
 
 /// Get post by ID
+#[utoipa::path(
+    get,
+    path = "/api/v1/posts/{id}",
+    tag = "Posts",
+    security(("BearerAuth" = [])),
+    responses(
+    (status=200, body=crate::utils::api_types::ApiResponse<PostDto>,
+        examples((
+            "Found" = (
+                summary = "取得成功",
+                value = json!({
+                    "success": true,
+                    "data": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "title": "Hello World",
+                        "content": "First post body...",
+                        "author_id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "status": "published",
+                        "tags": ["intro"],
+                        "created_at": "2025-09-05T12:00:00Z",
+                        "updated_at": "2025-09-05T12:05:00Z"
+                    },
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))
+    ),
+        (status=404, description="Post not found"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn get_post(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
-    let cache_key = format!("post:{}", id);
+    let cache_key = CacheKeyBuilder::new("post").kv("id", id).build();
     #[cfg(feature = "cache")]
-    if let Ok(Some(cached)) = state.cache.get::<PostResponse>(&cache_key).await {
-        return Ok(Json(ApiResponse::success(cached)));
-    }
-    let post = state.db_get_post_by_id(id).await?;
-    let response = PostResponse::from(&post);
-    #[cfg(feature = "cache")]
-    if let Err(e) = state
-        .cache
-        .set(cache_key, &response, Some(Duration::from_secs(300)))
-        .await
     {
-        eprintln!("Failed to cache post: {}", e);
+    let response = state.cache_get_or_set::<PostDto, _, _>(&cache_key, Duration::from_secs(300), || async {
+            let post = state.db_get_post_by_id(id).await?;
+        Ok(PostDto::from(&post))
+        }).await?;
+    return Ok(ApiOk(response));
     }
-    Ok(Json(ApiResponse::success(response)))
+    #[cfg(not(feature = "cache"))]
+    {
+        let post = state.db_get_post_by_id(id).await?;
+    return Ok(ApiOk(PostDto::from(&post)));
+    }
 }
 
 /// Get all posts with pagination and filtering
+#[utoipa::path(
+    get,
+    path = "/api/v1/posts",
+    tag = "Posts",
+    params(PostQuery),
+    security(("BearerAuth" = [])),
+    responses(
+    (status=200, body=crate::utils::api_types::ApiResponse<Paginated<PostDto>>,
+        examples((
+            "List" = (
+                summary = "ページ付き一覧",
+                value = json!({
+                    "success": true,
+                    "data": {
+                        "items": [
+                            {
+                                "id": "550e8400-e29b-41d4-a716-446655440000",
+                                "title": "Hello World",
+                                "content": "First post body...",
+                                "author_id": "1d2e3f40-1111-2222-3333-444455556666",
+                                "status": "published",
+                                "tags": ["intro"],
+                                "created_at": "2025-09-05T12:00:00Z",
+                                "updated_at": "2025-09-05T12:05:00Z"
+                            }
+                        ],
+                        "page": 1,
+                        "per_page": 20,
+                        "total": 1,
+                        "total_pages": 1
+                    },
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))
+    ),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn get_posts(
     State(state): State<AppState>,
     Query(query): Query<PostQuery>,
 ) -> Result<impl IntoResponse> {
-    let page = query.page.unwrap_or(1);
-    let limit = query.limit.unwrap_or(20);
-    let cache_key = format!(
-        "posts:page:{}:limit:{}:status:{}:author:{}:tag:{}:sort:{}",
-        page,
-        limit,
-        query.status.as_deref().unwrap_or("all"),
-        query
-            .author
-            .map(|a| a.to_string())
-            .unwrap_or_else(|| "all".to_string()),
-        query.tag.as_deref().unwrap_or("all"),
-        query.sort.as_deref().unwrap_or("created_at")
-    );
+    let (page, limit) = normalize_page_limit(query.page, query.limit);
+    let cache_key = CacheKeyBuilder::new("posts")
+        .kv("page", page)
+        .kv("limit", limit)
+        .kv_opt("status", query.status.clone())
+        .kv_opt("author", query.author)
+        .kv_opt("tag", query.tag.clone())
+        .kv_opt("sort", query.sort.clone())
+        .build();
     #[cfg(feature = "cache")]
-    if let Ok(Some(cached)) = state.cache.get::<PostsResponse>(&cache_key).await {
-        return Ok(Json(cached));
-    }
-    let posts = state
-        .db_get_posts(page, limit, query.status, query.author, query.tag, query.sort)
-        .await?;
-    let total = state.db_count_posts(None).await?;
-    let total_pages = (total as f32 / limit as f32).ceil() as u32;
-    let response = PostsResponse {
-        posts: posts.iter().map(PostResponse::from).collect(),
-        total,
-        page,
-        limit,
-        total_pages,
-    };
-    #[cfg(feature = "cache")]
-    if let Err(e) = state
-        .cache
-        .set(cache_key, &response, Some(Duration::from_secs(300)))
-        .await
     {
-        eprintln!("Failed to cache posts: {}", e);
+        let response = state.cache_get_or_set::<Paginated<PostDto>, _, _>(&cache_key, Duration::from_secs(300), || async {
+            let posts = state
+                .db_get_posts(page, limit, query.status.clone(), query.author, query.tag.clone(), query.sort.clone())
+                .await?;
+            let total = state
+                .db_count_posts_filtered(query.status.clone(), query.author, query.tag.clone())
+                .await?;
+            let paginated = Paginated::new(posts.iter().map(PostDto::from).collect(), total, page, limit);
+            Ok(paginated)
+        }).await?;
+    return Ok(ApiOk(response));
     }
-    Ok(Json(response))
+    #[cfg(not(feature = "cache"))]
+    {
+    let posts = state
+            .db_get_posts(page, limit, query.status, query.author, query.tag, query.sort)
+            .await?;
+        let total = state
+            .db_count_posts_filtered(query.status.clone(), query.author, query.tag.clone())
+            .await?;
+    let response = Paginated::new(posts.iter().map(PostDto::from).collect(), total, page, limit);
+    return Ok(ApiOk(response));
+    }
 }
 
 /// Update post
+#[utoipa::path(
+    put,
+    path = "/api/v1/posts/{id}",
+    tag = "Posts",
+    request_body = UpdatePostRequest,
+    security(("BearerAuth" = [])),
+    responses(
+    (status=200, body=crate::utils::api_types::ApiResponse<PostDto>,
+        examples((
+            "Updated" = (
+                summary = "更新成功",
+                value = json!({
+                    "success": true,
+                    "data": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "title": "Hello World (edited)",
+                        "content": "Updated post body...",
+                        "author_id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "status": "published",
+                        "tags": ["intro"],
+                        "created_at": "2025-09-05T12:00:00Z",
+                        "updated_at": "2025-09-05T12:10:00Z"
+                    },
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))
+    ),
+    (status=400, description="Validation error", body=crate::utils::api_types::ApiResponse<serde_json::Value>),
+        (status=404, description="Post not found"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn update_post(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -175,94 +299,123 @@ pub async fn update_post(
 ) -> Result<impl IntoResponse> {
     let post = state.db_update_post(id, request).await?;
     #[cfg(feature = "search")]
-    if let Err(e) = state.search.index_post(&post).await {
-        eprintln!("Failed to update post in search index: {}", e);
-    }
-    let cache_key = format!("post:{}", id);
+    state.search_index_post_safe(&post).await;
     #[cfg(feature = "cache")]
-    if let Err(e) = state.cache.delete(&cache_key).await {
-        eprintln!("Failed to clear post cache: {}", e);
-    }
-    #[cfg(feature = "cache")]
-    if let Err(e) = state.cache.delete("posts:*").await {
-        eprintln!("Failed to clear posts cache: {}", e);
-    }
-    Ok(Json(ApiResponse::success(PostResponse::from(&post))))
+    state.invalidate_post_caches(id).await;
+    Ok(ApiOk(PostDto::from(&post)))
 }
 
 /// Delete post
+#[utoipa::path(
+    delete,
+    path = "/api/v1/posts/{id}",
+    tag = "Posts",
+    security(("BearerAuth" = [])),
+    responses(
+        (status=200, description="Post deleted", examples((
+            "Deleted" = (
+                summary="削除成功",
+                value = json!({
+                    "success": true,
+                    "data": {"message": "Post deleted successfully"},
+                    "message": null,
+                    "error": null,
+                    "validation_errors": null
+                })
+            )
+        ))),
+        (status=404, description="Post not found"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn delete_post(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     state.db_delete_post(id).await?;
     #[cfg(feature = "search")]
-    if let Err(e) = state.search.remove_document(&id.to_string()).await {
-        eprintln!("Failed to remove post from search index: {}", e);
-    }
-    let cache_key = format!("post:{}", id);
+    state.search_remove_post_safe(id).await;
     #[cfg(feature = "cache")]
-    if let Err(e) = state.cache.delete(&cache_key).await {
-        eprintln!("Failed to clear post cache: {}", e);
-    }
-    #[cfg(feature = "cache")]
-    if let Err(e) = state.cache.delete("posts:*").await {
-        eprintln!("Failed to clear posts cache: {}", e);
-    }
-    Ok(Json(ApiResponse::success(json!({
+    state.invalidate_post_caches(id).await;
+    Ok(ApiOk(json!({
         "success": true,
         "message": "Post deleted successfully"
-    }))))
+    })))
 }
 
 /// Get posts by tag
+#[utoipa::path(
+    get,
+    path = "/api/v1/posts/tag/{tag}",
+    tag = "Posts",
+    params(PostQuery),
+    security(("BearerAuth" = [])),
+    responses(
+    (status=200, body=crate::utils::api_types::ApiResponse<Paginated<PostDto>>),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn get_posts_by_tag(
     State(state): State<AppState>,
     Path(tag): Path<String>,
     Query(query): Query<PostQuery>,
 ) -> Result<impl IntoResponse> {
-    let page = query.page.unwrap_or(1);
-    let limit = query.limit.unwrap_or(20);
+    let (page, limit) = normalize_page_limit(query.page, query.limit);
+    // Avoid moving fields twice
+    let status = query.status.clone();
+    let author = query.author;
+    let sort = query.sort.clone();
     let posts = state
-        .db_get_posts(page, limit, query.status, query.author, Some(tag.clone()), query.sort)
+        .db_get_posts(page, limit, status.clone(), author, Some(tag.clone()), sort)
         .await?;
-    let total = state.db_count_posts(Some(&tag)).await?;
-    let total_pages = (total as f32 / limit as f32).ceil() as u32;
-    let response = PostsResponse {
-        posts: posts.iter().map(PostResponse::from).collect(),
-        total,
-        page,
-        limit,
-        total_pages,
-    };
-    Ok(Json(response))
+    let total = state
+        .db_count_posts_filtered(status, author, Some(tag.clone()))
+        .await?;
+    let response = Paginated::new(posts.iter().map(PostDto::from).collect(), total, page, limit);
+    Ok(ApiOk(response))
 }
 
 /// Publish post
+#[utoipa::path(
+    post,
+    path = "/api/v1/posts/{id}/publish",
+    tag = "Posts",
+    security(("BearerAuth" = [])),
+    responses(
+    (status=200, body=crate::utils::api_types::ApiResponse<PostDto>, examples((
+        "Published" = (
+            summary="公開成功",
+            value = json!({
+                "success": true,
+                "data": {
+                    "id": "550e8400-e29b-41d4-a716-446655440000",
+                    "title": "Hello World",
+                    "content": "First post body...",
+                    "author_id": "1d2e3f40-1111-2222-3333-444455556666",
+                    "status": "published",
+                    "tags": ["intro"],
+                    "created_at": "2025-09-05T12:00:00Z",
+                    "updated_at": "2025-09-05T12:05:00Z"
+                },
+                "message": null,
+                "error": null,
+                "validation_errors": null
+            })
+        )
+    ))),
+        (status=404, description="Post not found"),
+        (status=500, description="Server error")
+    )
+)]
 pub async fn publish_post(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
-    let update_request = UpdatePostRequest {
-        title: None,
-        content: None,
-        excerpt: None,
-        slug: None,
-        published: Some(true),
-        tags: None,
-        category: None,
-        featured_image: None,
-        meta_title: None,
-        meta_description: None,
-        status: Some(crate::models::PostStatus::Published),
-        published_at: Some(chrono::Utc::now()),
-    };
+    let update_request = UpdatePostRequest::empty().publish_now();
     let post = state.db_update_post(id, update_request).await?;
     #[cfg(feature = "search")]
-    if let Err(e) = state.search.index_post(&post).await {
-        eprintln!("Failed to update post in search index: {}", e);
-    }
-    Ok(Json(PostResponse::from(&post)))
+    state.search_index_post_safe(&post).await;
+    Ok(ApiOk(PostDto::from(&post)))
 }
  
 

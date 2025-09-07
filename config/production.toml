@@ -31,11 +31,11 @@ enable_fuzzy = true
 fuzzy_distance = 2
 
 [auth]
-jwt_secret = "${JWT_SECRET}"
-jwt_expiration = 3600        # 1 hour
 biscuit_root_key = "${BISCUIT_ROOT_KEY}"
 bcrypt_cost = 14             # 高セキュリティ
 session_timeout = 86400      # 24 hours
+access_token_ttl_secs = 3600
+refresh_token_ttl_secs = 86400
 
 [auth.webauthn]
 rp_id = "${WEBAUTHN_RP_ID}"

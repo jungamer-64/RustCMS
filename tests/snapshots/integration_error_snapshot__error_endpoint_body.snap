@@ -1,0 +1,10 @@
+---
+source: tests/integration_error_snapshot.rs
+expression: json
+---
+{
+  "success": false,
+  "data": null,
+  "message": null,
+  "error": "invalid demo input"
+}
