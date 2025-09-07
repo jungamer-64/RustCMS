@@ -1,22 +1,28 @@
 use crate::app::AppState;
 use axum::{
-    extract::{Request, State},
+    extract::Request,
     http::{header::AUTHORIZATION, StatusCode},
     middleware::Next,
     response::Response,
 };
 
+/// Authorization ヘッダの簡易パーサ
+/// 許容スキーム: "Bearer" / "Biscuit"（どちらも同等に扱う）
+pub fn parse_authorization_header(value: &str) -> Option<&str> {
+    let v = value.trim();
+    if let Some(rest) = v.strip_prefix("Bearer ") {
+        return Some(rest.trim());
+    }
+    if let Some(rest) = v.strip_prefix("Biscuit ") {
+        return Some(rest.trim());
+    }
+    None
+}
+
 pub async fn auth_middleware(
-    State(state): State<AppState>,
     mut req: Request,
     next: Next,
 ) -> std::result::Result<Response, StatusCode> {
-    // Skip authentication for public routes
-    let path = req.uri().path();
-    if is_public_route(path) {
-        return Ok(next.run(req).await);
-    }
-
     // Extract authorization header
     let auth_header = req
         .headers()
@@ -24,32 +30,22 @@ pub async fn auth_middleware(
         .and_then(|header| header.to_str().ok())
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    // Validate token
-    let token = auth_header
-        .strip_prefix("Bearer ")
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+    // Parse supported schemes and validate token -> inject AuthContext
+    let token = parse_authorization_header(auth_header).ok_or(StatusCode::UNAUTHORIZED)?;
 
-    match state.auth_validate_token(token).await {
-        Ok(user) => {
-            req.extensions_mut().insert(user);
+    let state = req
+        .extensions()
+        .get::<AppState>()
+        .cloned()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    match state.auth_verify_biscuit(token).await {
+        Ok(ctx) => {
+            // Handlers can extract `Extension<crate::auth::AuthContext>`
+            req.extensions_mut().insert(ctx);
             Ok(next.run(req).await)
         }
         Err(_) => Err(StatusCode::UNAUTHORIZED),
     }
 }
 
-fn is_public_route(path: &str) -> bool {
-    matches!(
-        path,
-        "/health"
-            | "/metrics"
-            | "/api/public/posts"
-            | "/api/public/posts/*"
-            | "/api/auth/login"
-            | "/api/auth/register"
-            | "/api/docs"
-            | "/api/docs/*"
-            | "/redoc"
-            | "/openapi.json"
-    )
-}

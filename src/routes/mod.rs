@@ -13,49 +13,53 @@ use crate::middleware::rate_limiting::RateLimitLayer; // unified IP rate limitin
 
 /// Create the main application router
 pub fn create_router() -> Router<AppState> {
-    let mut router = Router::new()
+    // Public routes (no auth layer applied)
+    let mut public = Router::new()
         // Root API info
         .route("/api/v1", get(handlers::api_info))
-    // Metrics
-    .route("/api/v1/metrics", get(handlers::metrics::metrics))
+        // Metrics
+        .route("/api/v1/metrics", get(handlers::metrics::metrics))
         // Serve interactive docs and OpenAPI JSON at /api/docs
         .route("/api/docs", get(handlers::docs_ui))
         .route("/api/docs/openapi.json", get(handlers::openapi_json))
-        // (legacy /docs removed)
         // Health check routes
         .nest("/api/v1/health", health_routes())
         // Build info endpoint
         .route("/api/v1/info", get(handlers::api_info))
-        // 404 handler
-        .fallback(handlers::not_found)
-        // Apply global IP rate limiting (config-driven via AppState)
-    .layer(RateLimitLayer::new());
+        // 404 handler (kept on the outer router below)
+        ;
 
     // Add conditional routes based on features
     #[cfg(feature = "auth")]
     {
-        router = router.nest("/api/v1/auth", auth_routes());
+        public = public.nest("/api/v1/auth", auth_routes());
     }
 
     #[cfg(feature = "database")]
     {
-        router = router.nest("/api/v1/posts", post_routes());
-        router = router.nest("/api/v1/users", user_routes());
+        public = public.nest("/api/v1/posts", post_routes());
+        public = public.nest("/api/v1/users", user_routes());
         // Admin-only management endpoints (simple token auth in handlers)
-        router = router.nest("/api/v1/admin", admin_routes());
+        public = public.nest("/api/v1/admin", admin_routes());
         // API Key 管理 (要 auth feature)
         #[cfg(feature = "auth")]
         {
-            router = router.nest("/api/v1/api-keys", api_key_routes());
+            use axum::middleware;
+            use crate::middleware::auth::auth_middleware;
+            let api_keys = api_key_routes().layer(middleware::from_fn(auth_middleware));
+            public = public.nest("/api/v1/api-keys", api_keys);
         }
     }
 
     #[cfg(feature = "search")]
     {
-        router = router.nest("/api/v1/search", search_routes());
+        public = public.nest("/api/v1/search", search_routes());
     }
 
-    router
+    // Compose final router: rate limit globally, merge groups, add fallback
+    public
+        .fallback(handlers::not_found)
+        .layer(RateLimitLayer::new())
 }
 
 /// Authentication routes

@@ -301,3 +301,251 @@ rg -n "verify|validate" src | sort
 - PR-3: ルータ再構成（is_public_route 撤廃）
 - PR-4: OpenAPI/README 同期
 - PR-5: 非推奨 API 削除 + 最終クリーニング
+
+## 実装スケルトン（適用順）
+
+### 1) 共通抽出とトークン抽象
+
+```rust
+// filepath: /home/jungamer/Desktop/RustCMS/src/auth/service.rs
+pub enum TokenKind {
+    Bearer(String),
+    Biscuit(String),
+    ApiKey(String),
+}
+
+pub struct ParsedAuthHeader {
+    pub kind: TokenKind,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum AuthError {
+    #[error("missing authorization header")]
+    MissingAuthorization,
+    #[error("unsupported authorization scheme")]
+    InvalidScheme,
+    #[error("invalid token")]
+    InvalidToken,
+    #[error("expired token")]
+    Expired,
+    #[error("forbidden")]
+    Forbidden,
+    #[error("internal error")]
+    Internal,
+}
+
+pub fn parse_authorization_header(value: &str, allow_biscuit: bool) -> Result<ParsedAuthHeader, AuthError> {
+    let v = value.trim();
+    if let Some(rest) = v.strip_prefix("Bearer ") {
+        return Ok(ParsedAuthHeader { kind: TokenKind::Bearer(rest.trim().to_owned()) });
+    }
+    if allow_biscuit {
+        if let Some(rest) = v.strip_prefix("Biscuit ") {
+            return Ok(ParsedAuthHeader { kind: TokenKind::Biscuit(rest.trim().to_owned()) });
+        }
+    }
+    Err(AuthError::InvalidScheme)
+}
+```
+
+### 2) AuthService の単一窓口
+
+```rust
+// filepath: /home/jungamer/Desktop/RustCMS/src/auth/service.rs
+// ...existing code...
+pub struct AuthContext {
+    pub subject: String,
+    pub scopes: Vec<String>,
+    // 必要に応じて user_id, tenant_id, session_id 等を拡張
+}
+
+pub trait AuthService {
+    fn verify(&self, token: &TokenKind) -> Result<AuthContext, AuthError>;
+    fn validate_user(&self, token: &TokenKind) -> Result<crate::models::user::User, AuthError>;
+}
+
+pub struct DefaultAuthService {
+    // 署名鍵、DB 接続、設定など
+    // pub db: DbPool, pub verifier: Verifier, ...
+}
+
+impl Default for DefaultAuthService {
+    fn default() -> Self { Self { /* 初期化 */ } }
+}
+
+impl AuthService for DefaultAuthService {
+    fn verify(&self, token: &TokenKind) -> Result<AuthContext, AuthError> {
+        match token {
+            TokenKind::Bearer(t) | TokenKind::Biscuit(t) => {
+                // 署名検証/期限/スコープを一元実装（Biscuit でもここへ集約）
+                // Ok(AuthContext { subject, scopes })
+                Err(AuthError::InvalidToken) // TODO: 実装
+            }
+            TokenKind::ApiKey(_) => Err(AuthError::Forbidden),
+        }
+    }
+
+    fn validate_user(&self, token: &TokenKind) -> Result<crate::models::user::User, AuthError> {
+        let _ctx = self.verify(token)?;
+        // DB から User 解決
+        // Ok(user)
+        Err(AuthError::Internal) // TODO: 実装
+    }
+}
+```
+
+### 3) ミドルウェアは抽出→サービス呼び出しのみ
+
+```rust
+// filepath: /home/jungamer/Desktop/RustCMS/src/middleware/auth_layer.rs
+use axum::{http::Request, extract::State};
+use tower::{Layer, Service};
+use std::task::{Context, Poll};
+use crate::auth::service::{parse_authorization_header, DefaultAuthService, AuthError};
+
+#[derive(Clone)]
+pub struct AuthLayer {
+    pub allow_biscuit: bool,
+}
+
+impl<S> Layer<S> for AuthLayer {
+    type Service = AuthMiddleware<S>;
+    fn layer(&self, inner: S) -> Self::Service {
+        AuthMiddleware { inner, allow_biscuit: self.allow_biscuit }
+    }
+}
+
+#[derive(Clone)]
+pub struct AuthMiddleware<S> {
+    inner: S,
+    allow_biscuit: bool,
+}
+
+impl<B, S> Service<Request<B>> for AuthMiddleware<S>
+where
+    S: Service<Request<B>, Response = axum::response::Response> + Clone + Send + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = S::Future;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, mut req: Request<B>) -> Self::Future {
+        let header = req.headers().get(axum::http::header::AUTHORIZATION)
+            .and_then(|h| h.to_str().ok());
+        let header = match header {
+            Some(h) => h,
+            None => {
+                // 401 を返すハンドリングに差し替え可
+                return self.inner.call(req);
+            }
+        };
+
+        // State からサービスを取り出す設計にするなら Extension/State を利用
+        let _ = parse_authorization_header(header, self.allow_biscuit);
+        // 成功時に拡張へ context を注入する設計が可能
+
+        self.inner.call(req)
+    }
+}
+```
+
+### 4) ルータ構成（公開/保護をレイヤで分離）
+
+```rust
+// filepath: /home/jungamer/Desktop/RustCMS/src/routes/mod.rs
+// ...existing code...
+use axum::{Router, routing::get, Extension};
+use crate::middleware::auth_layer::AuthLayer;
+use crate::auth::service::DefaultAuthService;
+
+pub fn app_router() -> Router {
+    let svc = DefaultAuthService::default();
+
+    let public = Router::new()
+        .route("/health", get(health))
+        .route("/metrics", get(metrics))
+        .route("/api/auth/login", get(login))
+        .route("/api/docs", get(docs));
+
+    let protected = Router::new()
+        .route("/api/v1/posts", get(list_posts))
+        .route("/api/v1/posts/:id", get(get_post))
+        .layer(AuthLayer { allow_biscuit: false })
+        .layer(Extension(svc));
+
+    public.merge(protected)
+}
+```
+
+### 5) 非推奨 API の一時ラッパ
+
+```rust
+// filepath: /home/jungamer/Desktop/RustCMS/src/auth/mod.rs
+// ...existing code...
+#[deprecated(note = "Use AuthService::verify instead")]
+pub fn verify_biscuit(token: &str) -> Result<AuthContext, AuthError> {
+    // 新実装を呼ぶ
+    // DefaultAuthService::default().verify(&TokenKind::Bearer(token.to_owned()))
+    unimplemented!()
+}
+
+#[deprecated(note = "Use AuthService::validate_user instead")]
+pub fn validate_token(token: &str) -> Result<User, AuthError> {
+    // DefaultAuthService::default().validate_user(&TokenKind::Bearer(token.to_owned()))
+    unimplemented!()
+}
+```
+
+### 6) OpenAPI と README の同期テンプレ
+
+```yaml
+# filepath: /home/jungamer/Desktop/RustCMS/openapi/partials/security.yml
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - BearerAuth: []
+```
+
+```md
+# filepath: /home/jungamer/Desktop/RustCMS/README.md
+## 認証
+デフォルトは Authorization: Bearer <token> を使用します。
+Biscuit スキームを許容する場合は、設定で allow_biscuit=true を有効化してください。
+```
+
+### 7) 最小テスト雛形
+
+```rust
+// filepath: /home/jungamer/Desktop/RustCMS/tests/auth_header_parse.rs
+use rustcms::auth::service::{parse_authorization_header, AuthError};
+
+#[test]
+fn bearer_ok() {
+    let p = parse_authorization_header("Bearer abc", false).unwrap();
+    match p.kind { rustcms::auth::service::TokenKind::Bearer(s) => assert_eq!(s, "abc"), _ => panic!() }
+}
+
+#[test]
+fn biscuit_rejected_when_not_allowed() {
+    let e = parse_authorization_header("Biscuit xyz", false).unwrap_err();
+    matches!(e, AuthError::InvalidScheme);
+}
+```
+
+## 適用チェックリスト
+
+- [ ] parse_authorization_header を導入し既存抽出箇所を置換
+- [ ] AuthService を導入し verify/validate_user を 1 カ所化
+- [ ] ルータで保護ルートにのみ AuthLayer を適用（is_public_route 削除）
+- [ ] 非推奨 API に #[deprecated] を付与し呼び先を移行
+- [ ] OpenAPI/README を同期
+- [ ] 単体/統合テストを追加し CI で緑化
