@@ -235,13 +235,17 @@ pub async fn get_posts(
         &cache_key,
         crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
         move || async move {
-            let posts = state
-                .db_get_posts(page, limit, status.clone(), author, tag.clone(), sort.clone())
-                .await?;
-            let total = state
-                .db_count_posts_filtered(status, author, tag)
-                .await?;
-            Ok(Paginated::new(posts.iter().map(PostDto::from).collect(), total, page, limit))
+            crate::utils::paginate::fetch_paginated(
+                page,
+                limit,
+                || async {
+                    let posts = state
+                        .db_get_posts(page, limit, status.clone(), author, tag.clone(), sort.clone())
+                        .await?;
+                    Ok(posts.iter().map(PostDto::from).collect())
+                },
+                || async { state.db_count_posts_filtered(status.clone(), author, tag.clone()).await },
+            ).await
         },
     ).await?;
     Ok(ApiOk(response))
@@ -369,13 +373,17 @@ pub async fn get_posts_by_tag(
         &cache_key,
         crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
         move || async move {
-            let posts = state
-                .db_get_posts(page, limit, status.clone(), author, Some(t.clone()), sort.clone())
-                .await?;
-            let total = state
-                .db_count_posts_filtered(status, author, Some(t.clone()))
-                .await?;
-            Ok(Paginated::new(posts.iter().map(PostDto::from).collect(), total, page, limit))
+            crate::utils::paginate::fetch_paginated(
+                page,
+                limit,
+                || async {
+                    let posts = state
+                        .db_get_posts(page, limit, status.clone(), author, Some(t.clone()), sort.clone())
+                        .await?;
+                    Ok(posts.iter().map(PostDto::from).collect())
+                },
+                || async { state.db_count_posts_filtered(status.clone(), author, Some(t.clone())).await },
+            ).await
         },
     ).await?;
     Ok(ApiOk(response))

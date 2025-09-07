@@ -87,11 +87,17 @@ pub async fn get_users(
             &cache_key,
             crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
             move || async move {
-                let users = state
-                    .db_get_users(page, limit, role.clone(), active, sort.clone())
-                    .await?;
-                let total = state.db_count_users_filtered(role, active).await?;
-                Ok(Paginated::new(users.iter().map(UserInfo::from).collect(), total, page, limit))
+                crate::utils::paginate::fetch_paginated(
+                    page,
+                    limit,
+                    || async {
+                        let users = state
+                            .db_get_users(page, limit, role.clone(), active, sort.clone())
+                            .await?;
+                        Ok(users.iter().map(UserInfo::from).collect())
+                    },
+                    || async { state.db_count_users_filtered(role.clone(), active).await },
+                ).await
             },
         ).await?
     };
@@ -299,20 +305,24 @@ pub async fn get_user_posts(
         &cache_key,
         crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
         move || async move {
-            let posts = state
-                .db_get_posts(
-                    page,
-                    limit,
-                    status.clone(),
-                    Some(id),
-                    tag.clone(),
-                    sort.clone(),
-                )
-                .await?;
-            let total = state
-                .db_count_posts_filtered(status, Some(id), tag)
-                .await?;
-            Ok(crate::models::pagination::Paginated::new(posts.iter().map(crate::handlers::posts::PostDto::from).collect(), total, page, limit))
+            crate::utils::paginate::fetch_paginated(
+                page,
+                limit,
+                || async {
+                    let posts = state
+                        .db_get_posts(
+                            page,
+                            limit,
+                            status.clone(),
+                            Some(id),
+                            tag.clone(),
+                            sort.clone(),
+                        )
+                        .await?;
+                    Ok(posts.iter().map(crate::handlers::posts::PostDto::from).collect())
+                },
+                || async { state.db_count_posts_filtered(status.clone(), Some(id), tag.clone()).await },
+            ).await
         },
     ).await?;
     return Ok(ApiOk(response));
