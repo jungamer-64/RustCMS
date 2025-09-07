@@ -10,7 +10,6 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use serde_json::json;
-use std::time::Duration;
 use uuid::Uuid;
 
 use crate::utils::{cache_key::CacheKeyBuilder};
@@ -159,19 +158,16 @@ pub async fn get_post(
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let cache_key = CacheKeyBuilder::new("post").kv("id", id).build();
-    #[cfg(feature = "cache")]
-    {
-    let response = state.cache_get_or_set::<PostDto, _, _>(&cache_key, Duration::from_secs(300), || async {
+    let dto: PostDto = crate::utils::cache_helpers::cache_or_compute(
+        state.clone(),
+        &cache_key,
+        crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
+        move || async move {
             let post = state.db_get_post_by_id(id).await?;
-        Ok(PostDto::from(&post))
-        }).await?;
-    return Ok(ApiOk(response));
-    }
-    #[cfg(not(feature = "cache"))]
-    {
-        let post = state.db_get_post_by_id(id).await?;
-    return Ok(ApiOk(PostDto::from(&post)));
-    }
+            Ok(PostDto::from(&post))
+        },
+    ).await?;
+    Ok(ApiOk(dto))
 }
 
 /// Get all posts with pagination and filtering
@@ -229,31 +225,26 @@ pub async fn get_posts(
         .kv_opt("tag", query.tag.clone())
         .kv_opt("sort", query.sort.clone())
         .build();
-    #[cfg(feature = "cache")]
-    {
-        let response = state.cache_get_or_set::<Paginated<PostDto>, _, _>(&cache_key, Duration::from_secs(300), || async {
+    // clone parameters for move into closure
+    let status = query.status.clone();
+    let author = query.author;
+    let tag = query.tag.clone();
+    let sort = query.sort.clone();
+    let response: Paginated<PostDto> = crate::utils::cache_helpers::cache_or_compute(
+        state.clone(),
+        &cache_key,
+        crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
+        move || async move {
             let posts = state
-                .db_get_posts(page, limit, query.status.clone(), query.author, query.tag.clone(), query.sort.clone())
+                .db_get_posts(page, limit, status.clone(), author, tag.clone(), sort.clone())
                 .await?;
             let total = state
-                .db_count_posts_filtered(query.status.clone(), query.author, query.tag.clone())
+                .db_count_posts_filtered(status, author, tag)
                 .await?;
-            let paginated = Paginated::new(posts.iter().map(PostDto::from).collect(), total, page, limit);
-            Ok(paginated)
-        }).await?;
-    return Ok(ApiOk(response));
-    }
-    #[cfg(not(feature = "cache"))]
-    {
-    let posts = state
-            .db_get_posts(page, limit, query.status, query.author, query.tag, query.sort)
-            .await?;
-        let total = state
-            .db_count_posts_filtered(query.status.clone(), query.author, query.tag.clone())
-            .await?;
-    let response = Paginated::new(posts.iter().map(PostDto::from).collect(), total, page, limit);
-    return Ok(ApiOk(response));
-    }
+            Ok(Paginated::new(posts.iter().map(PostDto::from).collect(), total, page, limit))
+        },
+    ).await?;
+    Ok(ApiOk(response))
 }
 
 /// Update post
@@ -361,17 +352,32 @@ pub async fn get_posts_by_tag(
     Query(query): Query<PostQuery>,
 ) -> Result<impl IntoResponse> {
     let (page, limit) = normalize_page_limit(query.page, query.limit);
-    // Avoid moving fields twice
+    let cache_key = CacheKeyBuilder::new("posts:tag")
+        .kv("tag", &tag)
+        .kv("page", page)
+        .kv("limit", limit)
+        .kv_opt("status", query.status.clone())
+        .kv_opt("author", query.author)
+        .kv_opt("sort", query.sort.clone())
+        .build();
     let status = query.status.clone();
     let author = query.author;
     let sort = query.sort.clone();
-    let posts = state
-        .db_get_posts(page, limit, status.clone(), author, Some(tag.clone()), sort)
-        .await?;
-    let total = state
-        .db_count_posts_filtered(status, author, Some(tag.clone()))
-        .await?;
-    let response = Paginated::new(posts.iter().map(PostDto::from).collect(), total, page, limit);
+    let t = tag.clone();
+    let response: Paginated<PostDto> = crate::utils::cache_helpers::cache_or_compute(
+        state.clone(),
+        &cache_key,
+        crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
+        move || async move {
+            let posts = state
+                .db_get_posts(page, limit, status.clone(), author, Some(t.clone()), sort.clone())
+                .await?;
+            let total = state
+                .db_count_posts_filtered(status, author, Some(t.clone()))
+                .await?;
+            Ok(Paginated::new(posts.iter().map(PostDto::from).collect(), total, page, limit))
+        },
+    ).await?;
     Ok(ApiOk(response))
 }
 

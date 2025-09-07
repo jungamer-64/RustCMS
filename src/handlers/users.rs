@@ -10,7 +10,6 @@ use axum::{
 use serde::Deserialize;
 use utoipa::ToSchema;
 use serde_json::json;
-use std::time::Duration;
 use uuid::Uuid;
 
 use crate::utils::{common_types::UserInfo, cache_key::CacheKeyBuilder};
@@ -80,24 +79,21 @@ pub async fn get_users(
         .build();
 
     let response = {
-        #[cfg(feature = "cache")]
-        {
-            state.cache_get_or_set::<Paginated<UserInfo>, _, _>(&cache_key, Duration::from_secs(300), || async {
+        let role = query.role.clone();
+        let active = query.active;
+        let sort = query.sort.clone();
+        crate::utils::cache_helpers::cache_or_compute(
+            state.clone(),
+            &cache_key,
+            crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
+            move || async move {
                 let users = state
-                    .db_get_users(page, limit, query.role.clone(), query.active, query.sort.clone())
+                    .db_get_users(page, limit, role.clone(), active, sort.clone())
                     .await?;
-                let total = state.db_count_users_filtered(query.role.clone(), query.active).await?;
+                let total = state.db_count_users_filtered(role, active).await?;
                 Ok(Paginated::new(users.iter().map(UserInfo::from).collect(), total, page, limit))
-            }).await?
-        }
-        #[cfg(not(feature = "cache"))]
-        {
-            let users = state
-                .db_get_users(page, limit, query.role.clone(), query.active, query.sort.clone())
-                .await?;
-            let total = state.db_count_users_filtered(query.role.clone(), query.active).await?;
-            Paginated::new(users.iter().map(UserInfo::from).collect(), total, page, limit)
-        }
+            },
+        ).await?
     };
     Ok(ApiOk(response))
 }
@@ -136,16 +132,16 @@ pub async fn get_user(
 ) -> Result<impl IntoResponse> {
     // Try cache first
     let cache_key = CacheKeyBuilder::new("user").kv("id", id).build();
-    let response = {
-        #[cfg(feature = "cache")]
-        { state.cache_get_or_set::<UserInfo, _, _>(&cache_key, Duration::from_secs(600), || async {
-                let user = state.db_get_user_by_id(id).await?;
-                Ok(UserInfo::from(&user))
-            }).await? }
-        #[cfg(not(feature = "cache"))]
-        { UserInfo::from(&state.db_get_user_by_id(id).await?) }
-    };
-    Ok(ApiOk(response))
+    let info: UserInfo = crate::utils::cache_helpers::cache_or_compute(
+        state.clone(),
+        &cache_key,
+        crate::utils::cache_ttl::CACHE_TTL_LONG,
+        move || async move {
+            let user = state.db_get_user_by_id(id).await?;
+            Ok(UserInfo::from(&user))
+        },
+    ).await?;
+    Ok(ApiOk(info))
 }
 
 /// Update user
@@ -295,52 +291,31 @@ pub async fn get_user_posts(
         .kv_opt("tag", query.tag.clone())
         .kv_opt("sort", query.sort.clone())
         .build();
-    #[cfg(feature = "cache")]
-    {
-    let response = state.cache_get_or_set::<crate::models::pagination::Paginated<crate::handlers::posts::PostDto>, _, _>(&cache_key, std::time::Duration::from_secs(300), || async {
+    let status = query.status.clone();
+    let tag = query.tag.clone();
+    let sort = query.sort.clone();
+    let response = crate::utils::cache_helpers::cache_or_compute(
+        state.clone(),
+        &cache_key,
+        crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
+        move || async move {
             let posts = state
                 .db_get_posts(
                     page,
                     limit,
-                    query.status.clone(),
+                    status.clone(),
                     Some(id),
-                    query.tag.clone(),
-                    query.sort.clone(),
+                    tag.clone(),
+                    sort.clone(),
                 )
                 .await?;
             let total = state
-                .db_count_posts_filtered(
-                    query.status.clone(),
-                    Some(id),
-                    query.tag.clone(),
-                )
+                .db_count_posts_filtered(status, Some(id), tag)
                 .await?;
             Ok(crate::models::pagination::Paginated::new(posts.iter().map(crate::handlers::posts::PostDto::from).collect(), total, page, limit))
-        }).await?;
+        },
+    ).await?;
     return Ok(ApiOk(response));
-    }
-    #[cfg(not(feature = "cache"))]
-    {
-        // Avoid moving fields twice
-        let status = query.status.clone();
-        let tag = query.tag.clone();
-        let sort = query.sort.clone();
-        let posts = state
-            .db_get_posts(
-                page,
-                limit,
-                status.clone(),
-                Some(id),
-                tag.clone(),
-                sort,
-            )
-            .await?;
-    let total = state
-        .db_count_posts_filtered(status, Some(id), tag)
-        .await?;
-    let response = crate::models::pagination::Paginated::new(posts.iter().map(crate::handlers::posts::PostDto::from).collect(), total, page, limit);
-    return Ok(ApiOk(response));
-    }
 }
 
 /// Change user role (admin only)
