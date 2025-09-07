@@ -415,14 +415,23 @@ impl AuthService {
     /// 直接 DB コネクションを取得せず、`AppState` の `db_get_user_by_id` を利用することで
     /// メトリクスと一貫した DB アクセス経路を確保する。
     pub async fn verify_biscuit(&self, state: &crate::AppState, token: &str) -> Result<AuthContext> {
-        self.verify_biscuit_generic(token, None).await?; // 署名 & exp など基本検証
-        // 既存仕様: user fact 取得 (verify_biscuit_generic 内で抽出できるよう統合)
-        let parsed = self.parse_biscuit(token)?;
-        // Verify user (DB)
-        let user = state.db_get_user_by_id(parsed.user_id).await.map_err(|_| AuthError::UserNotFound)?;
-    self.ensure_active(&user)?;
-    let role_clone = parsed.role.clone();
-    Ok(AuthContext { user_id: parsed.user_id, username: parsed.username, role: parsed.role, session_id: parsed.session_id, permissions: self.get_role_permissions(role_clone.as_str()) })
+        let (ctx, _user) = self.verify_biscuit_with_user(state, token).await?;
+        Ok(ctx)
+    }
+
+    /// Biscuit 検証＋ユーザー取得（有効性検査込み）を一度で行い、DB 取得の重複を避ける
+    pub async fn verify_biscuit_with_user(
+        &self,
+        state: &crate::AppState,
+        token: &str,
+    ) -> Result<(AuthContext, crate::models::User)> {
+        let ctx = self.verify_biscuit_generic(token, None).await?;
+        let user = state
+            .db_get_user_by_id(ctx.user_id)
+            .await
+            .map_err(|_| AuthError::UserNotFound)?;
+        self.ensure_active(&user)?;
+        Ok((ctx, user))
     }
 
     fn parse_biscuit(&self, token: &str) -> Result<ParsedBiscuit> {
@@ -444,23 +453,58 @@ impl AuthService {
     }
 
     async fn verify_biscuit_generic(&self, token: &str, expect_type: Option<&str>) -> Result<AuthContext> {
-        let parsed = self.parse_biscuit(token)?;
-        if let Some(t) = expect_type { if parsed.token_type != t { return Err(AuthError::InvalidToken.into()); } }
-        // セッション整合性 (存在 / 期限 / version は access では version 一致のみ任意だが整合性優先で確認)
+        let parsed = self.parse_and_check(token, expect_type)?;
+        // セッション整合性チェックを専用ヘルパーへ委譲
+        self.validate_session_consistency(&parsed).await?;
+        Ok(self.build_auth_context(&parsed))
+    }
+
+    /// セッション存在・期限・バージョン整合性を検証し、last_accessed を更新
+    async fn validate_session_consistency(&self, parsed: &ParsedBiscuit) -> Result<()> {
         let mut sessions = self.sessions.write().await;
-        if let Some(sess) = sessions.get_mut(&parsed.session_id) {
-            if sess.expires_at < Utc::now() { return Err(AuthError::TokenExpired.into()); }
-            // last_accessed 更新
-            sess.last_accessed = Utc::now();
-            // access の場合は version <= stored_version を許可 (新しい refresh で version が進むため)
-            if parsed.token_type == "access" && parsed.version > sess.refresh_version { return Err(AuthError::InvalidToken.into()); }
-            // refresh の場合は厳密一致を要求 (refresh_access_token で再発行済みなら旧は拒否)
-            if parsed.token_type == "refresh" && parsed.version != sess.refresh_version { return Err(AuthError::InvalidToken.into()); }
-        } else {
+        let now = Utc::now();
+        let sess = sessions.get_mut(&parsed.session_id).ok_or(AuthError::InvalidToken)?;
+        if sess.expires_at < now { return Err(AuthError::TokenExpired.into()); }
+        // last_accessed 更新
+        sess.last_accessed = now;
+        // access の場合は version <= stored_version を許可 (新しい refresh で version が進むため)
+        if parsed.token_type == "access" && parsed.version > sess.refresh_version {
             return Err(AuthError::InvalidToken.into());
         }
-    let role_clone = parsed.role.clone();
-    Ok(AuthContext { user_id: parsed.user_id, username: parsed.username, role: parsed.role, session_id: parsed.session_id, permissions: self.get_role_permissions(role_clone.as_str()) })
+        // refresh の場合は厳密一致を要求 (refresh_access_token で再発行済みなら旧は拒否)
+        if parsed.token_type == "refresh" && parsed.version != sess.refresh_version {
+            return Err(AuthError::InvalidToken.into());
+        }
+        Ok(())
+    }
+
+    #[inline]
+    fn ensure_token_type(&self, expect_type: Option<&str>, actual: &str) -> Result<()> {
+        if let Some(t) = expect_type {
+            if actual != t {
+                return Err(AuthError::InvalidToken.into());
+            }
+        }
+        Ok(())
+    }
+
+    #[inline]
+    fn build_auth_context(&self, parsed: &ParsedBiscuit) -> AuthContext {
+        let role_clone = parsed.role.clone();
+        AuthContext {
+            user_id: parsed.user_id,
+            username: parsed.username.clone(),
+            role: parsed.role.clone(),
+            session_id: parsed.session_id.clone(),
+            permissions: self.get_role_permissions(role_clone.as_str()),
+        }
+    }
+
+    #[inline]
+    fn parse_and_check(&self, token: &str, expect_type: Option<&str>) -> Result<ParsedBiscuit> {
+        let parsed = self.parse_biscuit(token)?;
+        self.ensure_token_type(expect_type, &parsed.token_type)?;
+        Ok(parsed)
     }
 
     /// Get permissions for a role
@@ -538,9 +582,7 @@ impl AuthService {
 
     /// Validate token (Biscuit access) and return user
     pub async fn validate_token(&self, state: &crate::AppState, token: &str) -> Result<crate::models::User> {
-        let parsed = self.verify_biscuit_generic(token, Some("access")).await?;
-        let user = state.db_get_user_by_id(parsed.user_id).await.map_err(|_| AuthError::UserNotFound)?;
-    self.ensure_active(&user)?;
+        let (_ctx, user) = self.verify_biscuit_with_user(state, token).await?;
         Ok(user)
     }
 
