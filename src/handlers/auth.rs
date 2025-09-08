@@ -13,6 +13,7 @@ use serde_json::json;
 
 use crate::utils::{common_types::UserInfo};
 use crate::utils::response_ext::ApiOk;
+use crate::utils::auth_response::AuthTokens;
 use crate::{auth::LoginRequest, models::CreateUserRequest, AppState, Result};
 
 /// Registration request
@@ -109,6 +110,7 @@ pub async fn register(
 
     // Build full auth response (access/refresh/biscuit + session) via AppState
     let auth = state.auth_build_auth_response(user, false).await?;
+    // Backward compatibility: still return LoginResponse shape externally
     Ok((StatusCode::CREATED, ApiOk(LoginResponse::from(auth))))
 }
 
@@ -244,12 +246,8 @@ pub struct RefreshResponse { pub success: bool, pub access_token: String, pub ex
 )]
 pub async fn refresh_token(State(state): State<AppState>, Json(body): Json<RefreshRequest>) -> Result<impl IntoResponse> {
     let refreshed = state.auth_refresh_access_token(&body.refresh_token).await?;
-    let resp = RefreshResponse {
-        success: true,
-        access_token: refreshed.access_token,
-        expires_in: refreshed.expires_in,
-        session_id: refreshed.session_id,
-        refresh_token: refreshed.refresh_token,
-    };
+    // 既存の公開スキーマ (RefreshResponse) はそのまま返しつつ内部的には AuthTokens へ統一
+    let tokens: AuthTokens = refreshed.into();
+    let resp = RefreshResponse { success: true, access_token: tokens.access_token.clone(), expires_in: tokens.expires_in, session_id: tokens.session_id.clone(), refresh_token: tokens.refresh_token.clone() };
     Ok(ApiOk(resp))
 }

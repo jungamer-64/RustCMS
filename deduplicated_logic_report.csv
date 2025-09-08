@@ -1,0 +1,10 @@
+area,canonical_impl,file,notes,replaced_examples
+cache_keys,ListCacheKey & entity_id_key,src/utils/cache_key.rs,Unified list/entity cache key construction,build_posts_cache_key|build_users_cache_key (legacy wrappers retained)
+api_delete_response,delete_with & ok_message,src/utils/response_ext.rs,Standard JSON success/delete responses,handlers/posts.rs::delete_post|handlers/users.rs::delete_user|handlers/api_keys.rs::revoke_api_key (was raw Json/status)
+create_entity,create_entity,src/utils/crud.rs,Generic create (201 + ApiOk) with optional hook,handlers/posts.rs::create_post|handlers/admin.rs::create_post (was inline DB + mapping)
+update_entity,update_entity,src/utils/crud.rs,Generic update with optional post-hook (search indexing),handlers/posts.rs::update_post|handlers/users.rs::update_user (was direct calls + indexing)
+api_keys_standardization,ApiOk + delete_with patterns,src/handlers/api_keys.rs,Normalized create/list/revoke response shapes,create_api_key/list_api_keys/revoke_api_key (was mixed tuple + raw Json)
+pagination_core,fetch_paginated_cached,src/utils/paginate.rs,Base cached pagination (unchanged this pass),used internally by higher helpers
+pagination_mapped,fetch_paginated_cached_mapped,src/utils/paginate.rs,Eliminated per-handler map boilerplate,handlers/posts.rs::paginate_posts|handlers/users.rs::paginate_users (replaced fetch_paginated_cached_with_filters + map loop)
+admin_post_unify,create_entity + delete_with,src/handlers/admin.rs,Admin create/delete aligned with public patterns,admin::create_post|admin::delete_post (was manual + 204)
+auth_tokens_unify,AuthTokens struct + From conversions,src/utils/auth_response.rs,Central token shaping used by auth handlers,handlers/auth.rs::refresh_token (manual struct => From impl)
