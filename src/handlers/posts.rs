@@ -71,23 +71,16 @@ impl From<&Post> for PostDto {
 
 // Posts list now directly returns Paginated<PostDto> instead of wrapper
 
-// (Deprecated) build_posts_cache_key retained temporarily for backward compatibility of any external modules/tests.
-// Internally we now prefer ListCacheKey::Posts.
+#[deprecated(note = "Use ListCacheKey::Posts.to_cache_key() (and build_list_cache_key for non-canonical bases)")]
 pub(crate) fn build_posts_cache_key(base: &str, page: u32, limit: u32, status: &Option<String>, author: &Option<Uuid>, tag: &Option<String>, sort: &Option<String>) -> String {
-    if base == "posts" { // canonical path
+    if base == "posts" {
         ListCacheKey::Posts { page, limit, status, author, tag, sort }.to_cache_key()
     } else {
-        // fall back to original behavior for custom bases (user_posts, posts:tag etc.)
         crate::utils::cache_key::build_list_cache_key(
             base,
             page,
             limit,
-            &[
-                ("status", status.clone()),
-                ("author", author.map(|u| u.to_string())),
-                ("tag", tag.clone()),
-                ("sort", sort.clone()),
-            ],
+            &[("status", status.clone()), ("author", author.map(|u| u.to_string())), ("tag", tag.clone()), ("sort", sort.clone())],
         )
     }
 }
@@ -176,7 +169,7 @@ pub async fn create_post(
     #[cfg(feature = "search")]
     let hook = Some(|model: &Post, st: AppState| {
         let m = model.clone();
-        async move { st.search_index_post_safe(&m).await }
+        async move { st.search_index_entity_safe(crate::utils::search_index::SearchEntity::Post(&m)).await }
     });
     #[cfg(not(feature = "search"))]
     let hook: Option<fn(&Post, AppState) -> _> = None;
@@ -289,7 +282,7 @@ pub async fn get_posts(
     Query(query): Query<PostQuery>,
 ) -> Result<impl IntoResponse> {
     let (page, limit) = normalize_page_limit(query.page, query.limit);
-    let cache_key = build_posts_cache_key("posts", page, limit, &query.status, &query.author, &query.tag, &query.sort);
+    let cache_key = ListCacheKey::Posts { page, limit, status: &query.status, author: &query.author, tag: &query.tag, sort: &query.sort }.to_cache_key();
     let resp = paginate_posts(
         state.clone(),
         page,
@@ -352,11 +345,9 @@ pub async fn update_post(
         |st, pid, req| async move { st.db_update_post(pid, req).await },
         |p: &crate::models::post::Post| PostDto::from(p),
     Some(|p: crate::models::post::Post, st: AppState| async move {
-            #[cfg(feature = "search")]
-            {
-        st.search_index_post_safe(&p).await;
-            }
-        })
+        #[cfg(feature = "search")]
+        st.search_index_entity_safe(crate::utils::search_index::SearchEntity::Post(&p)).await;
+    })
     ).await?;
     Ok(api_ok)
 }
@@ -416,7 +407,12 @@ pub async fn get_posts_by_tag(
 ) -> Result<impl IntoResponse> {
     let (page, limit) = normalize_page_limit(query.page, query.limit);
     let tag_opt = Some(tag.clone());
-    let cache_key = build_posts_cache_key("posts:tag", page, limit, &query.status, &query.author, &tag_opt, &query.sort);
+    let cache_key = crate::utils::cache_key::build_list_cache_key(
+        "posts:tag",
+        page,
+        limit,
+        &[("status", query.status.clone()), ("author", query.author.map(|u| u.to_string())), ("tag", tag_opt.clone()), ("sort", query.sort.clone())]
+    );
     let resp = paginate_posts(
         state.clone(),
         page,

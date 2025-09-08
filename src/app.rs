@@ -18,6 +18,8 @@ use crate::cache::CacheService;
 use crate::database::Database;
 #[cfg(feature = "search")]
 use crate::search::SearchService;
+#[cfg(feature = "search")]
+use crate::utils::search_index::SearchEntity;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use std::{sync::Arc, time::Instant};
@@ -601,6 +603,23 @@ impl AppState {
     pub async fn search_index_user_safe(&self, user: &crate::models::User) {
         if let Err(e) = self.search.index_user(user).await {
             warn!(user_id = %user.id, error = ?e, "search index user failed");
+        }
+    }
+
+    // ---------------- Generic search index dispatcher (reduces closure duplication) ----------------
+    #[cfg(feature = "search")]
+    pub async fn search_index_entity_safe(&self, entity: SearchEntity<'_>) {
+        match entity {
+            SearchEntity::Post(p) => {
+                if let Err(e) = self.search.index_post(p).await {
+                    warn!(post_id = %p.id, error=?e, "search index post failed");
+                }
+            }
+            SearchEntity::User(u) => {
+                if let Err(e) = self.search.index_user(u).await {
+                    warn!(user_id = %u.id, error=?e, "search index user failed");
+                }
+            }
         }
     }
 

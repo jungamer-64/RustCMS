@@ -125,6 +125,7 @@ pub async fn get_users(
 
 // Helper to build consistent cache key for users listing
 // Deprecated: replaced by ListCacheKey::Users; kept temporarily if other modules reference it.
+#[deprecated(note = "Use ListCacheKey::Users.to_cache_key() directly")]
 pub(crate) fn build_users_cache_key(page: u32, limit: u32, role: &Option<String>, active: Option<bool>, sort: &Option<String>) -> String {
     ListCacheKey::Users { page, limit, role, active, sort }.to_cache_key()
 }
@@ -217,7 +218,7 @@ pub async fn update_user(
         |u: &crate::models::user::User| UserInfo::from(u),
         Some(|u: crate::models::user::User, st: AppState| async move {
             #[cfg(feature = "search")]
-            st.search_index_user_safe(&u).await;
+            st.search_index_entity_safe(crate::utils::search_index::SearchEntity::User(&u)).await;
         })
     ).await?;
     Ok(api_ok)
@@ -307,14 +308,11 @@ pub async fn get_user_posts(
 ) -> Result<impl IntoResponse> {
     let (page, limit) = normalize_page_limit(query.page, query.limit);
     let tag_opt = query.tag.clone();
-    let cache_key = crate::handlers::posts::build_posts_cache_key(
+    let cache_key = crate::utils::cache_key::build_list_cache_key(
         "user_posts:user",
         page,
         limit,
-        &query.status,
-        &Some(id),
-        &tag_opt,
-        &query.sort,
+        &[("status", query.status.clone()), ("author", Some(id.to_string())), ("tag", tag_opt.clone()), ("sort", query.sort.clone())]
     );
     let resp = crate::handlers::posts::paginate_posts(
         state.clone(),
