@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::models::{User, UserRole};
+use crate::dto_from_model; // macro
 
 /// Unified user information for API responses
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -24,29 +25,19 @@ pub struct UserInfo {
     pub updated_at: DateTime<Utc>,
 }
 
-impl From<&User> for UserInfo {
-    fn from(user: &User) -> Self {
-        Self {
-            id: user.id.to_string(),
-            username: user.username.clone(),
-            email: user.email.clone(),
-            first_name: user.first_name.clone(),
-            last_name: user.last_name.clone(),
-            role: UserRole::parse_str(&user.role).unwrap_or(UserRole::Subscriber),
-            is_active: user.is_active,
-            email_verified: user.email_verified,
-            last_login: user.last_login,
-            created_at: user.created_at,
-            updated_at: user.updated_at,
-        }
-    }
-}
-
-impl From<User> for UserInfo {
-    fn from(user: User) -> Self {
-        Self::from(&user)
-    }
-}
+dto_from_model!(UserInfo, User, |u| UserInfo {
+    id: u.id.to_string(),
+    username: u.username.clone(),
+    email: u.email.clone(),
+    first_name: u.first_name.clone(),
+    last_name: u.last_name.clone(),
+    role: UserRole::parse_str(&u.role).unwrap_or(UserRole::Subscriber),
+    is_active: u.is_active,
+    email_verified: u.email_verified,
+    last_login: u.last_login,
+    created_at: u.created_at,
+    updated_at: u.updated_at,
+});
 
 /// Post summary for admin interface
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

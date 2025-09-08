@@ -11,6 +11,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::utils::cache_key::{ListCacheKey, entity_id_key};
+use crate::dto_from_model; // macro
 use crate::utils::response_ext::delete_with;
 use crate::utils::crud;
 use crate::utils::response_ext::ApiOk;
@@ -47,27 +48,23 @@ pub struct PostDto {
     pub published_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-impl From<&Post> for PostDto {
-    fn from(post: &Post) -> Self {
-        Self {
-            id: post.id,
-            title: post.title.clone(),
-            content: post.content.clone(),
-            excerpt: post.excerpt.clone(),
-            status: post.status.clone(),
-            author_id: post.author_id,
-            tags: post.tags.clone(),
-            metadata: serde_json::json!({
-                "meta_title": post.meta_title,
-                "meta_description": post.meta_description,
-                "categories": post.categories
-            }),
-            created_at: post.created_at,
-            updated_at: post.updated_at,
-            published_at: post.published_at,
-        }
-    }
-}
+dto_from_model!(PostDto, Post, |p| PostDto {
+    id: p.id,
+    title: p.title.clone(),
+    content: p.content.clone(),
+    excerpt: p.excerpt.clone(),
+    status: p.status.clone(),
+    author_id: p.author_id,
+    tags: p.tags.clone(),
+    metadata: serde_json::json!({
+        "meta_title": p.meta_title,
+        "meta_description": p.meta_description,
+        "categories": p.categories
+    }),
+    created_at: p.created_at,
+    updated_at: p.updated_at,
+    published_at: p.published_at,
+});
 
 // Posts list now directly returns Paginated<PostDto> instead of wrapper
 
