@@ -44,7 +44,7 @@ async fn tampered_refresh_token_rejected() {
     let auth = build_auth(&db).await;
     let user = dummy_user();
     let issued = auth.create_auth_response(user, false).await.expect("issue");
-    let tampered = naive_tamper(&issued.refresh_token);
+    let tampered = naive_tamper(&issued.tokens.refresh_token);
     assert!(auth.refresh_access_token(&tampered).await.is_err(), "tampered token should be invalid");
 }
 

@@ -165,6 +165,23 @@ cargo build --features legacy-auth-flat
 
 将来のメジャーリリースでこの feature とフラットフィールドは削除予定です。新規実装は `response.tokens.*` を参照してください。
 
+### 🧭 将来の Breaking (予告 / 3.0.0 計画)
+
+次期メジャー (3.0.0) では以下を削除予定です:
+
+1. Cargo feature `legacy-auth-flat`
+2. フラットフィールド: `access_token`, `refresh_token`, `biscuit_token`, `expires_in`, `session_id`, `token`
+3. 互換用 `LoginResponse` スキーマ
+
+移行ガイド (要約):
+
+- すべての直接参照を `response.tokens.*` へ置換 (例: `response.access_token` → `response.tokens.access_token`)
+- `token` (access_token エイリアス) を除去
+- OpenAPI 生成キャッシュをクリアし SDK 再生成
+
+詳細: `docs/AUTH_MIGRATION_V2.md` の Phase 4 セクションおよび `CHANGELOG.md` の Planned を参照。
+
+
 
 ## �🛠️ クイックスタート
 
@@ -283,7 +300,9 @@ cargo run --bin gen_biscuit_keys -- --out-dir keys --list
 
 API キーは長期自動処理 (CI / バッチ / 外部統合) 用。ユーザ認証後に管理エンドポイントで発行し、生キーはそのレスポンス以外では再取得不可。DB では **復号不能** (Argon2) かつ検索高速化のための決定的 `lookup_hash` (衝突極小) を持ちます。
 
+ 
 #### レガシー行バックフィル
+
 初期段階で `lookup_hash` 空の行が存在する場合、ミドルウェアは検証成功時にその行へハッシュを後書きし徐々に移行します。運用 CLI (backfill) により一括同定・失効も可能です。
 
 `backfill_api_key_lookup` バイナリ:

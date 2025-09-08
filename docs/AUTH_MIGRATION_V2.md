@@ -1,7 +1,7 @@
 # Auth Response Migration (V2)
 
 日付: 2025-09-09  
-対象バージョン: 次回マイナーバージョン (後方互換段階) → 将来メジャーで旧型削除予定
+対象バージョン: 2.x 系 (後方互換段階) → 3.0.0 で旧型削除予定
 
 ## Feature Flag (`legacy-auth-flat`)
 
@@ -85,7 +85,72 @@ function extractTokens(r: AuthSuccessResponse) {
 | Phase 1 | 新スキーマ導入＋旧フィールド温存 | 完了 |
 | Phase 2 | クライアントガイド/ドキュメント公開 (本ファイル) | 完了 |
 | Phase 3 | `token` / フラットフィールド deprecate + feature gate (`legacy-auth-flat`) | 完了 |
-| Phase 4 | メジャーリリースでフラットフィールド削除 & feature 削除 | 予定 |
+| Phase 4 | メジャー (3.0.0) でフラットフィールド + feature 削除 | 予定 |
+
+### Phase 4 計画 (3.0.0 予定)
+
+目的: 最終的にレスポンス構造を `success + tokens + user (+ 将来 extra)` の最小形へ確定し、保守負荷と誤用リスクを除去します。
+
+削除予定項目:
+
+1. Cargo feature `legacy-auth-flat`
+2. フラットフィールド: `access_token`, `refresh_token`, `biscuit_token`, `expires_in`, `session_id`, `token`
+3. (安全確認後) 旧 `LoginResponse` / その OpenAPI スキーマ (feature gate 下でのみ存在)
+
+スキーマ移行後の最終形 (3.0.0+):
+
+```jsonc
+{
+  "success": true,
+  "tokens": {
+    "access_token": "...",
+    "refresh_token": "...",
+    "biscuit_token": "...",
+    "expires_in": 3600,
+    "session_id": "..."
+  },
+  "user": { /* UserInfo */ }
+  // optional: "extra": { ... }
+}
+```
+
+クライアント移行ガイドライン (3.0.0 へのアップグレード時):
+
+- フラットトークン参照をすべて `response.tokens.*` へ置換
+- `token` (access_token エイリアス) を除去
+- OpenAPI 再生成: 旧フィールドがないことを前提に型を再生成
+- 異常系ハンドリングに変更は無し (HTTP ステータス / エラー JSON 不変)
+
+互換性ウィンドウ & タイムライン:
+
+- 2.x 系: Deprecated フィールドは残存 (警告ベースで移行促進)
+- 3.0.0: 削除 (コンパイルエラーとして顕在化し、早期に気付ける)
+
+レポジトリ上のガード (推奨 CI 強化案):
+
+1. `cargo build --no-default-features --features auth,database` (最小構成) でビルド継続確認
+2. `cargo doc --features legacy-auth-flat` (2.x 系のみ) で警告数をメトリク化 (過剰増加を検知)
+3. 3.0.0 ブランチ作成時に `grep -R "legacy-auth-flat"` が空であることを CI チェック
+
+リスク評価 & 緩和:
+
+| リスク | 内容 | 緩和策 |
+|--------|------|--------|
+| 未移行クライアント破損 | フラットフィールド直接参照でビルド失敗 | 2.x 期間に警告周知 + 明確な CHANGELOG 記載 |
+| OpenAPI 生成キャッシュ | 旧スキーマが生成物に残留 | 3.0.0 移行ガイドでキャッシュクリア明示 |
+| サードパーティ SDK ラグ | SDK 側更新遅延 | 早期アナウンス (2.x 内 README + CHANGELOG) |
+
+作業チェックリスト (3.0.0 ブランチ時):
+
+- [ ] `legacy-auth-flat` feature セクション削除 (Cargo.toml)
+- [ ] `AuthSuccessResponse` の deprecated 属性除去 + フラットフィールド削除
+- [ ] `LoginResponse` 削除 (`cfg` ブロック含む)
+- [ ] OpenAPI の components から `LoginResponse` 除外コード削除
+- [ ] テスト: フラットフィールド参照を tokens.* へ完全置換
+- [ ] 生成されたドキュメント差分 (run_docs, dump_openapi) のレビュー
+- [ ] CHANGELOG (Breaking Changes) へ明記
+
+ステータス表更新条件: 上記チェックリスト完了後、Phase 4 を「完了」に書き換える。
 
 ## アクションアイテム
 
@@ -95,6 +160,7 @@ function extractTokens(r: AuthSuccessResponse) {
 | A2 | `token` フィールドに `#[deprecated]` 属性付与 (警告拡散検証後) | 完了 |
 | A4 | `legacy-auth-flat` feature の最終削除 (メジャー) | Low |
 | A3 | `AuthSuccess<T>::extra` 利用シナリオ検討 (2FA, 拡張 claims) | Low |
+| A5 | Phase 4 (3.0.0) 削除計画ドキュメント化 | 完了 |
 
 ## 互換性とテスト
 

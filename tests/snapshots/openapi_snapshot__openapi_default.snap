@@ -1,0 +1,3380 @@
+---
+source: tests/openapi_snapshot.rs
+expression: value
+---
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Enterprise CMS API",
+    "description": "Production-ready Content Management System API",
+    "contact": {
+      "name": "CMS Development Team"
+    },
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    },
+    "version": "2.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Development server"
+    }
+  ],
+  "paths": {
+    "/api/v1/api-keys": {
+      "get": {
+        "tags": [
+          "crate::handlers::api_keys"
+        ],
+        "operationId": "list_api_keys",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApiKeyResponse"
+                  }
+                },
+                "examples": {
+                  "List": {
+                    "summary": "APIキー一覧",
+                    "value": [
+                      {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "name": "integration",
+                        "permissions": [
+                          "read:posts"
+                        ],
+                        "revoked": false
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "crate::handlers::api_keys"
+        ],
+        "operationId": "create_api_key",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApiKeyPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedApiKeyResponse"
+                },
+                "examples": {
+                  "Created": {
+                    "summary": "APIキー作成",
+                    "value": {
+                      "api_key": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "name": "integration",
+                        "permissions": [
+                          "read:posts"
+                        ],
+                        "revoked": false
+                      },
+                      "raw_key": "raw_api_key_sample_once_only"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/api-keys/{id}": {
+      "delete": {
+        "tags": [
+          "crate::handlers::api_keys"
+        ],
+        "operationId": "revoke_api_key",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Value"
+                },
+                "examples": {
+                  "Revoked": {
+                    "summary": "APIキー失効",
+                    "value": {
+                      "success": true,
+                      "data": {
+                        "message": "API key revoked"
+                      },
+                      "message": null,
+                      "error": null,
+                      "validation_errors": null
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Login user",
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Login success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSuccessResponse"
+                },
+                "examples": {
+                  "LoggedIn": {
+                    "summary": "ログイン成功",
+                    "value": {
+                      "success": true,
+                      "tokens": {
+                        "access_token": "ACCESS_TOKEN_SAMPLE",
+                        "refresh_token": "REFRESH_TOKEN_SAMPLE",
+                        "biscuit_token": "BISCUIT_TOKEN_SAMPLE",
+                        "expires_in": 3600,
+                        "session_id": "sess_123"
+                      },
+                      "user": {
+                        "id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "username": "alice",
+                        "email": "alice@example.com",
+                        "role": "subscriber"
+                      },
+                      "access_token": "ACCESS_TOKEN_SAMPLE",
+                      "refresh_token": "REFRESH_TOKEN_SAMPLE",
+                      "biscuit_token": "BISCUIT_TOKEN_SAMPLE",
+                      "expires_in": 3600,
+                      "session_id": "sess_123",
+                      "token": "ACCESS_TOKEN_SAMPLE"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Value"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "refresh_token",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Token refreshed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSuccessResponse"
+                },
+                "examples": {
+                  "Refreshed": {
+                    "summary": "トークン更新成功",
+                    "value": {
+                      "success": true,
+                      "tokens": {
+                        "access_token": "NEW_ACCESS_TOKEN_SAMPLE",
+                        "refresh_token": "NEW_REFRESH_TOKEN_SAMPLE",
+                        "biscuit_token": "",
+                        "expires_in": 3600,
+                        "session_id": "sess_123"
+                      },
+                      "user": {
+                        "id": "uuid",
+                        "username": "user",
+                        "email": "user@example.com",
+                        "first_name": null,
+                        "last_name": null,
+                        "role": "Subscriber",
+                        "is_active": true,
+                        "email_verified": true,
+                        "last_login": null,
+                        "created_at": "2025-01-01T00:00:00Z",
+                        "updated_at": "2025-01-01T00:00:00Z"
+                      },
+                      "access_token": "NEW_ACCESS_TOKEN_SAMPLE",
+                      "refresh_token": "NEW_REFRESH_TOKEN_SAMPLE",
+                      "biscuit_token": "",
+                      "expires_in": 3600,
+                      "session_id": "sess_123",
+                      "token": "NEW_ACCESS_TOKEN_SAMPLE"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired refresh token"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Register a new user",
+        "operationId": "register",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "User registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSuccessResponse"
+                },
+                "examples": {
+                  "Registered": {
+                    "summary": "登録成功",
+                    "value": {
+                      "success": true,
+                      "tokens": {
+                        "access_token": "ACCESS_TOKEN_SAMPLE",
+                        "refresh_token": "REFRESH_TOKEN_SAMPLE",
+                        "biscuit_token": "BISCUIT_TOKEN_SAMPLE",
+                        "expires_in": 3600,
+                        "session_id": "sess_123"
+                      },
+                      "user": {
+                        "id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "username": "alice",
+                        "email": "alice@example.com",
+                        "role": "subscriber"
+                      },
+                      "access_token": "ACCESS_TOKEN_SAMPLE",
+                      "refresh_token": "REFRESH_TOKEN_SAMPLE",
+                      "biscuit_token": "BISCUIT_TOKEN_SAMPLE",
+                      "expires_in": 3600,
+                      "session_id": "sess_123",
+                      "token": "ACCESS_TOKEN_SAMPLE"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Value"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Comprehensive health check",
+        "operationId": "health_check",
+        "responses": {
+          "200": {
+            "description": "System healthy or minimal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                },
+                "examples": {
+                  "Healthy": {
+                    "summary": "正常例",
+                    "value": {
+                      "status": "healthy",
+                      "timestamp": "2025-09-05T12:00:00Z",
+                      "services": {
+                        "database": {
+                          "status": "healthy"
+                        },
+                        "cache": {
+                          "status": "healthy"
+                        },
+                        "search": {
+                          "status": "healthy"
+                        },
+                        "auth": {
+                          "status": "healthy"
+                        }
+                      },
+                      "system": {
+                        "version": "2.0.0",
+                        "uptime_seconds": 1234,
+                        "rust_version": "stable",
+                        "build_profile": "debug"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "System degraded or unhealthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/liveness": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Liveness probe (simple check)",
+        "operationId": "liveness",
+        "responses": {
+          "200": {
+            "description": "Liveness OK"
+          }
+        }
+      }
+    },
+    "/api/v1/health/readiness": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Readiness probe (check if ready to serve traffic)",
+        "operationId": "readiness",
+        "responses": {
+          "200": {
+            "description": "Readiness status JSON"
+          }
+        }
+      }
+    },
+    "/api/v1/metrics": {
+      "get": {
+        "tags": [
+          "Metrics"
+        ],
+        "summary": "Expose application metrics in Prometheus text format.\nNOTE: 軽量用途のため現時点ではカウンタ/ゲージのみ。ヒストグラム等が必要になれば `prometheus` crate 統合を検討。",
+        "operationId": "metrics",
+        "responses": {
+          "200": {
+            "description": "Prometheus metrics",
+            "content": {
+              "text/plain": {}
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/posts": {
+      "get": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Get all posts with pagination and filtering",
+        "operationId": "get_posts",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "author",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Paginated_PostDto"
+                },
+                "examples": {
+                  "List": {
+                    "summary": "ページ付き一覧",
+                    "value": {
+                      "success": true,
+                      "data": {
+                        "items": [
+                          {
+                            "id": "550e8400-e29b-41d4-a716-446655440000",
+                            "title": "Hello World",
+                            "content": "First post body...",
+                            "author_id": "1d2e3f40-1111-2222-3333-444455556666",
+                            "status": "published",
+                            "tags": [
+                              "intro"
+                            ],
+                            "created_at": "2025-09-05T12:00:00Z",
+                            "updated_at": "2025-09-05T12:05:00Z"
+                          }
+                        ],
+                        "page": 1,
+                        "per_page": 20,
+                        "total": 1,
+                        "total_pages": 1
+                      },
+                      "message": null,
+                      "error": null,
+                      "validation_errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Create a new post",
+        "operationId": "create_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePostRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Post created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PostDto"
+                },
+                "examples": {
+                  "Created": {
+                    "summary": "新規作成成功",
+                    "value": {
+                      "success": true,
+                      "data": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "title": "Hello World",
+                        "content": "First post body...",
+                        "author_id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "status": "draft",
+                        "tags": [
+                          "intro"
+                        ],
+                        "created_at": "2025-09-05T12:00:00Z",
+                        "updated_at": "2025-09-05T12:00:00Z"
+                      },
+                      "message": null,
+                      "error": null,
+                      "validation_errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Value"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/posts/tag/{tag}": {
+      "get": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Get posts by tag",
+        "operationId": "get_posts_by_tag",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "author",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Paginated_PostDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/posts/{id}": {
+      "get": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Get post by ID",
+        "operationId": "get_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PostDto"
+                },
+                "examples": {
+                  "Found": {
+                    "summary": "取得成功",
+                    "value": {
+                      "success": true,
+                      "data": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "title": "Hello World",
+                        "content": "First post body...",
+                        "author_id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "status": "published",
+                        "tags": [
+                          "intro"
+                        ],
+                        "created_at": "2025-09-05T12:00:00Z",
+                        "updated_at": "2025-09-05T12:05:00Z"
+                      },
+                      "message": null,
+                      "error": null,
+                      "validation_errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Update post",
+        "operationId": "update_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePostRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PostDto"
+                },
+                "examples": {
+                  "Updated": {
+                    "summary": "更新成功",
+                    "value": {
+                      "success": true,
+                      "data": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "title": "Hello World (edited)",
+                        "content": "Updated post body...",
+                        "author_id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "status": "published",
+                        "tags": [
+                          "intro"
+                        ],
+                        "created_at": "2025-09-05T12:00:00Z",
+                        "updated_at": "2025-09-05T12:10:00Z"
+                      },
+                      "message": null,
+                      "error": null,
+                      "validation_errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Value"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Delete post",
+        "operationId": "delete_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Post deleted"
+          },
+          "404": {
+            "description": "Post not found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/posts/{id}/publish": {
+      "post": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Publish post",
+        "operationId": "publish_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PostDto"
+                },
+                "examples": {
+                  "Published": {
+                    "summary": "公開成功",
+                    "value": {
+                      "success": true,
+                      "data": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "title": "Hello World",
+                        "content": "First post body...",
+                        "author_id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "status": "published",
+                        "tags": [
+                          "intro"
+                        ],
+                        "created_at": "2025-09-05T12:00:00Z",
+                        "updated_at": "2025-09-05T12:05:00Z"
+                      },
+                      "message": null,
+                      "error": null,
+                      "validation_errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Search endpoint",
+        "operationId": "search",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          },
+          {
+            "name": "doc_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "sort_order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/SortOrder"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results (ApiResponse<SearchResults>)"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/v1/search/health": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Search index health check",
+        "operationId": "search_health",
+        "responses": {
+          "200": {
+            "description": "Search health (ApiResponse<ServiceHealth>)"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/v1/search/reindex": {
+      "post": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Reindex all content",
+        "operationId": "reindex",
+        "responses": {
+          "200": {
+            "description": "Reindex triggered (ApiResponse<{ message: string }>)"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/search/stats": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Search statistics endpoint",
+        "operationId": "search_stats",
+        "responses": {
+          "200": {
+            "description": "Search stats (ApiResponse<SearchStats>)"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/v1/search/suggest": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Search suggestions endpoint",
+        "operationId": "suggest",
+        "parameters": [
+          {
+            "name": "prefix",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Suggestions list (ApiResponse<{ suggestions: string[] }>)"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Get all users with pagination",
+        "operationId": "get_users",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paginated_UserInfo"
+                },
+                "examples": {
+                  "UserList": {
+                    "summary": "ユーザ一覧",
+                    "value": {
+                      "success": true,
+                      "data": {
+                        "items": [
+                          {
+                            "id": "1d2e3f40-1111-2222-3333-444455556666",
+                            "username": "alice",
+                            "email": "alice@example.com",
+                            "role": "subscriber"
+                          }
+                        ],
+                        "page": 1,
+                        "per_page": 20,
+                        "total": 1,
+                        "total_pages": 1
+                      },
+                      "message": null,
+                      "error": null,
+                      "validation_errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/users/{id}": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Get user by ID",
+        "operationId": "get_user",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserInfo"
+                },
+                "examples": {
+                  "User": {
+                    "summary": "ユーザ取得",
+                    "value": {
+                      "success": true,
+                      "data": {
+                        "id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "username": "alice",
+                        "email": "alice@example.com",
+                        "role": "subscriber"
+                      },
+                      "message": null,
+                      "error": null,
+                      "validation_errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Update user",
+        "operationId": "update_user",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserInfo"
+                },
+                "examples": {
+                  "Updated": {
+                    "summary": "更新成功",
+                    "value": {
+                      "success": true,
+                      "data": {
+                        "id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "username": "alice",
+                        "email": "alice@example.com",
+                        "role": "editor"
+                      },
+                      "message": null,
+                      "error": null,
+                      "validation_errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Value"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Delete user (soft delete by deactivating)",
+        "operationId": "delete_user",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User deactivated"
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/users/{id}/posts": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Get user's posts",
+        "operationId": "get_user_posts",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "author",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Paginated_PostDto"
+                },
+                "examples": {
+                  "UserPosts": {
+                    "summary": "ユーザ投稿一覧",
+                    "value": {
+                      "success": true,
+                      "data": {
+                        "items": [
+                          {
+                            "id": "550e8400-e29b-41d4-a716-446655440000",
+                            "title": "Hello World",
+                            "content": "First post body...",
+                            "author_id": "1d2e3f40-1111-2222-3333-444455556666",
+                            "status": "published",
+                            "tags": [
+                              "intro"
+                            ],
+                            "created_at": "2025-09-05T12:00:00Z",
+                            "updated_at": "2025-09-05T12:05:00Z"
+                          }
+                        ],
+                        "page": 1,
+                        "per_page": 20,
+                        "total": 1,
+                        "total_pages": 1
+                      },
+                      "message": null,
+                      "error": null,
+                      "validation_errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/users/{id}/role": {
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Change user role (admin only)",
+        "operationId": "change_user_role",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserInfo"
+                },
+                "examples": {
+                  "RoleChanged": {
+                    "summary": "ロール変更成功",
+                    "value": {
+                      "success": true,
+                      "data": {
+                        "id": "1d2e3f40-1111-2222-3333-444455556666",
+                        "username": "alice",
+                        "email": "alice@example.com",
+                        "role": "admin"
+                      },
+                      "message": null,
+                      "error": null,
+                      "validation_errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid role value"
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiKeyResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "permissions",
+          "user_id",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "ApiResponseExample": {
+        "type": "object",
+        "description": "ApiResponse の具体例（ジェネリックなし）",
+        "required": [
+          "success"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {},
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validation_errors": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            }
+          }
+        },
+        "example": {
+          "success": true,
+          "data": {
+            "message": "Operation completed"
+          },
+          "message": null,
+          "error": null,
+          "validation_errors": null
+        }
+      },
+      "ApiResponse_Paginated_PostDto": {
+        "type": "object",
+        "description": "標準的なAPIレスポンス構造\n\nジェネリック型 `T` を含むラッパー。OpenAPI 上では良く使う組合せを aliases で公開する。\n例: `ApiResponsePostResponse` は `ApiResponse<PostResponse>` のエイリアス。",
+        "required": [
+          "success"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "items",
+              "total",
+              "page",
+              "limit",
+              "total_pages"
+            ],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "description": "Post DTO for API (single post payload)",
+                  "required": [
+                    "id",
+                    "title",
+                    "content",
+                    "status",
+                    "author_id",
+                    "tags",
+                    "metadata",
+                    "created_at",
+                    "updated_at"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "excerpt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "author_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "metadata": {},
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "published_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    }
+                  }
+                }
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "page": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              },
+              "limit": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              },
+              "total_pages": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              }
+            }
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validation_errors": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            }
+          }
+        },
+        "example": {
+          "success": true,
+          "data": {
+            "example": "value"
+          },
+          "message": null,
+          "error": null,
+          "validation_errors": null
+        }
+      },
+      "ApiResponse_PostDto": {
+        "type": "object",
+        "description": "標準的なAPIレスポンス構造\n\nジェネリック型 `T` を含むラッパー。OpenAPI 上では良く使う組合せを aliases で公開する。\n例: `ApiResponsePostResponse` は `ApiResponse<PostResponse>` のエイリアス。",
+        "required": [
+          "success"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "description": "Post DTO for API (single post payload)",
+            "required": [
+              "id",
+              "title",
+              "content",
+              "status",
+              "author_id",
+              "tags",
+              "metadata",
+              "created_at",
+              "updated_at"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "title": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              },
+              "excerpt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "status": {
+                "type": "string"
+              },
+              "author_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "metadata": {},
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "published_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validation_errors": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            }
+          }
+        },
+        "example": {
+          "success": true,
+          "data": {
+            "example": "value"
+          },
+          "message": null,
+          "error": null,
+          "validation_errors": null
+        }
+      },
+      "ApiResponse_Value": {
+        "type": "object",
+        "description": "標準的なAPIレスポンス構造\n\nジェネリック型 `T` を含むラッパー。OpenAPI 上では良く使う組合せを aliases で公開する。\n例: `ApiResponsePostResponse` は `ApiResponse<PostResponse>` のエイリアス。",
+        "required": [
+          "success"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {},
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validation_errors": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            }
+          }
+        },
+        "example": {
+          "success": true,
+          "data": {
+            "example": "value"
+          },
+          "message": null,
+          "error": null,
+          "validation_errors": null
+        }
+      },
+      "AppMetrics": {
+        "type": "object",
+        "description": "Application metrics for monitoring",
+        "required": [
+          "total_requests",
+          "active_connections",
+          "cache_hits",
+          "cache_misses",
+          "search_queries",
+          "search_avg_response_time_ms",
+          "auth_attempts",
+          "auth_successes",
+          "auth_failures",
+          "db_queries",
+          "db_avg_response_time_ms",
+          "cache_invalidations",
+          "cache_invalidation_errors",
+          "errors_total",
+          "errors_auth",
+          "errors_db",
+          "errors_cache",
+          "errors_search",
+          "active_sessions"
+        ],
+        "properties": {
+          "total_requests": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total number of requests processed",
+            "minimum": 0
+          },
+          "active_connections": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of active connections",
+            "minimum": 0
+          },
+          "cache_hits": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Cache hit/miss statistics",
+            "minimum": 0
+          },
+          "cache_misses": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "search_queries": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Search query statistics",
+            "minimum": 0
+          },
+          "search_avg_response_time_ms": {
+            "type": "number",
+            "format": "double"
+          },
+          "auth_attempts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Authentication statistics",
+            "minimum": 0
+          },
+          "auth_successes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "auth_failures": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "db_queries": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Database operation statistics",
+            "minimum": 0
+          },
+          "db_avg_response_time_ms": {
+            "type": "number",
+            "format": "double"
+          },
+          "cache_invalidations": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Cache invalidation counters",
+            "minimum": 0
+          },
+          "cache_invalidation_errors": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "errors_total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Error counts by type",
+            "minimum": 0
+          },
+          "errors_auth": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "errors_db": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "errors_cache": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "errors_search": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "active_sessions": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Active auth sessions (computed periodically)",
+            "minimum": 0
+          }
+        }
+      },
+      "AuthSuccessResponse": {
+        "type": "object",
+        "description": "統一認証レスポンス (login/register 用)\n\ntokens オブジェクトに加え、後方互換のため従来フラットなフィールド (access_token / refresh_token / biscuit_token / expires_in / session_id / token) も保持する。",
+        "required": [
+          "success",
+          "tokens",
+          "user",
+          "access_token",
+          "refresh_token",
+          "biscuit_token",
+          "expires_in",
+          "session_id",
+          "token"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/AuthTokens"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserInfo"
+          },
+          "access_token": {
+            "type": "string",
+            "deprecated": true
+          },
+          "refresh_token": {
+            "type": "string",
+            "deprecated": true
+          },
+          "biscuit_token": {
+            "type": "string",
+            "deprecated": true
+          },
+          "expires_in": {
+            "type": "integer",
+            "format": "int64",
+            "deprecated": true
+          },
+          "session_id": {
+            "type": "string",
+            "deprecated": true
+          },
+          "token": {
+            "type": "string",
+            "description": "旧クライアント互換 (token == access_token)",
+            "deprecated": true
+          }
+        }
+      },
+      "AuthTokens": {
+        "type": "object",
+        "required": [
+          "access_token",
+          "refresh_token",
+          "biscuit_token",
+          "expires_in",
+          "session_id"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "refresh_token": {
+            "type": "string"
+          },
+          "biscuit_token": {
+            "type": "string"
+          },
+          "expires_in": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "session_id": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateApiKeyPayload": {
+        "type": "object",
+        "required": [
+          "name",
+          "permissions"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CreatePostRequest": {
+        "type": "object",
+        "required": [
+          "title",
+          "content"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slug": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "published": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "featured_image": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "meta_title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "meta_description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "published_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PostStatus"
+              }
+            ]
+          }
+        }
+      },
+      "CreatedApiKeyResponse": {
+        "type": "object",
+        "required": [
+          "api_key",
+          "raw_key"
+        ],
+        "properties": {
+          "api_key": {
+            "$ref": "#/components/schemas/ApiKeyResponse"
+          },
+          "raw_key": {
+            "type": "string",
+            "description": "生の API Key (一度だけ表示)。クライアントは安全に保存すること。"
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "description": "Overall system health response",
+        "required": [
+          "status",
+          "timestamp",
+          "services",
+          "system"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "services": {
+            "$ref": "#/components/schemas/ServiceHealthDetails"
+          },
+          "system": {
+            "$ref": "#/components/schemas/SystemInfo"
+          }
+        }
+      },
+      "HealthStatus": {
+        "type": "object",
+        "description": "Health status for individual services",
+        "required": [
+          "status",
+          "database",
+          "cache",
+          "search",
+          "auth",
+          "timestamp"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "Overall status: \"healthy\", \"degraded\", \"unhealthy\""
+          },
+          "database": {
+            "$ref": "#/components/schemas/ServiceHealth",
+            "description": "Database health"
+          },
+          "cache": {
+            "$ref": "#/components/schemas/ServiceHealth",
+            "description": "Cache service health"
+          },
+          "search": {
+            "$ref": "#/components/schemas/ServiceHealth",
+            "description": "Search service health"
+          },
+          "auth": {
+            "$ref": "#/components/schemas/ServiceHealth",
+            "description": "Authentication service health"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of health check"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "description": "Login request",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "remember_me": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      },
+      "Paginated_PostDto": {
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "total_pages"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "Post DTO for API (single post payload)",
+              "required": [
+                "id",
+                "title",
+                "content",
+                "status",
+                "author_id",
+                "tags",
+                "metadata",
+                "created_at",
+                "updated_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "excerpt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "status": {
+                  "type": "string"
+                },
+                "author_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "metadata": {},
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "updated_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "published_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "total_pages": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "Paginated_UserInfo": {
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "total_pages"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "Unified user information for API responses",
+              "required": [
+                "id",
+                "username",
+                "email",
+                "role",
+                "is_active",
+                "email_verified",
+                "created_at",
+                "updated_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "username": {
+                  "type": "string"
+                },
+                "email": {
+                  "type": "string"
+                },
+                "first_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "last_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "role": {
+                  "$ref": "#/components/schemas/UserRole"
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "email_verified": {
+                  "type": "boolean"
+                },
+                "last_login": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "updated_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "total_pages": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "description": "ページネーション情報",
+        "required": [
+          "page",
+          "per_page",
+          "total",
+          "total_pages"
+        ],
+        "properties": {
+          "page": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "per_page": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "total_pages": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        },
+        "example": {
+          "page": 1,
+          "per_page": 20,
+          "total": 42,
+          "total_pages": 3
+        }
+      },
+      "PostDto": {
+        "type": "object",
+        "description": "Post DTO for API (single post payload)",
+        "required": [
+          "id",
+          "title",
+          "content",
+          "status",
+          "author_id",
+          "tags",
+          "metadata",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "author_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "metadata": {},
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "published_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "PostQuery": {
+        "type": "object",
+        "description": "Post query parameters",
+        "properties": {
+          "page": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "author": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "tag": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sort": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PostStatus": {
+        "type": "string",
+        "enum": [
+          "Draft",
+          "Published",
+          "Archived"
+        ]
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "description": "Refresh token",
+        "required": [
+          "refresh_token"
+        ],
+        "properties": {
+          "refresh_token": {
+            "type": "string"
+          }
+        }
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "description": "Registration request",
+        "required": [
+          "username",
+          "email",
+          "password"
+        ],
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "first_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SearchQuery": {
+        "type": "object",
+        "description": "Search query parameters",
+        "required": [
+          "q"
+        ],
+        "properties": {
+          "q": {
+            "type": "string"
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "offset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "doc_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sort_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sort_order": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SortOrder"
+              }
+            ]
+          }
+        }
+      },
+      "ServiceHealth": {
+        "type": "object",
+        "description": "Individual service health information",
+        "required": [
+          "status",
+          "response_time_ms",
+          "details"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "Service status: \"up\", \"down\", \"degraded\""
+          },
+          "response_time_ms": {
+            "type": "number",
+            "format": "double",
+            "description": "Response time in milliseconds"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional error message"
+          },
+          "details": {
+            "description": "Service-specific details"
+          }
+        }
+      },
+      "ServiceHealthDetails": {
+        "type": "object",
+        "description": "Service health details",
+        "required": [
+          "database",
+          "cache",
+          "search",
+          "auth"
+        ],
+        "properties": {
+          "database": {
+            "$ref": "#/components/schemas/ServiceStatus"
+          },
+          "cache": {
+            "$ref": "#/components/schemas/ServiceStatus"
+          },
+          "search": {
+            "$ref": "#/components/schemas/ServiceStatus"
+          },
+          "auth": {
+            "$ref": "#/components/schemas/ServiceStatus"
+          }
+        }
+      },
+      "ServiceStatus": {
+        "type": "object",
+        "description": "Individual service status",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "response_time_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "details": {},
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SortOrder": {
+        "type": "string",
+        "enum": [
+          "asc",
+          "desc"
+        ]
+      },
+      "SuggestQuery": {
+        "type": "object",
+        "description": "Search suggestion query",
+        "required": [
+          "prefix"
+        ],
+        "properties": {
+          "prefix": {
+            "type": "string"
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        }
+      },
+      "SystemInfo": {
+        "type": "object",
+        "description": "System information",
+        "required": [
+          "version",
+          "uptime_seconds",
+          "rust_version",
+          "build_profile"
+        ],
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "uptime_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "rust_version": {
+            "type": "string"
+          },
+          "build_profile": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdatePostRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "content": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "excerpt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slug": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "published": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "featured_image": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "meta_title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "meta_description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "published_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PostStatus"
+              }
+            ]
+          }
+        }
+      },
+      "UpdateUserRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "first_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserRole"
+              }
+            ]
+          },
+          "is_active": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      },
+      "UserInfo": {
+        "type": "object",
+        "description": "Unified user information for API responses",
+        "required": [
+          "id",
+          "username",
+          "email",
+          "role",
+          "is_active",
+          "email_verified",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "first_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "email_verified": {
+            "type": "boolean"
+          },
+          "last_login": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UserQuery": {
+        "type": "object",
+        "description": "User query parameters",
+        "properties": {
+          "page": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "role": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "active": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "sort": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "UserRole": {
+        "type": "string",
+        "enum": [
+          "SuperAdmin",
+          "Admin",
+          "Editor",
+          "Author",
+          "Contributor",
+          "Subscriber"
+        ]
+      },
+      "ValidationError": {
+        "type": "object",
+        "description": "バリデーションエラー",
+        "required": [
+          "field",
+          "message"
+        ],
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "example": {
+          "field": "title",
+          "message": "must not be empty"
+        }
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Biscuit"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Health check endpoints"
+    },
+    {
+      "name": "Metrics",
+      "description": "Metrics exposition"
+    }
+  ]
+}

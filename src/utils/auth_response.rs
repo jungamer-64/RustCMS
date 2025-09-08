@@ -26,15 +26,7 @@ impl<T> AuthSuccess<T> {
 }
 
 impl From<crate::auth::AuthResponse> for AuthTokens {
-    fn from(a: crate::auth::AuthResponse) -> Self {
-        AuthTokens {
-            access_token: a.access_token,
-            refresh_token: a.refresh_token,
-            biscuit_token: a.biscuit_token,
-            expires_in: a.expires_in,
-            session_id: a.session_id,
-        }
-    }
+    fn from(a: crate::auth::AuthResponse) -> Self { a.tokens }
 }
 
 
@@ -47,32 +39,23 @@ pub struct AuthSuccessResponse {
     pub tokens: AuthTokens,
     pub user: UserInfo,
     // --- Backward compatible flattened fields ---
-    #[deprecated(note = "Use tokens.access_token")]
+    #[deprecated(note = "Use tokens.access_token (will be removed in 3.0.0)")]
     pub access_token: String,
-    #[deprecated(note = "Use tokens.refresh_token")]
+    #[deprecated(note = "Use tokens.refresh_token (will be removed in 3.0.0)")]
     pub refresh_token: String,
-    #[deprecated(note = "Use tokens.biscuit_token")]
+    #[deprecated(note = "Use tokens.biscuit_token (will be removed in 3.0.0)")]
     pub biscuit_token: String,
-    #[deprecated(note = "Use tokens.expires_in")]
+    #[deprecated(note = "Use tokens.expires_in (will be removed in 3.0.0)")]
     pub expires_in: i64,
-    #[deprecated(note = "Use tokens.session_id")]
+    #[deprecated(note = "Use tokens.session_id (will be removed in 3.0.0)")]
     pub session_id: String,
     /// 旧クライアント互換 (token == access_token)
-    #[deprecated(note = "Use tokens.access_token (alias)")]
+    #[deprecated(note = "Use tokens.access_token (alias, will be removed in 3.0.0)")]
     pub token: String,
 }
 
 impl From<crate::auth::AuthResponse> for AuthSuccessResponse {
-    fn from(a: crate::auth::AuthResponse) -> Self {
-        let tokens = AuthTokens {
-            access_token: a.access_token,
-            refresh_token: a.refresh_token,
-            biscuit_token: a.biscuit_token,
-            expires_in: a.expires_in,
-            session_id: a.session_id,
-        };
-        AuthSuccessResponse::from_parts(&tokens, a.user)
-    }
+    fn from(a: crate::auth::AuthResponse) -> Self { AuthSuccessResponse::from_parts(&a.tokens, a.user) }
 }
 
 impl AuthSuccessResponse {

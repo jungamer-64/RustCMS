@@ -38,7 +38,7 @@ async fn refresh_fails_after_expiry() {
     let issued = auth.create_auth_response(user, false).await.expect("issue");
     // Wait until refresh expiry passes
     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-    assert!(auth.refresh_access_token(&issued.refresh_token).await.is_err());
+    assert!(auth.refresh_access_token(&issued.tokens.refresh_token).await.is_err());
 }
 
 #[tokio::test]
@@ -48,9 +48,9 @@ async fn refresh_version_mismatch_reuse_old() {
     let user = dummy_user();
     let issued = auth.create_auth_response(user.clone(), false).await.expect("issue");
     // First rotation
-    let (rot_tokens, _) = auth.refresh_access_token(&issued.refresh_token).await.expect("rotate");
+    let (rot_tokens, _) = auth.refresh_access_token(&issued.tokens.refresh_token).await.expect("rotate");
     // Reuse original refresh => should fail (version bump)
-    assert!(auth.refresh_access_token(&issued.refresh_token).await.is_err());
+    assert!(auth.refresh_access_token(&issued.tokens.refresh_token).await.is_err());
     // Rotated token still works once
     let _ = auth.refresh_access_token(&rot_tokens.refresh_token).await.expect("second ok");
 }

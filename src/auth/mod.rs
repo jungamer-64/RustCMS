@@ -171,15 +171,11 @@ pub struct LoginRequest {
 }
 
 /// Authentication response
-#[derive(Debug, Serialize)]
-#[derive(ToSchema)]
+#[derive(Debug, Serialize, ToSchema, Clone)]
 pub struct AuthResponse {
     pub user: UserInfo,
-    pub access_token: String,
-    pub refresh_token: String,
-    pub biscuit_token: String,
-    pub expires_in: i64,
-    pub session_id: String,
+    /// Canonical nested tokens container (used by handlers to build AuthSuccessResponse)
+    pub tokens: crate::utils::auth_response::AuthTokens,
 }
 
 // RefreshResponse removed: refresh now returns AuthTokens + User directly at handler layer.
@@ -357,12 +353,19 @@ impl AuthService {
 
     /// Create authentication response with Biscuit access & refresh tokens
     pub async fn create_auth_response(&self, user: User, remember_me: bool) -> Result<AuthResponse> {
-    let session_id = Uuid::new_v4().to_string();
-    let (access_exp, refresh_exp) = self.compute_expiries(remember_me);
-    let refresh_version = 1u32;
-    self.insert_session(&user, &session_id, refresh_exp, refresh_version).await;
-    let (access_token, refresh_token, expires_in) = self.issue_access_and_refresh(&user, &session_id, refresh_version, access_exp, refresh_exp)?;
-    Ok(AuthResponse { user: UserInfo::from(user), access_token: access_token.clone(), refresh_token: refresh_token.clone(), biscuit_token: access_token, expires_in, session_id })
+        let session_id = Uuid::new_v4().to_string();
+        let (access_exp, refresh_exp) = self.compute_expiries(remember_me);
+        let refresh_version = 1u32;
+        self.insert_session(&user, &session_id, refresh_exp, refresh_version).await;
+        let (access_token, refresh_token, expires_in) = self.issue_access_and_refresh(&user, &session_id, refresh_version, access_exp, refresh_exp)?;
+        let tokens = crate::utils::auth_response::AuthTokens {
+            access_token: access_token.clone(),
+            refresh_token: refresh_token.clone(),
+            biscuit_token: access_token,
+            expires_in,
+            session_id,
+        };
+        Ok(AuthResponse { user: UserInfo::from(user), tokens })
     }
 
     /// Refresh tokens (access + rotated refresh) using current valid refresh token.

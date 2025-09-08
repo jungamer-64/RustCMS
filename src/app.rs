@@ -664,7 +664,7 @@ impl AppState {
 
     #[cfg(feature = "auth")]
     pub async fn auth_build_auth_response(&self, user: crate::models::User, remember_me: bool) -> crate::Result<crate::auth::AuthResponse> {
-    timed_op!(self, "auth", self.auth.create_auth_response(user, remember_me))
+        timed_op!(self, "auth", self.auth.create_auth_response(user, remember_me))
     }
 
     #[cfg(feature = "auth")]

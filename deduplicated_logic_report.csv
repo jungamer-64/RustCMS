@@ -22,3 +22,12 @@ auth_flat_fields_deprecation,Deprecated flattened token fields in AuthSuccessRes
 legacy_auth_flat_feature_gating,LoginResponse behind feature gate,src/handlers/auth.rs|src/openapi.rs,Feature legacy-auth-flat controls legacy schema exposure,LoginResponse schema unconditional inclusion
 refresh_tamper_negative_tests,Tamper & garbage refresh rejection,tests/biscuit_refresh_tamper_tests.rs,Ensures signature and structural validation for refresh tokens,tampered_refresh_token_rejected|random_garbage_token_rejected
 refresh_session_missing_negative_test,Session missing refresh rejection,tests/biscuit_refresh_session_missing_tests.rs,Ensures refresh requires existing active session,refresh_fails_when_session_missing
+phase4_plan_doc,Phase 4 removal plan documented,docs/AUTH_MIGRATION_V2.md,Adds 3.0.0 removal checklist & risk table,AuthSuccessResponse flattened fields future removal
+phase4_public_notice,Phase 4 public notices added,CHANGELOG.md|README.md,Advance breaking change warning inserted,legacy-auth-flat feature & flattened fields
+phase4_issue_template,Phase 4 removal issue template,.github/ISSUE_TEMPLATE/phase4_removal_checklist.md,Operationalizes removal checklist,deprecation removal workflow
+deprecated_field_scan_job,CI job scans for flattened auth field usage,.github/workflows/ci.yml,Non-blocking informational scan prior to 3.0.0,grep -R tokens.* fallback
+auth_flat_deprecation_note_versioned,Add 3.0.0 removal notice to deprecated fields,src/utils/auth_response.rs,Clarifies timeline in attribute notes,AuthSuccessResponse fields
+openapi_phase4_comment,Add Phase 4 removal comment for LoginResponse schema,src/openapi.rs,Signals planned elimination of conditional legacy schema,in-file comment
+openapi_snapshot_guard,Add OpenAPI schema snapshot test,tests/openapi_snapshot.rs,Detects unintended schema regressions & legacy schema leakage,insta snapshot
+openapi_auth_success_schema_guard,Focused AuthSuccessResponse schema snapshot,tests/openapi_auth_success_snapshot.rs,Guards structure & deprecated fields until Phase 4,auth_success_schema only
+auth_success_flatten_consistency_guard,Flattened auth fields consistency test,tests/auth_success_flatten_consistency.rs,Ensures deprecated fields mirror tokens.* until removal,assert equality

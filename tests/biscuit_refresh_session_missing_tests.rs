@@ -22,5 +22,5 @@ async fn refresh_fails_when_session_missing() {
     let issued = auth.create_auth_response(user, false).await.expect("issue");
     // Clear sessions (simulate eviction / restart without persistence)
     auth.clear_sessions_for_test().await;
-    assert!(auth.refresh_access_token(&issued.refresh_token).await.is_err(), "refresh should fail after session map cleared");
+    assert!(auth.refresh_access_token(&issued.tokens.refresh_token).await.is_err(), "refresh should fail after session map cleared");
 }

@@ -21,6 +21,8 @@ impl Modify for SecurityAddon {
 
         #[cfg(feature = "legacy-auth-flat")]
         {
+            // NOTE(Phase 4 / 3.0.0): This conditional inclusion of LoginResponse will be removed.
+            // After removal, only AuthSuccessResponse remains as the canonical auth schema.
             use utoipa::ToSchema;
             if !components.schemas.contains_key("LoginResponse") {
                 components.schemas.insert(
