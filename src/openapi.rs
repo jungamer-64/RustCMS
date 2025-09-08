@@ -4,8 +4,22 @@
 //! Full API documentation will be restored after fixing dependencies
 
 use utoipa::OpenApi;
+use utoipa::Modify;
+use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
 
 use crate::app::{AppMetrics, HealthStatus, ServiceHealth};
+
+/// Add security schemes dynamically to avoid macro incompatibility.
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let components = openapi.components.get_or_insert(Default::default());
+        let mut http = Http::new(HttpAuthScheme::Bearer);
+        http.bearer_format = Some("JWT".to_string());
+        components.add_security_scheme("BearerAuth", SecurityScheme::Http(http));
+    }
+}
 
 // (Schemas temporarily minimized during refactor; extend later as needed)
 
@@ -89,6 +103,7 @@ use crate::app::{AppMetrics, HealthStatus, ServiceHealth};
             crate::utils::api_types::ApiResponse<serde_json::Value>,
             crate::utils::api_types::ApiResponseExample
         )
-    )
+    ),
+    modifiers(&SecurityAddon)
 )]
 pub struct ApiDoc;

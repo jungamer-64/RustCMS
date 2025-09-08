@@ -32,7 +32,13 @@ pub fn create_router() -> Router<AppState> {
     // Add conditional routes based on features
     #[cfg(feature = "auth")]
     {
-        public = public.nest("/api/v1/auth", auth_routes());
+        use axum::middleware;
+        use crate::middleware::auth::auth_middleware;
+        // 公開authルート（register/login/refresh）は認証不要
+        public = public.nest("/api/v1/auth", auth_public_routes());
+        // 保護authルート（logout/profile）のみ認証レイヤを適用
+        let auth_protected = auth_protected_routes().layer(middleware::from_fn(auth_middleware));
+        public = public.nest("/api/v1/auth", auth_protected);
     }
 
     #[cfg(feature = "database")]
@@ -69,16 +75,23 @@ pub fn create_router() -> Router<AppState> {
         .layer(RateLimitLayer::new())
 }
 
-/// Authentication routes
+/// Authentication routes (public only)
 #[cfg(feature = "auth")]
-fn auth_routes() -> Router<AppState> {
+fn auth_public_routes() -> Router<AppState> {
     use crate::handlers::auth;
     Router::new()
         .route("/register", post(auth::register))
         .route("/login", post(auth::login))
+        .route("/refresh", post(auth::refresh_token))
+}
+
+/// Authentication routes (protected by auth middleware)
+#[cfg(feature = "auth")]
+fn auth_protected_routes() -> Router<AppState> {
+    use crate::handlers::auth;
+    Router::new()
         .route("/logout", post(auth::logout))
         .route("/profile", get(auth::profile))
-        .route("/refresh", post(auth::refresh_token))
 }
 
 /// Post routes

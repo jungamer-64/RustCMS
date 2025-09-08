@@ -1,8 +1,11 @@
 runtimes:
+    - rust@1.89.0
     - java@17.0.10
     - node@22.2.0
     - python@3.11.11
 tools:
+    - clippy@1.89.0
+    - cargo-audit@0.20.0
     - eslint@8.57.0
     - lizard@1.17.31
     - pmd@6.55.0

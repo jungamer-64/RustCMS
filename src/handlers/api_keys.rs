@@ -18,7 +18,7 @@ pub struct CreatedApiKeyResponse {
     pub raw_key: String,
 }
 
-#[utoipa::path(post, path="/api/v1/api-keys", request_body=CreateApiKeyPayload, responses((status=201, description="Created", body=CreatedApiKeyResponse, examples((
+#[utoipa::path(post, path="/api/v1/api-keys", security(("BearerAuth" = [])), request_body=CreateApiKeyPayload, responses((status=201, description="Created", body=CreatedApiKeyResponse, examples((
     "Created" = (
         summary = "APIキー作成",
         value = json!({
@@ -33,7 +33,7 @@ pub async fn create_api_key(State(state): State<AppState>, Extension(auth): Exte
     Ok((axum::http::StatusCode::CREATED, Json(CreatedApiKeyResponse { api_key, raw_key: raw })))
 }
 
-#[utoipa::path(get, path="/api/v1/api-keys", responses((status=200, body=[crate::models::ApiKeyResponse], examples((
+#[utoipa::path(get, path="/api/v1/api-keys", security(("BearerAuth" = [])), responses((status=200, body=[crate::models::ApiKeyResponse], examples((
     "List" = (
         summary = "APIキー一覧",
         value = json!([{ "id": "550e8400-e29b-41d4-a716-446655440000", "name": "integration", "permissions": ["read:posts"], "revoked": false }])
@@ -44,7 +44,7 @@ pub async fn list_api_keys(State(state): State<AppState>, Extension(auth): Exten
     Ok(Json(keys))
 }
 
-#[utoipa::path(delete, path="/api/v1/api-keys/{id}", params(("id"=Uuid, Path)), responses((status=200, examples((
+#[utoipa::path(delete, path="/api/v1/api-keys/{id}", security(("BearerAuth" = [])), params(("id"=Uuid, Path)), responses((status=200, examples((
     "Revoked" = (
         summary = "APIキー失効",
         value = json!({"status": "revoked"})
