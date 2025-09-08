@@ -21,3 +21,4 @@ posts_cache_key_fn_removal,Removed deprecated build_posts_cache_key,src/handlers
 auth_flat_fields_deprecation,Deprecated flattened token fields in AuthSuccessResponse,src/utils/auth_response.rs,Guides clients to use nested tokens.*,access_token|refresh_token|biscuit_token|expires_in|session_id|token
 legacy_auth_flat_feature_gating,LoginResponse behind feature gate,src/handlers/auth.rs|src/openapi.rs,Feature legacy-auth-flat controls legacy schema exposure,LoginResponse schema unconditional inclusion
 refresh_tamper_negative_tests,Tamper & garbage refresh rejection,tests/biscuit_refresh_tamper_tests.rs,Ensures signature and structural validation for refresh tokens,tampered_refresh_token_rejected|random_garbage_token_rejected
+refresh_session_missing_negative_test,Session missing refresh rejection,tests/biscuit_refresh_session_missing_tests.rs,Ensures refresh requires existing active session,refresh_fails_when_session_missing

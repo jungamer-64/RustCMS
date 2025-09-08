@@ -77,8 +77,9 @@ impl From<crate::auth::AuthResponse> for AuthSuccessResponse {
 
 impl AuthSuccessResponse {
     pub fn from_parts(tokens: &AuthTokens, user: UserInfo) -> Self {
-        // Centralize deprecated flattened field population
-        Self {
+    // Centralize deprecated flattened field population
+    #[allow(deprecated)]
+    let resp = Self {
             success: true,
             tokens: tokens.clone(),
             user,
@@ -88,6 +89,7 @@ impl AuthSuccessResponse {
             expires_in: tokens.expires_in,
             session_id: tokens.session_id.clone(),
             token: tokens.access_token.clone(),
-        }
+    };
+    resp
     }
 }

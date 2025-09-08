@@ -41,6 +41,28 @@ use crate::{
     Result,
 };
 
+// --- Key file helper funcs (extracted for reduced complexity in try_load_dir_keys) ---
+fn read_file_string(path: &std::path::Path, label: &str) -> crate::Result<String> {
+    std::fs::read_to_string(path)
+        .map_err(|e| crate::AppError::Internal(format!("Failed reading biscuit {label} key file: {e}")))
+}
+fn decode_key_b64(data: &str, label: &str) -> crate::Result<Vec<u8>> {
+    STANDARD.decode(data)
+        .map_err(|e| crate::AppError::Internal(format!("Failed to decode biscuit {label} key b64: {e}")))
+}
+fn read_biscuit_private_key(path: &std::path::Path) -> crate::Result<PrivateKey> {
+    let b64 = read_file_string(path, "private")?;
+    let bytes = decode_key_b64(&b64, "private")?;
+    PrivateKey::from_bytes(&bytes, BiscuitAlgorithm::Ed25519)
+        .map_err(|e| crate::AppError::Internal(format!("Failed to parse biscuit private key: {e}")))
+}
+fn read_biscuit_public_key(path: &std::path::Path) -> crate::Result<PublicKey> {
+    let b64 = read_file_string(path, "public")?;
+    let bytes = decode_key_b64(&b64, "public")?;
+    PublicKey::from_bytes(&bytes, BiscuitAlgorithm::Ed25519)
+        .map_err(|e| crate::AppError::Internal(format!("Failed to parse biscuit public key: {e}")))
+}
+
 #[derive(Debug, Error)]
 pub enum AuthError {
     #[error("Invalid credentials")]
@@ -107,6 +129,11 @@ impl Clone for AuthService {
             argon2: Argon2::default(),
         }
     }
+}
+
+impl AuthService {
+    /// Testing helper: clears all sessions (used by integration tests)
+    pub async fn clear_sessions_for_test(&self) { self.sessions.write().await.clear(); }
 }
 
 /// Session data
@@ -179,37 +206,6 @@ impl AuthService {
         Some((priv_key, pub_key))
     }
 
-    fn try_load_dir_keys(dir: &std::path::Path) -> crate::Result<Option<(PrivateKey, PublicKey)>> {
-        use std::fs;
-        fn read_file(path: &std::path::Path, label: &str) -> crate::Result<String> {
-            fs::read_to_string(path)
-                .map_err(|e| crate::AppError::Internal(format!("Failed reading biscuit {label} key file: {e}")))
-        }
-        fn decode_b64(data: &str, label: &str) -> crate::Result<Vec<u8>> {
-            STANDARD.decode(data)
-                .map_err(|e| crate::AppError::Internal(format!("Failed to decode biscuit {label} key b64: {e}")))
-        }
-        fn parse_private(bytes: &[u8]) -> crate::Result<PrivateKey> {
-            PrivateKey::from_bytes(bytes, BiscuitAlgorithm::Ed25519)
-                .map_err(|e| crate::AppError::Internal(format!("Failed to parse biscuit private key: {e}")))
-        }
-        fn parse_public(bytes: &[u8]) -> crate::Result<PublicKey> {
-            PublicKey::from_bytes(bytes, BiscuitAlgorithm::Ed25519)
-                .map_err(|e| crate::AppError::Internal(format!("Failed to parse biscuit public key: {e}")))
-        }
-
-        let priv_path = dir.join("biscuit_private.b64");
-        let pub_path = dir.join("biscuit_public.b64");
-        if !(priv_path.exists() && pub_path.exists()) { return Ok(None); }
-
-        let priv_b64 = read_file(&priv_path, "private")?;
-        let pub_b64 = read_file(&pub_path, "public")?;
-        let priv_bytes = decode_b64(&priv_b64, "private")?;
-        let pub_bytes = decode_b64(&pub_b64, "public")?;
-        let priv_key = parse_private(&priv_bytes)?;
-        let pub_key = parse_public(&pub_bytes)?;
-        Ok(Some((priv_key, pub_key)))
-    }
 
     fn generate_and_persist(dir: &std::path::Path) -> crate::Result<(PrivateKey, PublicKey)> {
         std::fs::create_dir_all(dir)
@@ -309,9 +305,12 @@ impl AuthService {
         } else {
             let path = std::path::Path::new(&config.biscuit_root_key);
             if !config.biscuit_root_key.is_empty() && path.exists() && path.is_dir() {
-                match Self::try_load_dir_keys(path)? {
-                    Some(pair) => pair,
-                    None => Self::generate_and_persist(path)?,
+                if path.join("biscuit_private.b64").exists() && path.join("biscuit_public.b64").exists() {
+                    let priv_key = read_biscuit_private_key(&path.join("biscuit_private.b64"))?;
+                    let pub_key = read_biscuit_public_key(&path.join("biscuit_public.b64"))?;
+                    (priv_key, pub_key)
+                } else {
+                    Self::generate_and_persist(path)?
                 }
             } else {
                 Self::generate_ephemeral()

@@ -150,6 +150,21 @@ cargo insta accept
 
 保護ルートには認証ミドルウェアが適用され、ハンドラは `Extension<crate::auth::AuthContext>` で検証済みユーザ情報を利用できます。
 
+### レガシー互換 Feature: `legacy-auth-flat`
+
+統一認証レスポンス `AuthSuccessResponse` への移行に伴い、旧 `LoginResponse` スキーマはデフォルトで OpenAPI から除外されています。過去クライアント生成コードや差分検証用途で必要な場合のみ下記で有効化してください。
+
+```bash
+cargo build --features legacy-auth-flat
+```
+
+有効化すると以下が有効になります:
+
+- `LoginResponse` 型がコンパイルされ OpenAPI に `LoginResponse` スキーマが追加
+- 互換 JSON フラットフィールド (access_token 等) は引き続き `AuthSuccessResponse` に残存 (deprecated 注記付き)
+
+将来のメジャーリリースでこの feature とフラットフィールドは削除予定です。新規実装は `response.tokens.*` を参照してください。
+
 
 ## �🛠️ クイックスタート
 

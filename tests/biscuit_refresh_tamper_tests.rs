@@ -1,6 +1,7 @@
 //! Tampering tests for refresh biscuit tokens
 
 use cms_backend::auth::AuthService;
+use base64::Engine; // for decode/encode methods on STANDARD
 use cms_backend::config::{AuthConfig, DatabaseConfig};
 use cms_backend::database::Database;
 use cms_backend::models::{User, UserRole};
