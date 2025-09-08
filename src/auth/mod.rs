@@ -1,6 +1,6 @@
 //! Authentication Service - Biscuit (統一版)
 //!
-//! 目的: 既存の JWT / Biscuit 併用実装を廃止し、Biscuit トークンのみで
+//! 目的: 既存のマルチ認証実装を廃止し、Biscuit トークンのみで
 //! アクセス/リフレッシュ (スライディングセッション) を提供する。
 //!
 //! 提供機能:
@@ -133,7 +133,7 @@ struct ParsedBiscuit {
     version: u32,
 }
 
-// JWT 関連構造体は削除 (後方互換保持不要と判断)
+// Legacy authentication structures have been removed in favor of Biscuit-only auth
 
 /// Login request
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
@@ -360,7 +360,7 @@ impl AuthService {
 
     /// Refresh tokens (access + rotated refresh) using current valid refresh token.
     /// 仕様:
-    /// - refresh JWT の jti は "<session_id>_refresh_v<version>" 形式
+    /// - refresh biscuit の session は "<session_id>_refresh_v<version>" 形式
     /// - セッションに保存している refresh_version と一致した場合のみ有効
     /// - 使用成功時に refresh_version をインクリメントし新しい refresh_token を発行 (旧トークンは無効化)
     /// - アクセストークンは 1h、リフレッシュは都度 30d (スライディング) とする
@@ -407,10 +407,6 @@ impl AuthService {
         Ok(b64)
     }
 
-    /// (旧互換) verify_jwt -> Biscuit access 検証
-    #[deprecated(note = "Use verify_biscuit(state, token) or auth_middleware injected AuthContext")]
-    pub async fn verify_jwt(&self, token: &str) -> Result<AuthContext> { self.verify_biscuit_generic(token, Some("access")).await }
-
     /// Biscuit トークン検証 (AppState 経由でユーザー確認 & メトリクス計測用ラッパーと組み合わせて利用)
     ///
     /// 直接 DB コネクションを取得せず、`AppState` の `db_get_user_by_id` を利用することで
@@ -453,7 +449,7 @@ impl AuthService {
     Ok(ParsedBiscuit { user_id, username, role, token_type, session_id, version })
     }
 
-    async fn verify_biscuit_generic(&self, token: &str, expect_type: Option<&str>) -> Result<AuthContext> {
+    pub async fn verify_biscuit_generic(&self, token: &str, expect_type: Option<&str>) -> Result<AuthContext> {
         let parsed = self.parse_and_check(token, expect_type)?;
         // セッション整合性チェックを専用ヘルパーへ委譲
         self.validate_session_consistency(&parsed).await?;

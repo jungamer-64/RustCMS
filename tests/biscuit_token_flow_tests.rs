@@ -66,7 +66,7 @@ async fn biscuit_refresh_rotation_invalidate_old() {
     assert!(!issued.access_token.is_empty());
     assert!(!issued.refresh_token.is_empty());
 
-    let ctx = auth.verify_jwt(&issued.access_token).await.expect("verify access");
+    let ctx = auth.verify_biscuit_generic(&issued.access_token, Some("access")).await.expect("verify access");
     assert_eq!(ctx.user_id, user.id);
 
     let rotated = auth.refresh_access_token(&issued.refresh_token).await.expect("refresh");

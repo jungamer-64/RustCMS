@@ -275,11 +275,6 @@ path = "src/bin/add_sample_post.rs"
 required-features = ["dev-tools"]
 
 [[bin]]
-name = "admin_cli_test"
-path = "src/bin/admin_cli_test.rs"
-required-features = ["dev-tools"]
-
-[[bin]]
 name = "admin_server"
 path = "src/bin/admin_server.rs"
 
