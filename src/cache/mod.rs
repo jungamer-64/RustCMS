@@ -109,29 +109,31 @@ impl CacheService {
             let _: () = conn.set(&full_key, &serialized).await?;
         }
 
-        // Set in memory cache
-        let expires_at = ttl.map(|t| Instant::now() + t);
-        let entry = CacheEntry {
-            value: serialized,
-            created_at: Instant::now(),
-            expires_at,
-            hits: 0,
-        };
-
-        let mut memory_cache = self.memory_cache.write().await;
-
-        // Evict old entries if cache is full
-        if memory_cache.len() >= self.max_memory_size {
-            self.evict_lru(&mut memory_cache).await;
-        }
-
-        memory_cache.insert(full_key, entry);
+    // Set in memory cache
+    self.memory_insert(full_key, serialized, ttl).await;
 
         // Update stats
         let mut stats = self.stats.write().await;
         stats.total_operations += 1;
 
         Ok(())
+    }
+
+    #[inline]
+    async fn memory_insert(&self, full_key: String, data: Vec<u8>, ttl: Option<Duration>) {
+        let expires_at = ttl.map(|t| Instant::now() + t);
+        let entry = CacheEntry {
+            value: data,
+            created_at: Instant::now(),
+            expires_at,
+            hits: 0,
+        };
+
+        let mut memory_cache = self.memory_cache.write().await;
+        if memory_cache.len() >= self.max_memory_size {
+            self.evict_lru(&mut memory_cache).await;
+        }
+        memory_cache.insert(full_key, entry);
     }
 
     /// Get value from cache
@@ -175,18 +177,7 @@ impl CacheService {
             let value: T = serde_json::from_slice(&data)?;
 
             // Store in memory cache for next time
-            let entry = CacheEntry {
-                value: data,
-                created_at: Instant::now(),
-                expires_at: None, // Redis handles TTL
-                hits: 1,
-            };
-
-            let mut memory_cache = self.memory_cache.write().await;
-            if memory_cache.len() >= self.max_memory_size {
-                self.evict_lru(&mut memory_cache).await;
-            }
-            memory_cache.insert(full_key, entry);
+            self.memory_insert(full_key, data, None).await;
 
             // Update stats
             self.record_redis_hit().await;

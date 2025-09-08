@@ -1,12 +1,16 @@
-use assert_cmd::Command;
+mod helpers;
+use helpers::common::run_cargo_gen_biscuit_keys;
 use predicates::str::contains;
 
 #[test]
 fn smoke_prints_private_key() {
-    let mut cmd = Command::new("cargo");
-    cmd.arg("run").arg("--manifest-path").arg("Cargo.toml").arg("--bin").arg("gen_biscuit_keys").arg("--")
-        .arg("--format").arg("stdout");
-    cmd.assert()
-        .success()
-        .stdout(contains("BISCUIT_PRIVATE_KEY_B64="));
+    // Use helpers to run the command and check output
+    let output = std::process::Command::new("cargo")
+        .arg("run").arg("--manifest-path").arg("Cargo.toml").arg("--bin").arg("gen_biscuit_keys").arg("--")
+        .arg("--format").arg("stdout")
+        .output()
+        .expect("failed to run gen_biscuit_keys");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("BISCUIT_PRIVATE_KEY_B64="));
 }

@@ -14,6 +14,58 @@ use crate::{
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use uuid::Uuid;
 
+// Macros to DRY optional filter application for Diesel boxed queries
+macro_rules! apply_eq_filter {
+    ($query:ident, $opt:expr, $col:path) => {
+        if let Some(val) = $opt.as_ref() {
+            $query = $query.filter($col.eq(val));
+        }
+    };
+}
+
+#[allow(unused_macros)]
+macro_rules! apply_tag_contains {
+    ($query:ident, $opt:expr, $col:path) => {
+        if let Some(val) = $opt.as_ref() {
+            #[allow(unused_imports)]
+            use diesel::PgArrayExpressionMethods;
+            $query = $query.filter($col.contains(vec![val.clone()]));
+        }
+    };
+}
+
+// Grouped filter application macros to remove repeated triplets
+macro_rules! apply_user_filters {
+    ($query:ident, $role:expr, $active:expr) => {{
+        apply_eq_filter!($query, $role, crate::database::schema::users::dsl::role);
+        apply_eq_filter!($query, $active, crate::database::schema::users::dsl::is_active);
+    }};
+}
+
+macro_rules! apply_post_filters {
+    ($query:ident, $status:expr, $author:expr, $tag:expr) => {{
+        apply_eq_filter!($query, $status, crate::database::schema::posts::dsl::status);
+        apply_eq_filter!($query, $author, crate::database::schema::posts::dsl::author_id);
+        apply_tag_contains!($query, $tag, crate::database::schema::posts::dsl::tags);
+    }};
+}
+
+// Macro to DRY ordering logic based on (column_name, desc) with a default
+// Usage:
+//   apply_order_match!(query, sort_col, desc, default_order,
+//       "created_at" => (users_dsl::created_at.asc(), users_dsl::created_at.desc()),
+//       "updated_at" => (users_dsl::updated_at.asc(), users_dsl::updated_at.desc()),
+//   );
+macro_rules! apply_order_match {
+    ($query:ident, $sort_col:expr, $desc:expr, $default:expr, $( $name:literal => ($asc:expr, $desc_e:expr) ),+ $(,)?) => {{
+        $query = match ($sort_col.as_str(), $desc) {
+            $( ($name, true) => $query.order($desc_e),
+               ($name, false) => $query.order($asc), )+
+            _ => $query.order($default),
+        };
+    }};
+}
+
 // Small helpers to reduce repeated error mapping patterns across DB helpers.
 fn map_diesel_result<T>(res: std::result::Result<T, diesel::result::Error>, not_found_msg: &str, ctx: &str) -> Result<T> {
     match res {
@@ -38,6 +90,98 @@ fn map_internal_err<T, E: std::fmt::Display>(res: std::result::Result<T, E>, ctx
     res.map_err(|e| crate::AppError::Internal(format!("{}: {}", ctx, e)))
 }
 
+// Data holder for post update fields to keep update_post lean and testable
+struct PostUpdateData {
+    title: String,
+    slug: String,
+    content: String,
+    excerpt: Option<String>,
+    tags: Vec<String>,
+    categories: Vec<String>,
+    meta_title: Option<String>,
+    meta_description: Option<String>,
+    status: String,
+    published_at: Option<chrono::DateTime<chrono::Utc>>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+// Compute the final set of fields for a post update, based on the request and existing row
+fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpdateData {
+    let title = req
+        .title
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| existing.title.clone());
+    let slug = req
+        .slug
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| existing.slug.clone());
+    let content = req
+        .content
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| existing.content.clone());
+    let excerpt = if req.excerpt.is_some() {
+        req.excerpt.clone()
+    } else {
+        existing.excerpt.clone()
+    };
+    let tags = req.tags.clone().unwrap_or_else(|| existing.tags.clone());
+    let categories = match &req.category {
+        Some(cat) => vec![cat.trim().to_lowercase()],
+        None => existing.categories.clone(),
+    };
+    let meta_title = if req.meta_title.is_some() {
+        req.meta_title.clone()
+    } else {
+        existing.meta_title.clone()
+    };
+    let meta_description = if req.meta_description.is_some() {
+        req.meta_description.clone()
+    } else {
+        existing.meta_description.clone()
+    };
+
+    // status / published_at handling
+    let mut status = if let Some(st) = &req.status {
+        st.to_string()
+    } else {
+        existing.status.clone()
+    };
+    let mut published_at = if req.published_at.is_some() {
+        req.published_at
+    } else {
+        existing.published_at
+    };
+    if let Some(published) = req.published {
+        if published {
+            status = "published".to_string();
+            if published_at.is_none() {
+                published_at = Some(chrono::Utc::now());
+            }
+        } else {
+            status = "draft".to_string();
+        }
+    }
+
+    let updated_at = chrono::Utc::now();
+
+    PostUpdateData {
+        title,
+        slug,
+        content,
+        excerpt,
+        tags,
+        categories,
+        meta_title,
+        meta_description,
+        status,
+        published_at,
+        updated_at,
+    }
+}
+
 // Diesel 2.x の embed_migrations: Cargo.toml からの相対パスでディレクトリ配下の
 // up.sql / down.sql を持つバージョンディレクトリを埋め込む。
 // 以前: 存在しない feature(with-migrations) と fallback(".") でビルド失敗を誘発していたため撤去。
@@ -60,6 +204,16 @@ impl Database {
         }
 
         Ok(Self { pool })
+    }
+
+    // Small helper to acquire a pooled connection and run a closure.
+    // This removes repeated `let mut conn = self.get_connection()?;` boilerplate.
+    fn with_conn<T, F>(&self, f: F) -> Result<T>
+    where
+        F: FnOnce(&mut PooledConnection) -> Result<T>,
+    {
+        let mut conn = self.get_connection()?;
+        f(&mut conn)
     }
 
     pub fn pool(&self) -> &DatabasePool {
@@ -89,13 +243,10 @@ impl Database {
             request.last_name,
             request.role,
         )?;
-
-    let mut conn = self.get_connection()?;
-
-    // Insert and return the created user
-    let created: User = User::create(&mut conn, &user)?;
-
-    Ok(created)
+        self.with_conn(|conn| {
+            let created: User = User::create(conn, &user)?;
+            Ok(created)
+        })
     }
 
     /// List users helper used by admin CLI (stub)
@@ -110,31 +261,28 @@ impl Database {
 
     /// Get user by username helper used by admin CLI (stub)
     pub async fn get_user_by_username(&self, username_str: &str) -> Result<User> {
-        let mut conn = self.get_connection()?;
     // Propagate model-level AppError (preserves NotFound vs other AppError variants)
-    let user = User::find_by_username(&mut conn, username_str)?;
-        Ok(user)
+    self.with_conn(|conn| User::find_by_username(conn, username_str))
     }
 
     pub async fn get_user_by_id(&self, _id: Uuid) -> Result<User> {
-        let mut conn = self.get_connection()?;
     // Propagate model-level AppError so NotFound is preserved
-    let user = User::find_by_id(&mut conn, _id)?;
-        Ok(user)
+    self.with_conn(|conn| User::find_by_id(conn, _id))
     }
 
     /// Find a user by email
     pub async fn get_user_by_email(&self, email: &str) -> Result<User> {
-        let mut conn = self.get_connection()?;
-    let user = self.run_query(|| crate::models::User::find_by_email(&mut conn, email), "DB error finding user by email")?;
-        Ok(user)
+        self.with_conn(|conn| {
+            let user = self.run_query(|| crate::models::User::find_by_email(conn, email), "DB error finding user by email")?;
+            Ok(user)
+        })
     }
 
     /// Update user's last login timestamp
     pub async fn update_last_login(&self, id: Uuid) -> Result<()> {
-        let mut conn = self.get_connection()?;
-    self.run_query(|| crate::models::User::update_last_login(&mut conn, id), "DB error updating last_login")?;
-        Ok(())
+        self.with_conn(|conn| {
+            self.run_query(|| crate::models::User::update_last_login(conn, id), "DB error updating last_login")
+        })
     }
 
     pub async fn get_users(
@@ -148,18 +296,12 @@ impl Database {
         use diesel::prelude::*;
         use crate::database::schema::users::dsl as users_dsl;
 
-        let mut conn = self.get_connection()?;
+        let (_page_n, limit, offset) = Self::paged_params(_page, _limit);
 
-    let (_page_n, limit, offset) = Self::paged_params(_page, _limit);
-
-        let mut query = users_dsl::users.into_boxed();
-
-        if let Some(role) = _role.as_ref() {
-            query = query.filter(users_dsl::role.eq(role));
-        }
-        if let Some(active) = _active.as_ref() {
-            query = query.filter(users_dsl::is_active.eq(active));
-        }
+        // Build and execute inside with_conn to centralize connection logic
+        self.with_conn(|conn| {
+            let mut query = users_dsl::users.into_boxed();
+            apply_user_filters!(query, _role, _active);
 
         let (sort_col, desc) = {
             let allowed = ["created_at", "updated_at", "username"];
@@ -167,94 +309,72 @@ impl Database {
             (c, d)
         };
 
-        query = match (sort_col.as_str(), desc) {
-            ("created_at", true) => query.order(users_dsl::created_at.desc()),
-            ("created_at", false) => query.order(users_dsl::created_at.asc()),
-            ("updated_at", true) => query.order(users_dsl::updated_at.desc()),
-            ("updated_at", false) => query.order(users_dsl::updated_at.asc()),
-            ("username", true) => query.order(users_dsl::username.desc()),
-            ("username", false) => query.order(users_dsl::username.asc()),
-            _ => query.order(users_dsl::created_at.desc()),
-        };
+        apply_order_match!(
+            query,
+            sort_col,
+            desc,
+            users_dsl::created_at.desc(),
+            "created_at" => (users_dsl::created_at.asc(), users_dsl::created_at.desc()),
+            "updated_at" => (users_dsl::updated_at.asc(), users_dsl::updated_at.desc()),
+            "username" => (users_dsl::username.asc(), users_dsl::username.desc()),
+        );
 
-    let results = self.run_query(|| query.offset(offset).limit(limit).load::<User>(&mut conn), "Failed to list users")?;
-
-        Ok(results)
+            let results = self.run_query(|| query.offset(offset).limit(limit).load::<User>(conn), "Failed to list users")?;
+            Ok(results)
+        })
     }
 
     pub async fn update_user(&self, id: Uuid, request: UpdateUserRequest) -> Result<User> {
-        let mut conn = self.get_connection()?;
-    // Let the model return AppError (NotFound, etc.) propagate directly instead of
-    // remapping to Internal; this preserves semantics seen by callers.
-    let updated = User::update(&mut conn, id, &request)?;
-    Ok(updated)
+        self.with_conn(|conn| {
+            // Let the model return AppError (NotFound, etc.) propagate directly.
+            User::update(conn, id, &request)
+        })
     }
 
     pub async fn count_users(&self) -> Result<usize> {
-        use diesel::prelude::*;
-        use crate::database::schema::users::dsl as users_dsl;
-        let mut conn = self.get_connection()?;
-    let total: i64 = self.count_query(|| users_dsl::users.count().get_result(&mut conn), "Failed to count users")?;
-    Ok(total as usize)
+    // Reuse the filtered counter to avoid duplicated query logic
+    self.count_users_filtered(None, None).await
     }
 
     /// Count users with optional filters (for accurate pagination totals)
     pub async fn count_users_filtered(&self, _role: Option<String>, _active: Option<bool>) -> Result<usize> {
         use diesel::prelude::*;
         use crate::database::schema::users::dsl as users_dsl;
-        let mut conn = self.get_connection()?;
-
-        let mut query = users_dsl::users.into_boxed();
-        if let Some(role) = _role.as_ref() {
-            query = query.filter(users_dsl::role.eq(role));
-        }
-        if let Some(active) = _active.as_ref() {
-            query = query.filter(users_dsl::is_active.eq(active));
-        }
-
-    let total: i64 = self.count_query(|| query.count().get_result(&mut conn), "Failed to count users (filtered)")?;
-    Ok(total as usize)
+        self.with_conn(|conn| {
+            let mut query = users_dsl::users.into_boxed();
+            apply_user_filters!(query, _role, _active);
+            let total: i64 = self.count_query(|| query.count().get_result(conn), "Failed to count users (filtered)")?;
+            Ok(total as usize)
+        })
     }
 
     // Post CRUD operations
     pub async fn create_post(&self, request: CreatePostRequest) -> Result<Post> {
         use diesel::prelude::*;
-
-    let mut conn = self.get_connection()?;
-
         // Try to choose an author: prefer a user with role = 'admin', otherwise use the first user
         use crate::database::schema::users::dsl as users_dsl;
-
-        // Try to select an admin user first, otherwise fall back to the first user.
-        // Use run_query to centralize error mapping for DB operations.
-        let author = self.run_query(|| {
-            users_dsl::users
-                .filter(users_dsl::role.eq("admin"))
-                .first::<crate::models::user::User>(&mut conn)
-                .or_else(|_| users_dsl::users.first::<crate::models::user::User>(&mut conn))
-        }, "Failed to find author user")?;
-
-        let author_id = author.id;
-
-        // Convert request into NewPost (generates id inside)
-        let new_post = request.into_new_post(author_id);
-
-        // Insert and return the created post
         use crate::database::schema::posts::dsl as posts_dsl;
-
-    let inserted: Post = self.run_query(|| diesel::insert_into(posts_dsl::posts).values(&new_post).get_result(&mut conn), "Failed to create post")?;
-
-    Ok(inserted)
+        self.with_conn(|conn| {
+            let author = self.run_query(|| {
+                users_dsl::users
+                    .filter(users_dsl::role.eq("admin"))
+                    .first::<crate::models::user::User>(conn)
+                    .or_else(|_| users_dsl::users.first::<crate::models::user::User>(conn))
+            }, "Failed to find author user")?;
+            let author_id = author.id;
+            let new_post = request.into_new_post(author_id);
+            let inserted: Post = self.run_query(|| diesel::insert_into(posts_dsl::posts).values(&new_post).get_result(conn), "Failed to create post")?;
+            Ok(inserted)
+        })
     }
 
     pub async fn get_post_by_id(&self, _id: Uuid) -> Result<Post> {
         use diesel::prelude::*;
         use crate::database::schema::posts::dsl as posts_dsl;
-
-        let mut conn = self.get_connection()?;
-    let post = self.get_one_query(|| posts_dsl::posts.find(_id).first::<Post>(&mut conn), "Post not found", "Failed to fetch post")?;
-
-        Ok(post)
+        self.with_conn(|conn| {
+            let post = self.get_one_query(|| posts_dsl::posts.find(_id).first::<Post>(conn), "Post not found", "Failed to fetch post")?;
+            Ok(post)
+        })
     }
 
     pub async fn get_posts(
@@ -270,26 +390,12 @@ impl Database {
     // no raw SQL needed
         use crate::database::schema::posts::dsl as posts_dsl;
 
-        let mut conn = self.get_connection()?;
-
         // Pagination guards
-    let (_page_n, limit, offset) = Self::paged_params(_page, _limit);
+        let (_page_n, limit, offset) = Self::paged_params(_page, _limit);
 
-        let mut query = posts_dsl::posts.into_boxed();
-
-        if let Some(status) = _status.as_ref() {
-            query = query.filter(posts_dsl::status.eq(status));
-        }
-        if let Some(author) = _author.as_ref() {
-            query = query.filter(posts_dsl::author_id.eq(author));
-        }
-        if let Some(tag) = _tag.as_ref() {
-            // tags @> ARRAY[tag]
-            // Prefer Diesel array contains if available; fallback to SQL fragment
-            #[allow(unused_imports)]
-            use diesel::PgArrayExpressionMethods;
-            query = query.filter(posts_dsl::tags.contains(vec![tag.clone()]));
-        }
+        self.with_conn(|conn| {
+            let mut query = posts_dsl::posts.into_boxed();
+            apply_post_filters!(query, _status, _author, _tag);
 
         // Sort parsing via common helper; supports created_at, updated_at, published_at, title and optional '-' prefix
         let (sort_col, desc) = {
@@ -298,101 +404,75 @@ impl Database {
             (c, d)
         };
 
-        query = match (sort_col.as_str(), desc) {
-            ("created_at", true) => query.order(posts_dsl::created_at.desc()),
-            ("created_at", false) => query.order(posts_dsl::created_at.asc()),
-            ("updated_at", true) => query.order(posts_dsl::updated_at.desc()),
-            ("updated_at", false) => query.order(posts_dsl::updated_at.asc()),
-            // Emulate NULLS LAST/FIRST using a composite order
-            ("published_at", true) => query.order((posts_dsl::published_at.is_null().asc(), posts_dsl::published_at.desc())),
-            ("published_at", false) => query.order((posts_dsl::published_at.is_null().desc(), posts_dsl::published_at.asc())),
-            ("title", true) => query.order(posts_dsl::title.desc()),
-            ("title", false) => query.order(posts_dsl::title.asc()),
-            _ => query.order(posts_dsl::created_at.desc()),
-        };
+        // published_at needs composite for null handling; handle via default and explicit arms
+        if sort_col == "published_at" {
+            query = if desc {
+                query.order((posts_dsl::published_at.is_null().asc(), posts_dsl::published_at.desc()))
+            } else {
+                query.order((posts_dsl::published_at.is_null().desc(), posts_dsl::published_at.asc()))
+            };
+        } else {
+            apply_order_match!(
+                query,
+                sort_col,
+                desc,
+                posts_dsl::created_at.desc(),
+                "created_at" => (posts_dsl::created_at.asc(), posts_dsl::created_at.desc()),
+                "updated_at" => (posts_dsl::updated_at.asc(), posts_dsl::updated_at.desc()),
+                "title" => (posts_dsl::title.asc(), posts_dsl::title.desc()),
+            );
+        }
 
-    let results = self.run_query(|| query.offset(offset).limit(limit).load::<Post>(&mut conn), "Failed to list posts")?;
-
-        Ok(results)
+            let results = self.run_query(|| query.offset(offset).limit(limit).load::<Post>(conn), "Failed to list posts")?;
+            Ok(results)
+        })
     }
 
     pub async fn update_post(&self, _id: Uuid, _request: UpdatePostRequest) -> Result<Post> {
         use diesel::prelude::*;
         use crate::database::schema::posts::dsl as posts_dsl;
+        
+        // Extract compute-and-update into a scoped block for readability
+        self.with_conn(|conn| {
+            // Load existing to compute derived fields and keep unchanged values
+            let existing = self.get_one_query(|| posts_dsl::posts.find(_id).first::<Post>(conn), "Post not found", "Failed to fetch post")?;
 
-        let mut conn = self.get_connection()?;
+            // Compute all update values in one place
+            let update = compute_post_update_data(&existing, &_request);
 
-        // Load existing to compute derived fields and keep unchanged values
-    let existing = self.get_one_query(|| posts_dsl::posts.find(_id).first::<Post>(&mut conn), "Post not found", "Failed to fetch post")?;
+            // Apply update
+            let updated = self.run_query(|| diesel::update(posts_dsl::posts.find(_id))
+                .set((
+                    posts_dsl::title.eq(update.title),
+                    posts_dsl::slug.eq(update.slug),
+                    posts_dsl::content.eq(update.content),
+                    posts_dsl::excerpt.eq(update.excerpt),
+                    posts_dsl::tags.eq(update.tags),
+                    posts_dsl::categories.eq(update.categories),
+                    posts_dsl::meta_title.eq(update.meta_title),
+                    posts_dsl::meta_description.eq(update.meta_description),
+                    posts_dsl::status.eq(update.status),
+                    posts_dsl::published_at.eq(update.published_at),
+                    posts_dsl::updated_at.eq(update.updated_at),
+                ))
+                .get_result::<Post>(conn), "Failed to update post")?;
 
-        // Compute new values
-        let new_title = _request.title.as_ref().cloned().unwrap_or_else(|| existing.title.clone());
-        let new_slug = _request.slug.as_ref().cloned().unwrap_or_else(|| existing.slug.clone());
-        let new_content = _request.content.as_ref().cloned().unwrap_or_else(|| existing.content.clone());
-        let new_excerpt = if _request.excerpt.is_some() { _request.excerpt.clone() } else { existing.excerpt.clone() };
-        let new_tags = _request.tags.clone().unwrap_or_else(|| existing.tags.clone());
-        let new_categories = match &_request.category {
-            Some(cat) => vec![cat.trim().to_lowercase()],
-            None => existing.categories.clone(),
-        };
-        let new_meta_title = if _request.meta_title.is_some() { _request.meta_title.clone() } else { existing.meta_title.clone() };
-        let new_meta_description = if _request.meta_description.is_some() { _request.meta_description.clone() } else { existing.meta_description.clone() };
-
-        // status / published_at handling
-        let mut new_status = if let Some(st) = &_request.status { st.to_string() } else { existing.status.clone() };
-        let mut new_published_at = if _request.published_at.is_some() { _request.published_at } else { existing.published_at };
-        if let Some(published) = _request.published {
-            if published {
-                new_status = "published".to_string();
-                if new_published_at.is_none() { new_published_at = Some(chrono::Utc::now()); }
-            } else {
-                new_status = "draft".to_string();
-            }
-        }
-
-        let now = chrono::Utc::now();
-
-        let updated = self.run_query(|| diesel::update(posts_dsl::posts.find(_id))
-            .set((
-                posts_dsl::title.eq(new_title),
-                posts_dsl::slug.eq(new_slug),
-                posts_dsl::content.eq(new_content),
-                posts_dsl::excerpt.eq(new_excerpt),
-                posts_dsl::tags.eq(new_tags),
-                posts_dsl::categories.eq(new_categories),
-                posts_dsl::meta_title.eq(new_meta_title),
-                posts_dsl::meta_description.eq(new_meta_description),
-                posts_dsl::status.eq(new_status),
-                posts_dsl::published_at.eq(new_published_at),
-                posts_dsl::updated_at.eq(now),
-            ))
-            .get_result::<Post>(&mut conn), "Failed to update post")?;
-
-        Ok(updated)
+            Ok(updated)
+        })
     }
 
     pub async fn delete_post(&self, _id: Uuid) -> Result<()> {
         use diesel::prelude::*;
         use crate::database::schema::posts::dsl as posts_dsl;
-        let mut conn = self.get_connection()?;
-    // Use helper to execute and ensure at least one row affected
-    self.execute_and_ensure(|| diesel::delete(posts_dsl::posts.find(_id)).execute(&mut conn), "Failed to delete post", "Post not found")?;
-        Ok(())
+        // Use helper to execute and ensure at least one row affected
+        self.with_conn(|conn| {
+            self.execute_and_ensure(|| diesel::delete(posts_dsl::posts.find(_id)).execute(conn), "Failed to delete post", "Post not found")
+        })
     }
 
     pub async fn count_posts(&self, _tag: Option<&str>) -> Result<usize> {
-        use diesel::prelude::*;
-        use crate::database::schema::posts::dsl as posts_dsl;
-        let mut conn = self.get_connection()?;
-
-        let mut query = posts_dsl::posts.into_boxed();
-        if let Some(tag) = _tag {
-            #[allow(unused_imports)]
-            use diesel::PgArrayExpressionMethods;
-            query = query.filter(posts_dsl::tags.contains(vec![tag.to_string()]));
-        }
-    let total: i64 = self.count_query(|| query.count().get_result(&mut conn), "Failed to count posts")?;
-        Ok(total as usize)
+    // Delegate to the filtered counter to avoid duplication
+    self.count_posts_filtered(None, None, _tag.map(|t| t.to_string())).await
     }
 
     /// Count posts with optional filters to match listing totals
@@ -404,34 +484,17 @@ impl Database {
     ) -> Result<usize> {
         use diesel::prelude::*;
         use crate::database::schema::posts::dsl as posts_dsl;
-        let mut conn = self.get_connection()?;
-
-        let mut query = posts_dsl::posts.into_boxed();
-        if let Some(status) = _status.as_ref() {
-            query = query.filter(posts_dsl::status.eq(status));
-        }
-        if let Some(author) = _author.as_ref() {
-            query = query.filter(posts_dsl::author_id.eq(author));
-        }
-        if let Some(tag) = _tag.as_ref() {
-            #[allow(unused_imports)]
-            use diesel::PgArrayExpressionMethods;
-            query = query.filter(posts_dsl::tags.contains(vec![tag.clone()]));
-        }
-
-    let total: i64 = self.count_query(|| query.count().get_result(&mut conn), "Failed to count posts (filtered)")?;
-        Ok(total as usize)
+        self.with_conn(|conn| {
+            let mut query = posts_dsl::posts.into_boxed();
+            apply_post_filters!(query, _status, _author, _tag);
+            let total: i64 = self.count_query(|| query.count().get_result(conn), "Failed to count posts (filtered)")?;
+            Ok(total as usize)
+        })
     }
 
     pub async fn count_posts_by_author(&self, author: Uuid) -> Result<usize> {
-        use diesel::prelude::*;
-        use crate::database::schema::posts::dsl as posts_dsl;
-        let mut conn = self.get_connection()?;
-    let total: i64 = self.count_query(|| posts_dsl::posts
-        .filter(posts_dsl::author_id.eq(author))
-        .count()
-        .get_result(&mut conn), "Failed to count posts by author")?;
-        Ok(total as usize)
+    // Delegate to the filtered counter to avoid duplication
+    self.count_posts_filtered(None, Some(author), None).await
     }
 
     // Helper to run a diesel execute call and ensure affected > 0, mapping errors consistently.
@@ -482,23 +545,25 @@ impl Database {
         (page, limit, offset)
     }
 
+    
+
     /// Delete a user by ID
     pub async fn delete_user(&self, id: Uuid) -> Result<()> {
-    let mut conn = self.get_connection()?;
-    self.execute_and_ensure(|| User::delete(&mut conn, id), "Failed to delete user", "User not found")?;
-        Ok(())
+        self.with_conn(|conn| {
+            self.execute_and_ensure(|| User::delete(conn, id), "Failed to delete user", "User not found")
+        })
     }
 
     /// Reset user password helper used by admin CLI
     pub async fn reset_user_password(&self, id: Uuid, new_password: &str) -> Result<()> {
         use diesel::prelude::*;
         use crate::database::schema::users::dsl as users_dsl;
-        let mut conn = self.get_connection()?;
         let hash = crate::utils::password::hash_password(new_password)?;
-        self.execute_and_ensure(|| diesel::update(users_dsl::users.find(id))
-            .set((users_dsl::password_hash.eq(Some(hash)), users_dsl::updated_at.eq(chrono::Utc::now())))
-            .execute(&mut conn), "Failed to reset password", "User not found")?;
-        Ok(())
+        self.with_conn(|conn| {
+            self.execute_and_ensure(|| diesel::update(users_dsl::users.find(id))
+                .set((users_dsl::password_hash.eq(Some(hash.clone())), users_dsl::updated_at.eq(chrono::Utc::now())))
+                .execute(conn), "Failed to reset password", "User not found")
+        })
     }
 
     #[cfg(all(feature = "database", not(test)))]

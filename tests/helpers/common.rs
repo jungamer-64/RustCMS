@@ -27,3 +27,23 @@ pub fn find_gz_in_dir(backup_dir: &PathBuf) -> bool {
     }
     false
 }
+
+/// Run gen_biscuit_keys multiple times to create backups
+pub fn run_gen_biscuit_keys_multiple_backups(out_dir: &str, backup_dir: &str, times: usize) {
+    for _ in 0..times {
+        run_cargo_gen_biscuit_keys(&["--format", "files", "--out-dir", out_dir, "--backup", "--backup-dir", backup_dir, "--force"]);
+    }
+}
+
+/// Count backups with a given prefix in a directory
+pub fn count_backups_with_prefix(backup_dir: &PathBuf, prefix: &str) -> usize {
+    let mut count = 0;
+    for entry in fs::read_dir(backup_dir).unwrap() {
+        let entry = entry.unwrap();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with(prefix) {
+            count += 1;
+        }
+    }
+    count
+}

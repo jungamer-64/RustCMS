@@ -1,7 +1,7 @@
 // 完全に独立したシンプルCMS - 単一ファイルでの実装
 use axum::{
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::{StatusCode},
     response::{Html, IntoResponse, Json},
     routing::{delete, get, post, put},
     Router,
@@ -152,6 +152,34 @@ impl InMemoryStore {
 // ヘルパー関数
 fn generate_slug(title: &str) -> String { generate_safe_slug(title) }
 
+#[inline]
+fn now_iso() -> String { chrono::Utc::now().to_rfc3339() }
+
+#[inline]
+fn normalize_page_limit(params: &QueryParams, default_limit: usize, max_limit: usize) -> (usize, usize) {
+    let page = params.page.unwrap_or(1).max(1);
+    let mut limit = params.limit.unwrap_or(default_limit);
+    if limit == 0 { limit = default_limit; }
+    if limit > max_limit { limit = max_limit; }
+    (page, limit)
+}
+
+#[inline]
+fn apply_published_filter<T, F>(list: &mut Vec<T>, published_opt: Option<bool>, get_published: F)
+where
+    F: Fn(&T) -> bool,
+{
+    if let Some(published) = published_opt {
+        list.retain(|item| get_published(item) == published);
+    }
+}
+fn sort_by_created_desc<T, F>(list: &mut Vec<T>, get_created_at: F)
+where
+    F: Fn(&T) -> &String,
+{
+    list.sort_by(|a, b| get_created_at(b).cmp(get_created_at(a)));
+}
+
 fn paginate<T: Clone>(items: &[T], page: usize, per_page: usize) -> (Vec<T>, Pagination) {
     let total = items.len();
     let total_pages = (total as f64 / per_page as f64).ceil() as usize;
@@ -174,6 +202,11 @@ fn paginate<T: Clone>(items: &[T], page: usize, per_page: usize) -> (Vec<T>, Pag
     (paginated_items, pagination)
 }
 
+#[inline]
+fn respond_paginated<T: Serialize>(data: Vec<T>, pagination: Pagination) -> impl IntoResponse {
+    Json(ApiResponse::success(crate::utils::api_types::PaginatedResponse { data, pagination }))
+}
+
 // APIハンドラー
 
 // ヘルスチェック
@@ -193,23 +226,12 @@ async fn get_posts(
 ) -> impl IntoResponse {
     let posts = store.posts.read().unwrap();
     let mut post_list: Vec<Post> = posts.values().cloned().collect();
-
-    // 公開状態でフィルタリング
-    if let Some(published) = params.published {
-        post_list.retain(|p| p.published == published);
-    }
-
-    // 作成日時でソート（新しい順）
-    post_list.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-
-    // ページネーション
-    let page = params.page.unwrap_or(1).max(1);
-    let mut limit = params.limit.unwrap_or(20);
-    if limit == 0 { limit = 20; }
-    if limit > 100 { limit = 100; }
+    apply_published_filter(&mut post_list, params.published, |p| p.published);
+    sort_by_created_desc(&mut post_list, |p| &p.created_at);
+    let (page, limit) = normalize_page_limit(&params, 20, 100);
     let (paginated_posts, pagination) = paginate(&post_list, page, limit);
 
-    Json(ApiResponse::success(crate::utils::api_types::PaginatedResponse { data: paginated_posts, pagination }))
+    respond_paginated(paginated_posts, pagination)
 }
 
 async fn get_post(
@@ -234,7 +256,7 @@ async fn create_post(
 ) -> impl IntoResponse {
     let id = Uuid::new_v4().to_string();
     let slug = payload.slug.unwrap_or_else(|| generate_slug(&payload.title));
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = now_iso();
 
     let post = Post {
         id: id.clone(),
@@ -274,7 +296,7 @@ async fn update_post(
         if let Some(published) = payload.published {
             post.published = published;
         }
-        post.updated_at = chrono::Utc::now().to_rfc3339();
+    post.updated_at = now_iso();
 
     Json(ApiResponse::success(post.clone()))
     } else {
@@ -308,16 +330,11 @@ async fn get_users(
 ) -> impl IntoResponse {
     let users = store.users.read().unwrap();
     let mut user_list: Vec<User> = users.values().cloned().collect();
-
-    // 作成日時でソート（新しい順）
-    user_list.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-
-    // ページネーション
-    let page = params.page.unwrap_or(1).max(1);
-    let limit = params.limit.unwrap_or(10).min(100);
+    sort_by_created_desc(&mut user_list, |u| &u.created_at);
+    let (page, limit) = normalize_page_limit(&params, 10, 100);
     let (paginated_users, pagination) = paginate(&user_list, page, limit);
 
-    Json(ApiResponse::success(crate::utils::api_types::PaginatedResponse { data: paginated_users, pagination }))
+    respond_paginated(paginated_users, pagination)
 }
 
 async fn create_user(
@@ -331,7 +348,7 @@ async fn create_user(
         username: payload.username,
         email: payload.email,
         role: payload.role.unwrap_or("user".to_string()),
-        created_at: chrono::Utc::now().to_rfc3339(),
+    created_at: now_iso(),
     };
 
     store.users.write().unwrap().insert(id.clone(), user.clone());
@@ -349,21 +366,12 @@ async fn get_pages(
 ) -> impl IntoResponse {
     let pages = store.pages.read().unwrap();
     let mut page_list: Vec<Page> = pages.values().cloned().collect();
-
-    // 公開状態でフィルタリング
-    if let Some(published) = params.published {
-        page_list.retain(|p| p.published == published);
-    }
-
-    // 作成日時でソート（新しい順）
-    page_list.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-
-    // ページネーション
-    let page = params.page.unwrap_or(1).max(1);
-    let limit = params.limit.unwrap_or(10).min(100);
+    apply_published_filter(&mut page_list, params.published, |p| p.published);
+    sort_by_created_desc(&mut page_list, |p| &p.created_at);
+    let (page, limit) = normalize_page_limit(&params, 10, 100);
     let (paginated_pages, pagination) = paginate(&page_list, page, limit);
 
-    Json(ApiResponse::success(crate::utils::api_types::PaginatedResponse { data: paginated_pages, pagination }))
+    respond_paginated(paginated_pages, pagination)
 }
 
 async fn create_page(
@@ -372,7 +380,7 @@ async fn create_page(
 ) -> impl IntoResponse {
     let id = Uuid::new_v4().to_string();
     let slug = payload.slug.unwrap_or_else(|| generate_slug(&payload.title));
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = now_iso();
 
     let page = Page {
         id: id.clone(),
@@ -389,7 +397,8 @@ async fn create_page(
     (
         StatusCode::CREATED,
         Json(ApiResponse::success_with_message(page, "Page created successfully".to_string())),
-    );
+    )
+}
 
 // 統計ハンドラー
 async fn get_stats(State(store): State<InMemoryStore>) -> impl IntoResponse {
@@ -413,153 +422,15 @@ async fn get_stats(State(store): State<InMemoryStore>) -> impl IntoResponse {
 
 // ドキュメンテーション
 async fn api_docs() -> impl IntoResponse {
-    let html = r#"
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple CMS API Documentation</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
-        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
-        h3 { color: #7f8c8d; }
-        .endpoint { background: #ecf0f1; padding: 15px; margin: 10px 0; border-radius: 5px; border-left: 4px solid #3498db; }
-        .method { font-weight: bold; padding: 2px 8px; border-radius: 3px; color: white; font-size: 12px; }
-        .get { background: #27ae60; }
-        .post { background: #f39c12; }
-        .put { background: #9b59b6; }
-        .delete { background: #e74c3c; }
-        code { background: #2c3e50; color: #ecf0f1; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace; }
-        .example { background: #34495e; color: #ecf0f1; padding: 15px; border-radius: 5px; overflow-x: auto; margin: 10px 0; }
-        .status { margin: 20px 0; padding: 15px; background: #d5f4e6; border-radius: 5px; }
-        ul { line-height: 1.6; }
-        .feature { background: #e8f4fd; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 3px solid #3498db; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🚀 Simple CMS API Documentation</h1>
-        
-        <div class="status">
-            <h3>✅ サービス状況</h3>
-            <p>Simple CMS API は正常に動作しています。実用的なCMSとして以下の機能を提供します。</p>
-        </div>
-
-        <h2>📋 主要機能</h2>
-        <div class="feature">💬 投稿管理 - CRUD操作、公開/下書き状態管理</div>
-        <div class="feature">👥 ユーザー管理 - ユーザー作成・一覧表示</div>
-        <div class="feature">📄 ページ管理 - 静的ページの作成・管理</div>
-        <div class="feature">🔍 検索・フィルタリング - 公開状態による絞り込み</div>
-        <div class="feature">📊 ページネーション - 効率的なデータ表示</div>
-        <div class="feature">📈 統計情報 - システム全体の概要</div>
-
-        <h2>🔗 API エンドポイント</h2>
-
-        <h3>ヘルスチェック</h3>
-        <div class="endpoint">
-            <span class="method get">GET</span> <code>/health</code>
-            <p>システムの稼働状況を確認</p>
-        </div>
-
-        <h3>投稿管理</h3>
-        <div class="endpoint">
-            <span class="method get">GET</span> <code>/api/posts</code>
-            <p>投稿一覧を取得（ページネーション、公開状態フィルタリング対応）</p>
-            <p>クエリパラメータ: <code>page</code>, <code>limit</code>, <code>published</code></p>
-        </div>
-        <div class="endpoint">
-            <span class="method get">GET</span> <code>/api/posts/{id}</code>
-            <p>特定の投稿を取得</p>
-        </div>
-        <div class="endpoint">
-            <span class="method post">POST</span> <code>/api/posts</code>
-            <p>新しい投稿を作成</p>
-        </div>
-        <div class="endpoint">
-            <span class="method put">PUT</span> <code>/api/posts/{id}</code>
-            <p>投稿を更新</p>
-        </div>
-        <div class="endpoint">
-            <span class="method delete">DELETE</span> <code>/api/posts/{id}</code>
-            <p>投稿を削除</p>
-        </div>
-
-        <h3>ユーザー管理</h3>
-        <div class="endpoint">
-            <span class="method get">GET</span> <code>/api/users</code>
-            <p>ユーザー一覧を取得</p>
-        </div>
-        <div class="endpoint">
-            <span class="method post">POST</span> <code>/api/users</code>
-            <p>新しいユーザーを作成</p>
-        </div>
-
-        <h3>ページ管理</h3>
-        <div class="endpoint">
-            <span class="method get">GET</span> <code>/api/pages</code>
-            <p>ページ一覧を取得</p>
-        </div>
-        <div class="endpoint">
-            <span class="method post">POST</span> <code>/api/pages</code>
-            <p>新しいページを作成</p>
-        </div>
-
-        <h3>統計情報</h3>
-        <div class="endpoint">
-            <span class="method get">GET</span> <code>/api/stats</code>
-            <p>システム統計情報を取得</p>
-        </div>
-
-        <h2>💡 使用例</h2>
-        
-        <h3>投稿作成</h3>
-        <div class="example">
-curl -X POST http://localhost:3000/api/posts \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "新しい投稿",
-    "content": "投稿の内容です",
-    "published": true
-  }'
-        </div>
-
-        <h3>投稿一覧取得（公開済みのみ）</h3>
-        <div class="example">
-curl "http://localhost:3000/api/posts?published=true&page=1&limit=5"
-        </div>
-
-        <h2>🌟 実用性</h2>
-        <p>このSimple CMSは以下の点で実用的です：</p>
-        <ul>
-            <li>✅ 完全な CRUD 操作サポート</li>
-            <li>✅ RESTful API 設計</li>
-            <li>✅ ページネーション実装</li>
-            <li>✅ フィルタリング機能</li>
-            <li>✅ エラーハンドリング</li>
-            <li>✅ JSON レスポンス統一</li>
-            <li>✅ CORS サポート</li>
-            <li>✅ 包括的なドキュメント</li>
-        </ul>
-
-        <h2>🔧 技術仕様</h2>
-        <ul>
-            <li>フレームワーク: Axum (高性能 Rust web フレームワーク)</li>
-            <li>データストレージ: インメモリ（高速アクセス）</li>
-            <li>シリアライゼーション: Serde (JSON)</li>
-            <li>非同期処理: Tokio</li>
-            <li>CORS対応: tower-http</li>
-        </ul>
-    </div>
-</body>
-</html>
-"#;
-    Html(html)
+    Html(include_str!("templates/simple_cms_docs.html"))
 }
 
-// ルーターを構築
+#[tokio::main]
+async fn main() {
+    // 共有ストアを初期化
+    let store = InMemoryStore::new();
+
+    // ルーターを構築
     let app = Router::new()
         // ヘルスチェック
         .route("/health", get(health_check))

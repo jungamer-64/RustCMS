@@ -21,6 +21,18 @@ impl PostRepository {
         Self { db, cache, metrics }
     }
 
+    // Generic async timing helper to reduce duplicated start/stop timer patterns
+    async fn timed<T, F, Fut>(&self, operation: &str, f: F) -> Result<T>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<T>>,
+    {
+        let timer = self.start_db_timer(operation);
+        let res = f().await;
+        timer.stop();
+        res
+    }
+
     // Generic helper to attempt reading a typed value from cache and record metrics.
     async fn try_get_cache<T>(&self, cache_key: &str) -> Result<Option<T>>
     where
@@ -82,36 +94,36 @@ impl PostRepository {
     }
 
     pub async fn create(&self, req: CreatePostRequest, author_id: Uuid) -> Result<Post> {
-    let timer = self.start_db_timer("insert");
-
         let id = Uuid::new_v4();
         let now = Utc::now();
         let slug = req.slug.unwrap_or_else(|| generate_slug(&req.title));
 
-        let post = sqlx::query_as!(
-            Post,
-            r#"
-            INSERT INTO posts (id, title, content, slug, author_id, published, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            RETURNING *
-            "#,
-            id,
-            req.title,
-            req.content,
-            slug,
-            author_id,
-            req.published.unwrap_or(false),
-            now,
-            now
-        )
-        .fetch_one(&self.db)
-        .await?;
+        let post = self
+            .timed("insert", || async {
+                let post = sqlx::query_as!(
+                    Post,
+                    r#"
+                    INSERT INTO posts (id, title, content, slug, author_id, published, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    RETURNING *
+                    "#,
+                    id,
+                    req.title,
+                    req.content,
+                    slug,
+                    author_id,
+                    req.published.unwrap_or(false),
+                    now,
+                    now
+                )
+                .fetch_one(&self.db)
+                .await?;
+                Ok(post)
+            })
+            .await?;
 
-        timer.stop();
-
-    // Invalidate caches (lists)
-    self.invalidate_posts_list_caches().await?;
-        
+        // Invalidate caches (lists)
+        self.invalidate_posts_list_caches().await?;
         Ok(post)
     }
 
@@ -122,15 +134,14 @@ impl PostRepository {
         if let Some(cached_post) = self.try_get_cache::<Post>(&cache_key).await? {
             return Ok(Some(cached_post));
         }
-        let timer = self.start_db_timer("select");
-        let post = sqlx::query_as!(
-            Post,
-            "SELECT * FROM posts WHERE id = $1",
-            id
-        )
-        .fetch_optional(&self.db)
-        .await?;
-        timer.stop();
+        let post = self
+            .timed("select", || async {
+                let p = sqlx::query_as!(Post, "SELECT * FROM posts WHERE id = $1", id)
+                    .fetch_optional(&self.db)
+                    .await?;
+                Ok(p)
+            })
+            .await?;
 
         // Cache the result if found
         self.set_cache_if_some(&cache_key, &post, Some(300)).await?;
@@ -139,18 +150,14 @@ impl PostRepository {
     }
 
     pub async fn get_by_slug(&self, slug: &str) -> Result<Option<Post>> {
-    let timer = self.start_db_timer("select");
-
-        let post = sqlx::query_as!(
-            Post,
-            "SELECT * FROM posts WHERE slug = $1",
-            slug
-        )
-        .fetch_optional(&self.db)
-        .await?;
-
-        timer.stop();
-
+        let post = self
+            .timed("select", || async {
+                let p = sqlx::query_as!(Post, "SELECT * FROM posts WHERE slug = $1", slug)
+                    .fetch_optional(&self.db)
+                    .await?;
+                Ok(p)
+            })
+            .await?;
         Ok(post)
     }
 
@@ -194,17 +201,18 @@ impl PostRepository {
         query_builder.push(" OFFSET ");
         query_builder.push_bind(offset as i64);
 
-    let timer = self.start_db_timer("select");
-
         let posts_query = query_builder.build_query_as::<Post>();
         let count_query = count_builder.build_query_scalar::<i64>();
 
-        let (posts, total_count) = tokio::try_join!(
-            posts_query.fetch_all(&self.db),
-            count_query.fetch_one(&self.db)
-        )?;
-
-        timer.stop();
+        let (posts, total_count) = self
+            .timed("select", || async {
+                let res = tokio::try_join!(
+                    posts_query.fetch_all(&self.db),
+                    count_query.fetch_one(&self.db)
+                )?;
+                Ok(res)
+            })
+            .await?;
 
         let response = PostResponse {
             posts,
@@ -223,8 +231,6 @@ impl PostRepository {
     }
 
     pub async fn update(&self, id: Uuid, req: UpdatePostRequest) -> Result<Post> {
-    let timer = self.start_db_timer("update");
-
         let now = Utc::now();
         
         let mut query_builder = sqlx::QueryBuilder::new("UPDATE posts SET updated_at = ");
@@ -255,9 +261,12 @@ impl PostRepository {
         query_builder.push(" RETURNING *");
 
         let query = query_builder.build_query_as::<Post>();
-        let post = query.fetch_one(&self.db).await?;
-
-        timer.stop();
+        let post = self
+            .timed("update", || async {
+                let p = query.fetch_one(&self.db).await?;
+                Ok(p)
+            })
+            .await?;
 
     // Invalidate caches for this post & post lists
     self.invalidate_post_caches(&id).await?;
@@ -266,13 +275,14 @@ impl PostRepository {
     }
 
     pub async fn delete(&self, id: Uuid) -> Result<()> {
-    let timer = self.start_db_timer("delete");
-
-        let result = sqlx::query!("DELETE FROM posts WHERE id = $1", id)
-            .execute(&self.db)
+        let result = self
+            .timed("delete", || async {
+                let r = sqlx::query!("DELETE FROM posts WHERE id = $1", id)
+                    .execute(&self.db)
+                    .await?;
+                Ok(r)
+            })
             .await?;
-
-        timer.stop();
 
         if result.rows_affected() == 0 {
             return Err(AppError::NotFound("Post not found".to_string()));
@@ -285,43 +295,46 @@ impl PostRepository {
     }
 
     pub async fn search(&self, query: &str, filter: PostFilter) -> Result<PostResponse> {
-    let timer = self.start_db_timer("search");
 
         let offset = (filter.page - 1) * filter.limit;
         
         let search_query = format!("%{}%", query.to_lowercase());
         
-        let posts = sqlx::query_as!(
-            Post,
-            r#"
-            SELECT * FROM posts 
-            WHERE (LOWER(title) LIKE $1 OR LOWER(content) LIKE $1)
-            AND ($2::bool IS NULL OR published = $2)
-            ORDER BY created_at DESC
-            LIMIT $3 OFFSET $4
-            "#,
-            search_query,
-            filter.published,
-            filter.limit as i64,
-            offset as i64
-        )
-        .fetch_all(&self.db)
-        .await?;
+        let (posts, total_count) = self
+            .timed("search", || async {
+                let posts = sqlx::query_as!(
+                    Post,
+                    r#"
+                    SELECT * FROM posts 
+                    WHERE (LOWER(title) LIKE $1 OR LOWER(content) LIKE $1)
+                    AND ($2::bool IS NULL OR published = $2)
+                    ORDER BY created_at DESC
+                    LIMIT $3 OFFSET $4
+                    "#,
+                    search_query,
+                    filter.published,
+                    filter.limit as i64,
+                    offset as i64
+                )
+                .fetch_all(&self.db)
+                .await?;
 
-        let total_count = sqlx::query_scalar!(
-            r#"
-            SELECT COUNT(*) FROM posts 
-            WHERE (LOWER(title) LIKE $1 OR LOWER(content) LIKE $1)
-            AND ($2::bool IS NULL OR published = $2)
-            "#,
-            search_query,
-            filter.published
-        )
-        .fetch_one(&self.db)
-        .await?
-        .unwrap_or(0);
+                let total_count = sqlx::query_scalar!(
+                    r#"
+                    SELECT COUNT(*) FROM posts 
+                    WHERE (LOWER(title) LIKE $1 OR LOWER(content) LIKE $1)
+                    AND ($2::bool IS NULL OR published = $2)
+                    "#,
+                    search_query,
+                    filter.published
+                )
+                .fetch_one(&self.db)
+                .await?
+                .unwrap_or(0);
 
-        timer.stop();
+                Ok((posts, total_count))
+            })
+            .await?;
 
         Ok(PostResponse {
             posts,

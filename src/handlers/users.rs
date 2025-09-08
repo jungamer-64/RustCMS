@@ -30,6 +30,46 @@ pub struct UserQuery {
 
 // Users list now returns Paginated<UserInfo> directly
 
+// Shared helper to fetch paginated users with caching and filters
+pub(crate) async fn paginate_users(
+    state: AppState,
+    page: u32,
+    limit: u32,
+    role: Option<String>,
+    active: Option<bool>,
+    sort: Option<String>,
+    cache_key: String,
+) -> Result<Paginated<UserInfo>> {
+    use std::sync::Arc;
+    let filters = Arc::new((role.clone(), active, sort.clone()));
+
+    let response: Paginated<UserInfo> = crate::utils::paginate::fetch_paginated_cached_with_filters(
+        state.clone(),
+        cache_key,
+        crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
+        page,
+        limit,
+        filters,
+        |f| {
+            let state = state.clone();
+            move || async move {
+                let (role, active, sort) = (*f).clone();
+                let users = state.db_get_users(page, limit, role, active, sort).await?;
+                Ok(users.iter().map(UserInfo::from).collect())
+            }
+        },
+        |f| {
+            let state = state.clone();
+            move || async move {
+                let (role, active, _) = (*f).clone();
+                state.db_count_users_filtered(role, active).await
+            }
+        },
+    )
+    .await?;
+    Ok(response)
+}
+
 /// Get all users with pagination
 #[utoipa::path(
     get,
@@ -82,32 +122,17 @@ pub async fn get_users(
         ],
     );
 
-    let filters = Arc::new((query.role.clone(), query.active, query.sort.clone()));
-
-    let response = crate::utils::paginate::fetch_paginated_cached_with_filters(
+    let resp = paginate_users(
         state.clone(),
-        cache_key,
-        crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
         page,
         limit,
-        filters,
-        |f| {
-            let state = state.clone();
-            move || async move {
-                let (role, active, sort) = (*f).clone();
-                let users = state.db_get_users(page, limit, role, active, sort).await?;
-                Ok(users.iter().map(UserInfo::from).collect())
-            }
-        },
-        |f| {
-            let state = state.clone();
-            move || async move {
-                let (role, active, _) = (*f).clone();
-                state.db_count_users_filtered(role, active).await
-            }
-        },
-    ).await?;
-    Ok(ApiOk(response))
+        query.role.clone(),
+        query.active,
+        query.sort.clone(),
+        cache_key,
+    )
+    .await?;
+    Ok(ApiOk(resp))
 }
 
 /// Get user by ID
