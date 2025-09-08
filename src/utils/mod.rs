@@ -5,6 +5,7 @@ pub mod common_types;
 pub mod dup;
 pub mod text;
 pub mod date;
+pub mod vec_helpers;
 pub mod error;
 pub mod file;
 pub mod hash;

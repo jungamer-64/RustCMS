@@ -318,12 +318,12 @@ impl Post {
 
     /// Check if post has a specific tag
     pub fn has_tag(&self, tag: &str) -> bool {
-        self.tags.iter().any(|t| t == tag)
+    crate::utils::vec_helpers::contains_case_insensitive(&self.tags, tag)
     }
 
     /// Check if post is in a specific category
     pub fn has_category(&self, category: &str) -> bool {
-        self.categories.iter().any(|c| c == category)
+    crate::utils::vec_helpers::contains_case_insensitive(&self.categories, category)
     }
 }
 

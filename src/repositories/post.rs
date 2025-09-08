@@ -34,6 +34,28 @@ impl PostRepository {
         Ok(None)
     }
 
+    // Helper: run a DB operation under a timer and return the Timer so caller can stop it
+    fn start_db_timer(&self, operation: &str) -> crate::monitoring::metrics::Timer {
+        crate::monitoring::metrics::start_timer(
+            "database_query_duration_seconds",
+            vec![
+                ("operation".to_string(), operation.to_string()),
+                ("table".to_string(), "posts".to_string()),
+            ],
+        )
+    }
+
+    // Helper: set cache if value present and record set metric
+    async fn set_cache_if_some<T>(&self, cache_key: &str, value: &Option<T>, ttl: Option<u64>) -> Result<()>
+    where
+        T: serde::Serialize + Clone + Send + Sync + 'static,
+    {
+        if let Some(v) = value {
+            self.cache.set(cache_key, v, ttl).await?;
+        }
+        Ok(())
+    }
+
     pub async fn create(&self, req: CreatePostRequest, author_id: Uuid) -> Result<Post> {
         let timer = crate::monitoring::metrics::start_timer(
             "database_query_duration_seconds",
@@ -81,15 +103,7 @@ impl PostRepository {
         if let Some(cached_post) = self.try_get_cache::<Post>(&cache_key).await? {
             return Ok(Some(cached_post));
         }
-
-        let timer = crate::monitoring::metrics::start_timer(
-            "database_query_duration_seconds",
-            vec![
-                ("operation".to_string(), "select".to_string()),
-                ("table".to_string(), "posts".to_string()),
-            ],
-        );
-
+        let timer = self.start_db_timer("select");
         let post = sqlx::query_as!(
             Post,
             "SELECT * FROM posts WHERE id = $1",
@@ -97,13 +111,10 @@ impl PostRepository {
         )
         .fetch_optional(&self.db)
         .await?;
-
         timer.stop();
 
         // Cache the result if found
-        if let Some(ref post) = post {
-            self.cache.set(&cache_key, post, Some(300)).await?; // 5 minutes cache
-        }
+        self.set_cache_if_some(&cache_key, &post, Some(300)).await?;
 
         Ok(post)
     }
@@ -170,13 +181,7 @@ impl PostRepository {
         query_builder.push(" OFFSET ");
         query_builder.push_bind(offset as i64);
 
-        let timer = crate::monitoring::metrics::start_timer(
-            "database_query_duration_seconds",
-            vec![
-                ("operation".to_string(), "select".to_string()),
-                ("table".to_string(), "posts".to_string()),
-            ],
-        );
+    let timer = self.start_db_timer("select");
 
         let posts_query = query_builder.build_query_as::<Post>();
         let count_query = count_builder.build_query_scalar::<i64>();
@@ -198,8 +203,8 @@ impl PostRepository {
             },
         };
 
-        // Cache the result
-        self.cache.set(&cache_key, &response, Some(60)).await?; // 1 minute cache
+    // Cache the result
+    self.cache.set(&cache_key, &response, Some(60)).await?; // 1 minute cache
 
         Ok(response)
     }
