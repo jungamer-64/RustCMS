@@ -8,3 +8,4 @@ pagination_core,fetch_paginated_cached,src/utils/paginate.rs,Base cached paginat
 pagination_mapped,fetch_paginated_cached_mapped,src/utils/paginate.rs,Eliminated per-handler map boilerplate,handlers/posts.rs::paginate_posts|handlers/users.rs::paginate_users (replaced fetch_paginated_cached_with_filters + map loop)
 admin_post_unify,create_entity + delete_with,src/handlers/admin.rs,Admin create/delete aligned with public patterns,admin::create_post|admin::delete_post (was manual + 204)
 auth_tokens_unify,AuthTokens struct + From conversions,src/utils/auth_response.rs,Central token shaping used by auth handlers,handlers/auth.rs::refresh_token (manual struct => From impl)
+auth_success_response_unify,AuthSuccessResponse unified schema,src/utils/auth_response.rs,Login/Register now return unified tokens container + flattened fields,handlers/auth.rs::login|handlers/auth.rs::register (was LoginResponse)

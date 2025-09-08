@@ -26,9 +26,8 @@ pub struct RegisterRequest {
     pub last_name: Option<String>,
 }
 
-/// 旧 LoginResponse 型 (後方互換のため残留)
-#[deprecated(note = "Use AuthSuccessResponse (tokens + flattened compatibility fields)")]
-#[allow(deprecated)]
+/// 旧 LoginResponse 型 (後方互換のため残留) - 新規コードは AuthSuccessResponse を使用してください
+#[allow(dead_code)]
 #[derive(Debug, Serialize, ToSchema)]
 pub struct LoginResponse {
     pub success: bool,
@@ -41,7 +40,6 @@ pub struct LoginResponse {
     pub token: String,
 }
 
-#[allow(deprecated)]
 impl From<AuthSuccessResponse> for LoginResponse {
     fn from(a: AuthSuccessResponse) -> Self {
         LoginResponse { success: a.success, access_token: a.access_token, refresh_token: a.refresh_token, biscuit_token: a.biscuit_token, user: a.user, expires_in: a.expires_in, session_id: a.session_id, token: a.token }
