@@ -12,7 +12,7 @@ use utoipa::ToSchema;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::utils::cache_key::CacheKeyBuilder;
+use crate::utils::cache_key::{ListCacheKey, entity_id_key};
 use crate::utils::response_ext::ApiOk;
 use crate::{
     models::{CreatePostRequest, Post, UpdatePostRequest},
@@ -71,27 +71,25 @@ impl From<&Post> for PostDto {
 
 // Posts list now directly returns Paginated<PostDto> instead of wrapper
 
-// Helper to build a consistent cache key for any posts listing variant (base/tag variations)
-pub(crate) fn build_posts_cache_key(
-    base: &str,
-    page: u32,
-    limit: u32,
-    status: &Option<String>,
-    author: &Option<Uuid>,
-    tag: &Option<String>,
-    sort: &Option<String>,
-) -> String {
-    crate::utils::cache_key::build_list_cache_key(
-        base,
-        page,
-        limit,
-        &[
-            ("status", status.clone()),
-            ("author", author.map(|u| u.to_string())),
-            ("tag", tag.clone()),
-            ("sort", sort.clone()),
-        ],
-    )
+// (Deprecated) build_posts_cache_key retained temporarily for backward compatibility of any external modules/tests.
+// Internally we now prefer ListCacheKey::Posts.
+pub(crate) fn build_posts_cache_key(base: &str, page: u32, limit: u32, status: &Option<String>, author: &Option<Uuid>, tag: &Option<String>, sort: &Option<String>) -> String {
+    if base == "posts" { // canonical path
+        ListCacheKey::Posts { page, limit, status, author, tag, sort }.to_cache_key()
+    } else {
+        // fall back to original behavior for custom bases (user_posts, posts:tag etc.)
+        crate::utils::cache_key::build_list_cache_key(
+            base,
+            page,
+            limit,
+            &[
+                ("status", status.clone()),
+                ("author", author.map(|u| u.to_string())),
+                ("tag", tag.clone()),
+                ("sort", sort.clone()),
+            ],
+        )
+    }
 }
 
 // Shared helper to fetch paginated posts with caching and filters
@@ -219,7 +217,7 @@ pub async fn get_post(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
-    let cache_key = CacheKeyBuilder::new("post").kv("id", id).build();
+    let cache_key = entity_id_key("post", id);
     let dto: PostDto = crate::utils::cache_helpers::cache_or_compute(
         state.clone(),
         &cache_key,
@@ -279,15 +277,7 @@ pub async fn get_posts(
     Query(query): Query<PostQuery>,
 ) -> Result<impl IntoResponse> {
     let (page, limit) = normalize_page_limit(query.page, query.limit);
-    let cache_key = build_posts_cache_key(
-        "posts",
-        page,
-        limit,
-        &query.status,
-        &query.author,
-        &query.tag,
-        &query.sort,
-    );
+    let cache_key = build_posts_cache_key("posts", page, limit, &query.status, &query.author, &query.tag, &query.sort);
     let resp = paginate_posts(
         state.clone(),
         page,
@@ -404,15 +394,7 @@ pub async fn get_posts_by_tag(
 ) -> Result<impl IntoResponse> {
     let (page, limit) = normalize_page_limit(query.page, query.limit);
     let tag_opt = Some(tag.clone());
-    let cache_key = build_posts_cache_key(
-        "posts:tag",
-        page,
-        limit,
-        &query.status,
-        &query.author,
-        &tag_opt,
-        &query.sort,
-    );
+    let cache_key = build_posts_cache_key("posts:tag", page, limit, &query.status, &query.author, &tag_opt, &query.sort);
     let resp = paginate_posts(
         state.clone(),
         page,

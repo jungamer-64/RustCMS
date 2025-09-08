@@ -18,6 +18,48 @@ pub const CACHE_PREFIX_USER_ID: &str = "user:id:";          // + {uuid}
 pub const CACHE_PREFIX_USERS: &str = "users:";              // list queries start with this
 pub const CACHE_PREFIX_USER_POSTS: &str = "user_posts:user:"; // + {uuid}:...
 
+/// Convenience helper to build a simple entity id based cache key.
+/// Example: entity_id_key("post", uuid) => "post:id:{uuid}"
+pub fn entity_id_key(prefix: &str, id: impl std::fmt::Display) -> String {
+    format!("{}:id:{}", prefix, id)
+}
+
+/// Enum describing list style cache keys we standardize on. This avoids a
+/// proliferation of small one-off wrapper functions like build_posts_cache_key
+/// or build_users_cache_key. Handlers can format through `to_cache_key`.
+pub enum ListCacheKey<'a> {
+    Posts { page: u32, limit: u32, status: &'a Option<String>, author: &'a Option<uuid::Uuid>, tag: &'a Option<String>, sort: &'a Option<String> },
+    Users { page: u32, limit: u32, role: &'a Option<String>, active: Option<bool>, sort: &'a Option<String> },
+}
+
+impl<'a> ListCacheKey<'a> {
+    pub fn to_cache_key(&self) -> String {
+        match self {
+        ListCacheKey::Posts { page, limit, status, author, tag, sort } => build_list_cache_key(
+                "posts",
+                *page,
+                *limit,
+                &[
+            ("status", (*status).clone()),
+                    ("author", author.map(|u| u.to_string())),
+            ("tag", (*tag).clone()),
+            ("sort", (*sort).clone()),
+                ],
+            ),
+            ListCacheKey::Users { page, limit, role, active, sort } => build_list_cache_key(
+                "users",
+                *page,
+                *limit,
+                &[
+            ("role", (*role).clone()),
+                    ("active", active.map(|b| b.to_string())),
+            ("sort", (*sort).clone()),
+                ],
+            ),
+        }
+    }
+}
+
 impl CacheKeyBuilder {
     pub fn new(base: impl Into<String>) -> Self { Self { base: base.into(), segs: Vec::new(), used_labels: std::collections::HashSet::new() } }
     fn push_kv(&mut self, key: &str, val: String) {

@@ -12,7 +12,7 @@ use utoipa::ToSchema;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::utils::{common_types::UserInfo, cache_key::CacheKeyBuilder};
+use crate::utils::{common_types::UserInfo, cache_key::{entity_id_key, ListCacheKey}};
 use std::sync::Arc;
 use crate::utils::response_ext::ApiOk;
 use crate::{models::UpdateUserRequest, AppState, Result};
@@ -107,7 +107,7 @@ pub async fn get_users(
 ) -> Result<impl IntoResponse> {
     let (page, limit) = normalize_page_limit(query.page, query.limit);
     // Build cache key (use helper to keep parity with posts)
-    let cache_key = build_users_cache_key(page, limit, &query.role, query.active, &query.sort);
+    let cache_key = ListCacheKey::Users { page, limit, role: &query.role, active: query.active, sort: &query.sort }.to_cache_key();
 
     let resp = paginate_users(
         state.clone(),
@@ -123,23 +123,9 @@ pub async fn get_users(
 }
 
 // Helper to build consistent cache key for users listing
-pub(crate) fn build_users_cache_key(
-    page: u32,
-    limit: u32,
-    role: &Option<String>,
-    active: Option<bool>,
-    sort: &Option<String>,
-) -> String {
-    crate::utils::cache_key::build_list_cache_key(
-        "users",
-        page,
-        limit,
-        &[
-            ("role", role.clone()),
-            ("active", active.map(|b| b.to_string())),
-            ("sort", sort.clone()),
-        ],
-    )
+// Deprecated: replaced by ListCacheKey::Users; kept temporarily if other modules reference it.
+pub(crate) fn build_users_cache_key(page: u32, limit: u32, role: &Option<String>, active: Option<bool>, sort: &Option<String>) -> String {
+    ListCacheKey::Users { page, limit, role, active, sort }.to_cache_key()
 }
 
 /// Get user by ID
@@ -175,7 +161,7 @@ pub async fn get_user(
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     // Try cache first
-    let cache_key = CacheKeyBuilder::new("user").kv("id", id).build();
+    let cache_key = entity_id_key("user", id);
     let info: UserInfo = crate::utils::cache_helpers::cache_or_compute(
         state.clone(),
         &cache_key,
