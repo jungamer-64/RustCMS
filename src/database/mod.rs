@@ -126,20 +126,14 @@ impl Database {
     /// Find a user by email
     pub async fn get_user_by_email(&self, email: &str) -> Result<User> {
         let mut conn = self.get_connection()?;
-        let user = map_internal_err(
-            crate::models::User::find_by_email(&mut conn, email),
-            "DB error finding user by email",
-        )?;
+    let user = self.run_query(|| crate::models::User::find_by_email(&mut conn, email), "DB error finding user by email")?;
         Ok(user)
     }
 
     /// Update user's last login timestamp
     pub async fn update_last_login(&self, id: Uuid) -> Result<()> {
         let mut conn = self.get_connection()?;
-        map_internal_err(
-            crate::models::User::update_last_login(&mut conn, id),
-            "DB error updating last_login",
-        )?;
+    self.run_query(|| crate::models::User::update_last_login(&mut conn, id), "DB error updating last_login")?;
         Ok(())
     }
 
@@ -156,9 +150,7 @@ impl Database {
 
         let mut conn = self.get_connection()?;
 
-        let page = if _page == 0 { 1 } else { _page } as i64;
-        let limit = match _limit { 0 => 10, n if n > 100 => 100, n => n } as i64;
-        let offset = (page - 1) * limit;
+    let (_page_n, limit, offset) = Self::paged_params(_page, _limit);
 
         let mut query = users_dsl::users.into_boxed();
 
@@ -185,10 +177,7 @@ impl Database {
             _ => query.order(users_dsl::created_at.desc()),
         };
 
-        let results = map_internal_err(
-            query.offset(offset).limit(limit).load::<User>(&mut conn),
-            "Failed to list users",
-        )?;
+    let results = self.run_query(|| query.offset(offset).limit(limit).load::<User>(&mut conn), "Failed to list users")?;
 
         Ok(results)
     }
@@ -206,11 +195,8 @@ impl Database {
         use diesel::prelude::*;
         use crate::database::schema::users::dsl as users_dsl;
         let mut conn = self.get_connection()?;
-        let total: i64 = map_internal_err(
-            users_dsl::users.count().get_result(&mut conn),
-            "Failed to count users",
-        )?;
-        Ok(total as usize)
+    let total: i64 = self.count_query(|| users_dsl::users.count().get_result(&mut conn), "Failed to count users")?;
+    Ok(total as usize)
     }
 
     /// Count users with optional filters (for accurate pagination totals)
@@ -227,11 +213,8 @@ impl Database {
             query = query.filter(users_dsl::is_active.eq(active));
         }
 
-        let total: i64 = map_internal_err(
-            query.count().get_result(&mut conn),
-            "Failed to count users (filtered)",
-        )?;
-        Ok(total as usize)
+    let total: i64 = self.count_query(|| query.count().get_result(&mut conn), "Failed to count users (filtered)")?;
+    Ok(total as usize)
     }
 
     // Post CRUD operations
@@ -257,10 +240,7 @@ impl Database {
         // Insert and return the created post
         use crate::database::schema::posts::dsl as posts_dsl;
 
-        let inserted: Post = map_internal_err(
-            diesel::insert_into(posts_dsl::posts).values(&new_post).get_result(&mut conn),
-            "Failed to create post",
-        )?;
+    let inserted: Post = self.run_query(|| diesel::insert_into(posts_dsl::posts).values(&new_post).get_result(&mut conn), "Failed to create post")?;
 
     Ok(inserted)
     }
@@ -270,11 +250,7 @@ impl Database {
         use crate::database::schema::posts::dsl as posts_dsl;
 
         let mut conn = self.get_connection()?;
-        let post = map_diesel_result(
-            posts_dsl::posts.find(_id).first::<Post>(&mut conn),
-            "Post not found",
-            "Failed to fetch post",
-        )?;
+    let post = self.get_one_query(|| posts_dsl::posts.find(_id).first::<Post>(&mut conn), "Post not found", "Failed to fetch post")?;
 
         Ok(post)
     }
@@ -295,13 +271,7 @@ impl Database {
         let mut conn = self.get_connection()?;
 
         // Pagination guards
-        let page = if _page == 0 { 1 } else { _page } as i64;
-        let limit = match _limit {
-            0 => 10,
-            n if n > 100 => 100,
-            n => n,
-        } as i64;
-        let offset = (page - 1) * limit;
+    let (_page_n, limit, offset) = Self::paged_params(_page, _limit);
 
         let mut query = posts_dsl::posts.into_boxed();
 
@@ -339,10 +309,7 @@ impl Database {
             _ => query.order(posts_dsl::created_at.desc()),
         };
 
-        let results = map_internal_err(
-            query.offset(offset).limit(limit).load::<Post>(&mut conn),
-            "Failed to list posts",
-        )?;
+    let results = self.run_query(|| query.offset(offset).limit(limit).load::<Post>(&mut conn), "Failed to list posts")?;
 
         Ok(results)
     }
@@ -354,11 +321,7 @@ impl Database {
         let mut conn = self.get_connection()?;
 
         // Load existing to compute derived fields and keep unchanged values
-        let existing = map_diesel_result(
-            posts_dsl::posts.find(_id).first::<Post>(&mut conn),
-            "Post not found",
-            "Failed to fetch post",
-        )?;
+    let existing = self.get_one_query(|| posts_dsl::posts.find(_id).first::<Post>(&mut conn), "Post not found", "Failed to fetch post")?;
 
         // Compute new values
         let new_title = _request.title.as_ref().cloned().unwrap_or_else(|| existing.title.clone());
@@ -411,11 +374,8 @@ impl Database {
         use diesel::prelude::*;
         use crate::database::schema::posts::dsl as posts_dsl;
         let mut conn = self.get_connection()?;
-        let affected = map_internal_err(
-            diesel::delete(posts_dsl::posts.find(_id)).execute(&mut conn),
-            "Failed to delete post",
-        )?;
-        ensure_affected_nonzero(affected as usize, "Post not found")?;
+    // Use helper to execute and ensure at least one row affected
+    self.execute_and_ensure(|| diesel::delete(posts_dsl::posts.find(_id)).execute(&mut conn), "Failed to delete post", "Post not found")?;
         Ok(())
     }
 
@@ -430,10 +390,7 @@ impl Database {
             use diesel::PgArrayExpressionMethods;
             query = query.filter(posts_dsl::tags.contains(vec![tag.to_string()]));
         }
-        let total: i64 = map_internal_err(
-            query.count().get_result(&mut conn),
-            "Failed to count posts",
-        )?;
+    let total: i64 = self.count_query(|| query.count().get_result(&mut conn), "Failed to count posts")?;
         Ok(total as usize)
     }
 
@@ -461,10 +418,7 @@ impl Database {
             query = query.filter(posts_dsl::tags.contains(vec![tag.clone()]));
         }
 
-        let total: i64 = map_internal_err(
-            query.count().get_result(&mut conn),
-            "Failed to count posts (filtered)",
-        )?;
+    let total: i64 = self.count_query(|| query.count().get_result(&mut conn), "Failed to count posts (filtered)")?;
         Ok(total as usize)
     }
 
@@ -472,24 +426,65 @@ impl Database {
         use diesel::prelude::*;
         use crate::database::schema::posts::dsl as posts_dsl;
         let mut conn = self.get_connection()?;
-        let total: i64 = map_internal_err(
-            posts_dsl::posts
-                .filter(posts_dsl::author_id.eq(author))
-                .count()
-                .get_result(&mut conn),
-            "Failed to count posts by author",
-        )?;
+    let total: i64 = self.count_query(|| posts_dsl::posts
+        .filter(posts_dsl::author_id.eq(author))
+        .count()
+        .get_result(&mut conn), "Failed to count posts by author")?;
         Ok(total as usize)
+    }
+
+    // Helper to run a diesel execute call and ensure affected > 0, mapping errors consistently.
+    fn execute_and_ensure<F, E>(&self, f: F, ctx: &str, not_found_msg: &str) -> Result<()>
+    where
+        F: FnOnce() -> std::result::Result<usize, E>,
+        E: std::fmt::Display,
+    {
+        let res = map_internal_err(f(), ctx)?;
+        ensure_affected_nonzero(res as usize, not_found_msg)?;
+        Ok(())
+    }
+
+    // Helper to run count/get_result style queries returning i64, mapping errors consistently.
+    fn count_query<F, E>(&self, f: F, ctx: &str) -> Result<i64>
+    where
+        F: FnOnce() -> std::result::Result<i64, E>,
+        E: std::fmt::Display,
+    {
+        let total = map_internal_err(f(), ctx)?;
+        Ok(total)
+    }
+
+    // Generic helper to run a closure returning Result<T, E> and map errors consistently.
+    fn run_query<T, F, E>(&self, f: F, ctx: &str) -> Result<T>
+    where
+        F: FnOnce() -> std::result::Result<T, E>,
+        E: std::fmt::Display,
+    {
+        let res = map_internal_err(f(), ctx)?;
+        Ok(res)
+    }
+
+    // Helper to run a diesel first() query that returns Result<T, diesel::result::Error>
+    // and map NotFound/other errors consistently.
+    fn get_one_query<F, T>(&self, f: F, not_found_msg: &str, ctx: &str) -> Result<T>
+    where
+        F: FnOnce() -> std::result::Result<T, diesel::result::Error>,
+    {
+        map_diesel_result(f(), not_found_msg, ctx)
+    }
+
+    // Helper to compute page, limit, offset from user-provided values.
+    fn paged_params(page_in: u32, limit_in: u32) -> (i64, i64, i64) {
+        let page = if page_in == 0 { 1 } else { page_in } as i64;
+        let limit = match limit_in { 0 => 10, n if n > 100 => 100, n => n } as i64;
+        let offset = (page - 1) * limit;
+        (page, limit, offset)
     }
 
     /// Delete a user by ID
     pub async fn delete_user(&self, id: Uuid) -> Result<()> {
-        let mut conn = self.get_connection()?;
-        let affected = map_internal_err(
-            User::delete(&mut conn, id),
-            "Failed to delete user",
-        )?;
-        ensure_affected_nonzero(affected as usize, "User not found")?;
+    let mut conn = self.get_connection()?;
+    self.execute_and_ensure(|| User::delete(&mut conn, id), "Failed to delete user", "User not found")?;
         Ok(())
     }
 
@@ -499,13 +494,9 @@ impl Database {
         use crate::database::schema::users::dsl as users_dsl;
         let mut conn = self.get_connection()?;
         let hash = crate::utils::password::hash_password(new_password)?;
-        let affected = map_internal_err(
-            diesel::update(users_dsl::users.find(id))
-                .set((users_dsl::password_hash.eq(Some(hash)), users_dsl::updated_at.eq(chrono::Utc::now())))
-                .execute(&mut conn),
-            "Failed to reset password",
-        )?;
-        ensure_affected_nonzero(affected as usize, "User not found")?;
+        self.execute_and_ensure(|| diesel::update(users_dsl::users.find(id))
+            .set((users_dsl::password_hash.eq(Some(hash)), users_dsl::updated_at.eq(chrono::Utc::now())))
+            .execute(&mut conn), "Failed to reset password", "User not found")?;
         Ok(())
     }
 
