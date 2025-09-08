@@ -37,8 +37,15 @@ pub fn create_router() -> Router<AppState> {
 
     #[cfg(feature = "database")]
     {
-        public = public.nest("/api/v1/posts", post_routes());
-        public = public.nest("/api/v1/users", user_routes());
+        // Protect posts and users with auth middleware
+        {
+            use axum::middleware;
+            use crate::middleware::auth::auth_middleware;
+            let posts = post_routes().layer(middleware::from_fn(auth_middleware));
+            let users = user_routes().layer(middleware::from_fn(auth_middleware));
+            public = public.nest("/api/v1/posts", posts);
+            public = public.nest("/api/v1/users", users);
+        }
         // Admin-only management endpoints (simple token auth in handlers)
         public = public.nest("/api/v1/admin", admin_routes());
         // API Key 管理 (要 auth feature)
