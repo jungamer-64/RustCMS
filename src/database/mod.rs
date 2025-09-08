@@ -111,15 +111,15 @@ impl Database {
     /// Get user by username helper used by admin CLI (stub)
     pub async fn get_user_by_username(&self, username_str: &str) -> Result<User> {
         let mut conn = self.get_connection()?;
-        let user = User::find_by_username(&mut conn, username_str)
-            .map_err(|_| crate::AppError::NotFound("User not found".to_string()))?;
+    // Propagate model-level AppError (preserves NotFound vs other AppError variants)
+    let user = User::find_by_username(&mut conn, username_str)?;
         Ok(user)
     }
 
     pub async fn get_user_by_id(&self, _id: Uuid) -> Result<User> {
         let mut conn = self.get_connection()?;
-        let user = User::find_by_id(&mut conn, _id)
-            .map_err(|_| crate::AppError::NotFound("User not found".to_string()))?;
+    // Propagate model-level AppError so NotFound is preserved
+    let user = User::find_by_id(&mut conn, _id)?;
         Ok(user)
     }
 
@@ -184,11 +184,10 @@ impl Database {
 
     pub async fn update_user(&self, id: Uuid, request: UpdateUserRequest) -> Result<User> {
         let mut conn = self.get_connection()?;
-        let updated = map_internal_err(
-            User::update(&mut conn, id, &request),
-            "Failed to update user",
-        )?;
-        Ok(updated)
+    // Let the model return AppError (NotFound, etc.) propagate directly instead of
+    // remapping to Internal; this preserves semantics seen by callers.
+    let updated = User::update(&mut conn, id, &request)?;
+    Ok(updated)
     }
 
     pub async fn count_users(&self) -> Result<usize> {
@@ -226,11 +225,14 @@ impl Database {
         // Try to choose an author: prefer a user with role = 'admin', otherwise use the first user
         use crate::database::schema::users::dsl as users_dsl;
 
-        let author = users_dsl::users
-            .filter(users_dsl::role.eq("admin"))
-            .first::<crate::models::user::User>(&mut conn)
-            .or_else(|_| users_dsl::users.first::<crate::models::user::User>(&mut conn))
-            .map_err(|e| crate::AppError::Internal(format!("Failed to find author user: {}", e)))?;
+        // Try to select an admin user first, otherwise fall back to the first user.
+        // Use run_query to centralize error mapping for DB operations.
+        let author = self.run_query(|| {
+            users_dsl::users
+                .filter(users_dsl::role.eq("admin"))
+                .first::<crate::models::user::User>(&mut conn)
+                .or_else(|_| users_dsl::users.first::<crate::models::user::User>(&mut conn))
+        }, "Failed to find author user")?;
 
         let author_id = author.id;
 
@@ -350,7 +352,7 @@ impl Database {
 
         let now = chrono::Utc::now();
 
-        let updated = diesel::update(posts_dsl::posts.find(_id))
+        let updated = self.run_query(|| diesel::update(posts_dsl::posts.find(_id))
             .set((
                 posts_dsl::title.eq(new_title),
                 posts_dsl::slug.eq(new_slug),
@@ -364,8 +366,7 @@ impl Database {
                 posts_dsl::published_at.eq(new_published_at),
                 posts_dsl::updated_at.eq(now),
             ))
-            .get_result::<Post>(&mut conn)
-            .map_err(|e| crate::AppError::Internal(format!("Failed to update post: {}", e)))?;
+            .get_result::<Post>(&mut conn), "Failed to update post")?;
 
         Ok(updated)
     }
@@ -503,8 +504,8 @@ impl Database {
     #[cfg(all(feature = "database", not(test)))]
     fn run_migrations(pool: &DatabasePool) -> Result<()> {
         let mut conn = pool.get()?;
-        conn.run_pending_migrations(MIGRATIONS)
-            .map_err(|e| crate::AppError::Internal(format!("Migration error: {}", e)))?;
+    // Map migration errors through the common internal error mapper for consistency.
+    map_internal_err(conn.run_pending_migrations(MIGRATIONS), "Migration error")?;
 
         Ok(())
     }

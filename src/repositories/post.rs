@@ -67,11 +67,17 @@ impl PostRepository {
         Ok(())
     }
 
+    // Helper: invalidate caches for posts list pattern only.
+    async fn invalidate_posts_list_caches(&self) -> Result<()> {
+        self.cache.delete_pattern("posts:list:*").await?;
+        Ok(())
+    }
+
     // Helper: invalidate caches related to a single post (by id) and the posts list pattern.
     async fn invalidate_post_caches(&self, id: &Uuid) -> Result<()> {
         let cache_key = cache_keys::post(&id.to_string());
         self.cache.delete(&cache_key).await?;
-        self.cache.delete_pattern("posts:list:*").await?;
+        self.invalidate_posts_list_caches().await?;
         Ok(())
     }
 
@@ -103,8 +109,8 @@ impl PostRepository {
 
         timer.stop();
 
-        // Invalidate cache
-        self.cache.delete_pattern("posts:list:*").await?;
+    // Invalidate caches (lists)
+    self.invalidate_posts_list_caches().await?;
         
         Ok(post)
     }

@@ -150,38 +150,20 @@ impl CacheService {
                     if Instant::now() > expires_at {
                         memory_cache.remove(&full_key);
                         // Update stats
-                        let mut stats = self.stats.write().await;
-                        stats.memory_misses += 1;
-                        stats.total_operations += 1;
+                        self.record_memory_miss().await;
                     } else {
                         // Cache hit
-                        entry.hits += 1;
-                        let value: T = serde_json::from_slice(&entry.value)?;
-
-                        // Update stats
-                        let mut stats = self.stats.write().await;
-                        stats.memory_hits += 1;
-                        stats.total_operations += 1;
-
+                        let value: T = self.decode_and_record_memory_hit(entry).await?;
                         return Ok(Some(value));
                     }
                 } else {
                     // No expiration, cache hit
-                    entry.hits += 1;
-                    let value: T = serde_json::from_slice(&entry.value)?;
-
-                    // Update stats
-                    let mut stats = self.stats.write().await;
-                    stats.memory_hits += 1;
-                    stats.total_operations += 1;
-
+                    let value: T = self.decode_and_record_memory_hit(entry).await?;
                     return Ok(Some(value));
                 }
             } else {
                 // Memory cache miss
-                let mut stats = self.stats.write().await;
-                stats.memory_misses += 1;
-                stats.total_operations += 1;
+                self.record_memory_miss().await;
             }
         }
 
@@ -207,14 +189,12 @@ impl CacheService {
             memory_cache.insert(full_key, entry);
 
             // Update stats
-            let mut stats = self.stats.write().await;
-            stats.redis_hits += 1;
+            self.record_redis_hit().await;
 
             Ok(Some(value))
         } else {
             // Cache miss
-            let mut stats = self.stats.write().await;
-            stats.redis_misses += 1;
+            self.record_redis_miss().await;
 
             Ok(None)
         }
@@ -365,6 +345,37 @@ impl CacheService {
     pub async fn get_memory_usage(&self) -> usize {
         let memory_cache = self.memory_cache.read().await;
         memory_cache.len() * std::mem::size_of::<CacheEntry<Vec<u8>>>()
+    }
+}
+
+impl CacheService {
+    #[inline]
+    async fn record_memory_miss(&self) {
+        let mut stats = self.stats.write().await;
+        stats.memory_misses += 1;
+        stats.total_operations += 1;
+    }
+
+    #[inline]
+    async fn record_redis_hit(&self) {
+        let mut stats = self.stats.write().await;
+        stats.redis_hits += 1;
+    }
+
+    #[inline]
+    async fn record_redis_miss(&self) {
+        let mut stats = self.stats.write().await;
+        stats.redis_misses += 1;
+    }
+
+    #[inline]
+    async fn decode_and_record_memory_hit<T: DeserializeOwned>(&self, entry: &mut CacheEntry<Vec<u8>>) -> Result<T> {
+        entry.hits += 1;
+        let value: T = serde_json::from_slice(&entry.value)?;
+        let mut stats = self.stats.write().await;
+        stats.memory_hits += 1;
+        stats.total_operations += 1;
+        Ok(value)
     }
 }
 

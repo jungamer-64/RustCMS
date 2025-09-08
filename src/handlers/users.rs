@@ -83,28 +83,28 @@ pub async fn get_users(
     );
 
     let filters = Arc::new((query.role.clone(), query.active, query.sort.clone()));
-    let f1 = filters.clone();
-    let f2 = filters.clone();
 
-    let state1 = state.clone();
-    let state2 = state.clone();
-
-    let response = crate::utils::paginate::fetch_paginated_cached(
+    let response = crate::utils::paginate::fetch_paginated_cached_with_filters(
         state.clone(),
         cache_key,
         crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
         page,
         limit,
-        move || async move {
-            let (role1, active1, sort1) = (*f1).clone();
-            let users = state1
-                .db_get_users(page, limit, role1, active1, sort1)
-                .await?;
-            Ok(users.iter().map(UserInfo::from).collect())
+        filters,
+        |f| {
+            let state = state.clone();
+            move || async move {
+                let (role, active, sort) = (*f).clone();
+                let users = state.db_get_users(page, limit, role, active, sort).await?;
+                Ok(users.iter().map(UserInfo::from).collect())
+            }
         },
-        move || async move {
-            let (role2, active2, _) = (*f2).clone();
-            state2.db_count_users_filtered(role2, active2).await
+        |f| {
+            let state = state.clone();
+            move || async move {
+                let (role, active, _) = (*f).clone();
+                state.db_count_users_filtered(role, active).await
+            }
         },
     ).await?;
     Ok(ApiOk(response))

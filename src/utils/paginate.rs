@@ -47,3 +47,32 @@ where
     )
     .await
 }
+
+/// Convenience wrapper for handlers that follow the common pattern:
+/// - build a cache key outside
+/// - wrap filters into an Arc to clone into closures
+/// - call fetch_paginated_cached with the provided closures that use those filters
+pub async fn fetch_paginated_cached_with_filters<T, FI, FC, FutI, FutC, Filt>(
+    state: crate::AppState,
+    cache_key: String,
+    ttl_seconds: u64,
+    page: u32,
+    limit: u32,
+    filters: std::sync::Arc<Filt>,
+    build_items: impl Fn(std::sync::Arc<Filt>) -> FI,
+    build_count: impl Fn(std::sync::Arc<Filt>) -> FC,
+) -> crate::Result<Paginated<T>>
+where
+    FI: FnOnce() -> FutI + Send + 'static,
+    FutI: std::future::Future<Output = crate::Result<Vec<T>>> + Send + 'static,
+    FC: FnOnce() -> FutC + Send + 'static,
+    FutC: std::future::Future<Output = crate::Result<usize>> + Send + 'static,
+    T: Send + Sync + 'static + serde::Serialize + for<'de> serde::Deserialize<'de>,
+    Filt: Send + Sync + 'static,
+{
+    // Build closures by cloning the Arc to capture filter state in each closure
+    let fitems = build_items(filters.clone());
+    let fcount = build_count(filters.clone());
+
+    fetch_paginated_cached(state, cache_key, ttl_seconds, page, limit, move || fitems(), move || fcount()).await
+}

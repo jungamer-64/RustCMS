@@ -230,28 +230,28 @@ pub async fn get_posts(
     // Pack filter parameters into a single Arc so we can cheaply clone for both closures
     // include the path `tag` (String) so closures can pass Some(tag) into db_get_posts
     let filters = Arc::new((query.status.clone(), query.author, query.tag.clone(), query.sort.clone()));
-    let f1 = filters.clone();
-    let f2 = filters.clone();
 
-    let state1 = state.clone();
-    let state2 = state.clone();
-
-    let response: Paginated<PostDto> = crate::utils::paginate::fetch_paginated_cached(
+    let response: Paginated<PostDto> = crate::utils::paginate::fetch_paginated_cached_with_filters(
         state.clone(),
         cache_key,
         crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
         page,
         limit,
-        move || async move {
-            let (status1, author1, tag1, sort1) = (*f1).clone();
-            let posts = state1
-                .db_get_posts(page, limit, status1, author1, tag1, sort1)
-                .await?;
-            Ok(posts.iter().map(PostDto::from).collect())
+        filters,
+        |f| {
+            let state = state.clone();
+            move || async move {
+                let (status, author, tag, sort) = (*f).clone();
+                let posts = state.db_get_posts(page, limit, status, author, tag, sort).await?;
+                Ok(posts.iter().map(PostDto::from).collect())
+            }
         },
-        move || async move {
-            let (status2, author2, tag2, _) = (*f2).clone();
-            state2.db_count_posts_filtered(status2, author2, tag2).await
+        |f| {
+            let state = state.clone();
+            move || async move {
+                let (status, author, tag, _) = (*f).clone();
+                state.db_count_posts_filtered(status, author, tag).await
+            }
         },
     ).await?;
     Ok(ApiOk(response))
@@ -369,29 +369,32 @@ pub async fn get_posts_by_tag(
             ("sort", query.sort.clone()),
         ],
     );
-    let filters = Arc::new((query.status.clone(), query.author, query.tag.clone(), query.sort.clone()));
-    let f1 = filters.clone();
-    let f2 = filters.clone();
+    // 共有ヘルパーに寄せて重複排除
+    let filters = Arc::new((query.status.clone(), query.author, Some(tag.clone()), query.sort.clone()));
 
-    let state1 = state.clone();
-    let state2 = state.clone();
-
-    let response: Paginated<PostDto> = crate::utils::paginate::fetch_paginated_cached(
+    let response: Paginated<PostDto> = crate::utils::paginate::fetch_paginated_cached_with_filters(
         state.clone(),
         cache_key,
         crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
         page,
         limit,
-        move || async move {
-            let (status1, author1, t1, sort1) = (*f1).clone();
-            let posts = state1
-                .db_get_posts(page, limit, status1, author1, t1, sort1)
-                .await?;
-            Ok(posts.iter().map(PostDto::from).collect())
+        filters,
+        |f| {
+            let state = state.clone();
+            move || async move {
+                let (status, author, tag_opt, sort) = (*f).clone();
+                let posts = state
+                    .db_get_posts(page, limit, status, author, tag_opt, sort)
+                    .await?;
+                Ok(posts.iter().map(PostDto::from).collect())
+            }
         },
-        move || async move {
-            let (status2, author2, t2, _) = (*f2).clone();
-            state2.db_count_posts_filtered(status2, author2, t2).await
+        |f| {
+            let state = state.clone();
+            move || async move {
+                let (status, author, tag_opt, _) = (*f).clone();
+                state.db_count_posts_filtered(status, author, tag_opt).await
+            }
         },
     ).await?;
     Ok(ApiOk(response))
