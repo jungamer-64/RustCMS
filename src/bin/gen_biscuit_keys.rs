@@ -175,6 +175,92 @@ fn report_env_result(envfile: &str, res: std::io::Result<()>, force: bool) {
     }
 }
 
+// --- DRY helpers for output flows ---
+fn handle_files_output(
+    dir: &str,
+    versioned: bool,
+    latest_alias: bool,
+    no_manifest: bool,
+    prune: Option<usize>,
+    backup: bool,
+    backup_dir: Option<&Path>,
+    max_backups: Option<usize>,
+    backup_compress: bool,
+    force: bool,
+    priv_b64: &str,
+    pub_b64: &str,
+) {
+    let path = Path::new(dir);
+    if let Err(e) = fs::create_dir_all(path) {
+        eprintln!("Failed to create out-dir {}: {}", dir, e);
+        std::process::exit(1);
+    }
+
+    let (priv_path, pub_path) = if versioned {
+        let v = next_version(path).unwrap_or(1);
+        (
+            path.join(format!("biscuit_private_v{}.b64", v)),
+            path.join(format!("biscuit_public_v{}.b64", v)),
+        )
+    } else {
+        (path.join("biscuit_private.b64"), path.join("biscuit_public.b64"))
+    };
+
+    if let Err(e) = maybe_backup_file(&priv_path, backup, backup_dir, max_backups, Some(backup_compress)) {
+        eprintln!("Backup failed: {}", e);
+    }
+    if let Err(e) = maybe_backup_file(&pub_path, backup, backup_dir, max_backups, Some(backup_compress)) {
+        eprintln!("Backup failed: {}", e);
+    }
+
+    report_write_file_result(&priv_path, write_file_if_allowed(&priv_path, priv_b64, force), "private key", force);
+    report_write_file_result(&pub_path, write_file_if_allowed(&pub_path, pub_b64, force), "public key", force);
+
+    if versioned && latest_alias {
+        let latest_priv = path.join("biscuit_private.b64");
+        let latest_pub = path.join("biscuit_public.b64");
+        if let Err(e) = fs::write(&latest_priv, priv_b64) {
+            eprintln!("Failed to update latest alias {}: {}", latest_priv.display(), e);
+        }
+        if let Err(e) = fs::write(&latest_pub, pub_b64) {
+            eprintln!("Failed to update latest alias {}: {}", latest_pub.display(), e);
+        }
+    }
+
+    if versioned {
+        let v = parse_version(priv_path.file_name().unwrap().to_string_lossy().as_ref()).unwrap_or(0);
+        let priv_fp = hash::sha256_hex(priv_b64.as_bytes());
+        let pub_fp = hash::sha256_hex(pub_b64.as_bytes());
+        println!(
+            "private_fingerprint_sha256={} public_fingerprint_sha256={}",
+            priv_fp, pub_fp
+        );
+        if !no_manifest {
+            update_manifest(path, v, &priv_fp, &pub_fp);
+        }
+        if let Some(keep) = prune {
+            prune_versions(path, keep);
+        }
+    }
+}
+
+fn handle_env_output(
+    envfile: &str,
+    backup: bool,
+    backup_dir: Option<&Path>,
+    max_backups: Option<usize>,
+    backup_compress: bool,
+    force: bool,
+    priv_b64: &str,
+    pub_b64: &str,
+) {
+    let path = Path::new(envfile);
+    if let Err(e) = maybe_backup_env(path, backup, backup_dir, max_backups, Some(backup_compress)) {
+        eprintln!("Backup failed: {}", e);
+    }
+    report_env_result(envfile, append_env_file(path, priv_b64, pub_b64, force), force);
+}
+
 
 fn timestamp() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -408,127 +494,92 @@ fn main() {
     if let Some(ref f) = format {
         if f == "files" {
             let dir = out_dir.as_deref().unwrap_or("keys");
-            let path = Path::new(dir);
-            if let Err(e) = fs::create_dir_all(path) {
-                eprintln!("Failed to create out-dir {}: {}", dir, e);
-                std::process::exit(1);
-            }
-            let (priv_path, pub_path) = if args.versioned {
-                let v = next_version(path).unwrap_or(1);
-                (path.join(format!("biscuit_private_v{}.b64", v)), path.join(format!("biscuit_public_v{}.b64", v)))
-            } else {
-                (path.join("biscuit_private.b64"), path.join("biscuit_public.b64"))
-            };
-
-                if let Err(e) = maybe_backup_file(&priv_path, backup, args.backup_dir.as_deref(), args.max_backups, Some(args.backup_compress)) { eprintln!("Backup failed: {}", e); }
-                if let Err(e) = maybe_backup_file(&pub_path, backup, args.backup_dir.as_deref(), args.max_backups, Some(args.backup_compress)) { eprintln!("Backup failed: {}", e); }
-                report_write_file_result(&priv_path, write_file_if_allowed(&priv_path, &priv_b64, force), "private key", force);
-                report_write_file_result(&pub_path, write_file_if_allowed(&pub_path, &pub_b64, force), "public key", force);
-
-            // latest alias update
-            if args.versioned && args.latest_alias {
-                let latest_priv = path.join("biscuit_private.b64");
-                let latest_pub = path.join("biscuit_public.b64");
-                if let Err(e) = fs::write(&latest_priv, &priv_b64) { eprintln!("Failed to update latest alias {}: {}", latest_priv.display(), e); }
-                if let Err(e) = fs::write(&latest_pub, &pub_b64) { eprintln!("Failed to update latest alias {}: {}", latest_pub.display(), e); }
-            }
-
-            if args.versioned {
-                let v = parse_version(priv_path.file_name().unwrap().to_string_lossy().as_ref()).unwrap_or(0);
-                let priv_fp = hash::sha256_hex(priv_b64.as_bytes());
-                let pub_fp = hash::sha256_hex(pub_b64.as_bytes());
-                println!("private_fingerprint_sha256={} public_fingerprint_sha256={}", priv_fp, pub_fp);
-                if !args.no_manifest { update_manifest(path, v, &priv_fp, &pub_fp); }
-                if let Some(keep) = args.prune { prune_versions(path, keep); }
-            }
+            handle_files_output(
+                dir,
+                args.versioned,
+                args.latest_alias,
+                args.no_manifest,
+                args.prune,
+                backup,
+                args.backup_dir.as_deref(),
+                args.max_backups,
+                args.backup_compress,
+                force,
+                &priv_b64,
+                &pub_b64,
+            );
         } else if f == "env" {
             let envfile = env_file.as_deref().unwrap_or(".env");
-            let path = Path::new(envfile);
-            if let Err(e) = maybe_backup_env(path, backup, args.backup_dir.as_deref(), args.max_backups, Some(args.backup_compress)) { eprintln!("Backup failed: {}", e); }
-            report_env_result(envfile, append_env_file(path, &priv_b64, &pub_b64, force), force);
+            handle_env_output(
+                envfile,
+                backup,
+                args.backup_dir.as_deref(),
+                args.max_backups,
+                args.backup_compress,
+                force,
+                &priv_b64,
+                &pub_b64,
+            );
         } else if f == "both" {
             let dir = out_dir.as_deref().unwrap_or("keys");
             let envfile = env_file.as_deref().unwrap_or(".env");
-            let path = Path::new(dir);
-            if let Err(e) = fs::create_dir_all(path) {
-                eprintln!("Failed to create out-dir {}: {}", dir, e);
-                std::process::exit(1);
-            }
-            let (priv_path, pub_path) = if args.versioned {
-                let v = next_version(path).unwrap_or(1);
-                (path.join(format!("biscuit_private_v{}.b64", v)), path.join(format!("biscuit_public_v{}.b64", v)))
-            } else {
-                (path.join("biscuit_private.b64"), path.join("biscuit_public.b64"))
-            };
-
-                if let Err(e) = maybe_backup_file(&priv_path, backup, args.backup_dir.as_deref(), args.max_backups, Some(args.backup_compress)) { eprintln!("Backup failed: {}", e); }
-                if let Err(e) = maybe_backup_file(&pub_path, backup, args.backup_dir.as_deref(), args.max_backups, Some(args.backup_compress)) { eprintln!("Backup failed: {}", e); }
-                report_write_file_result(&priv_path, write_file_if_allowed(&priv_path, &priv_b64, force), "private key", force);
-                report_write_file_result(&pub_path, write_file_if_allowed(&pub_path, &pub_b64, force), "public key", force);
-
-            if args.versioned && args.latest_alias {
-                let latest_priv = path.join("biscuit_private.b64");
-                let latest_pub = path.join("biscuit_public.b64");
-                if let Err(e) = fs::write(&latest_priv, &priv_b64) { eprintln!("Failed to update latest alias {}: {}", latest_priv.display(), e); }
-                if let Err(e) = fs::write(&latest_pub, &pub_b64) { eprintln!("Failed to update latest alias {}: {}", latest_pub.display(), e); }
-            }
-
-            if args.versioned {
-                let v = parse_version(priv_path.file_name().unwrap().to_string_lossy().as_ref()).unwrap_or(0);
-                let priv_fp = hash::sha256_hex(priv_b64.as_bytes());
-                let pub_fp = hash::sha256_hex(pub_b64.as_bytes());
-                println!("private_fingerprint_sha256={} public_fingerprint_sha256={}", priv_fp, pub_fp);
-                if !args.no_manifest { update_manifest(path, v, &priv_fp, &pub_fp); }
-                if let Some(keep) = args.prune { prune_versions(path, keep); }
-            }
-
-            let envpath = Path::new(envfile);
-                if let Err(e) = maybe_backup_env(envpath, backup, args.backup_dir.as_deref(), args.max_backups, Some(args.backup_compress)) { eprintln!("Backup failed: {}", e); }
-                report_env_result(envfile, append_env_file(envpath, &priv_b64, &pub_b64, force), force);
+            handle_files_output(
+                dir,
+                args.versioned,
+                args.latest_alias,
+                args.no_manifest,
+                args.prune,
+                backup,
+                args.backup_dir.as_deref(),
+                args.max_backups,
+                args.backup_compress,
+                force,
+                &priv_b64,
+                &pub_b64,
+            );
+            handle_env_output(
+                envfile,
+                backup,
+                args.backup_dir.as_deref(),
+                args.max_backups,
+                args.backup_compress,
+                force,
+                &priv_b64,
+                &pub_b64,
+            );
         } else if f == "stdout" {
             // explicit stdout only: already printed
         }
     } else {
         // no explicit format: previous behavior - write if targets provided
         if let Some(ref dir) = out_dir {
-            let path = Path::new(&dir);
-            if let Err(e) = fs::create_dir_all(path) {
-                eprintln!("Failed to create out-dir {}: {}", dir, e);
-                std::process::exit(1);
-            }
-            let (priv_path, pub_path) = if args.versioned {
-                let v = next_version(path).unwrap_or(1);
-                (path.join(format!("biscuit_private_v{}.b64", v)), path.join(format!("biscuit_public_v{}.b64", v)))
-            } else {
-                (path.join("biscuit_private.b64"), path.join("biscuit_public.b64"))
-            };
-
-            if let Err(e) = maybe_backup_file(&priv_path, backup, args.backup_dir.as_deref(), args.max_backups, Some(args.backup_compress)) { eprintln!("Backup failed: {}", e); }
-            if let Err(e) = maybe_backup_file(&pub_path, backup, args.backup_dir.as_deref(), args.max_backups, Some(args.backup_compress)) { eprintln!("Backup failed: {}", e); }
-            report_write_file_result(&priv_path, write_file_if_allowed(&priv_path, &priv_b64, force), "private key", force);
-            report_write_file_result(&pub_path, write_file_if_allowed(&pub_path, &pub_b64, force), "public key", force);
-
-            if args.versioned && args.latest_alias {
-                let latest_priv = path.join("biscuit_private.b64");
-                let latest_pub = path.join("biscuit_public.b64");
-                if let Err(e) = fs::write(&latest_priv, &priv_b64) { eprintln!("Failed to update latest alias {}: {}", latest_priv.display(), e); }
-                if let Err(e) = fs::write(&latest_pub, &pub_b64) { eprintln!("Failed to update latest alias {}: {}", latest_pub.display(), e); }
-            }
-
-            if args.versioned {
-                let v = parse_version(priv_path.file_name().unwrap().to_string_lossy().as_ref()).unwrap_or(0);
-                let priv_fp = hash::sha256_hex(priv_b64.as_bytes());
-                let pub_fp = hash::sha256_hex(pub_b64.as_bytes());
-                println!("private_fingerprint_sha256={} public_fingerprint_sha256={}", priv_fp, pub_fp);
-                if !args.no_manifest { update_manifest(path, v, &priv_fp, &pub_fp); }
-                if let Some(keep) = args.prune { prune_versions(path, keep); }
-            }
+            handle_files_output(
+                dir,
+                args.versioned,
+                args.latest_alias,
+                args.no_manifest,
+                args.prune,
+                backup,
+                args.backup_dir.as_deref(),
+                args.max_backups,
+                args.backup_compress,
+                force,
+                &priv_b64,
+                &pub_b64,
+            );
         }
 
         if let Some(ref envfile) = env_file {
-            let path = Path::new(envfile);
-            if let Err(e) = maybe_backup_env(path, backup, args.backup_dir.as_deref(), args.max_backups, Some(args.backup_compress)) { eprintln!("Backup failed: {}", e); }
-            report_env_result(envfile, append_env_file(path, &priv_b64, &pub_b64, force), force);
+            handle_env_output(
+                envfile,
+                backup,
+                args.backup_dir.as_deref(),
+                args.max_backups,
+                args.backup_compress,
+                force,
+                &priv_b64,
+                &pub_b64,
+            );
         }
     }
 

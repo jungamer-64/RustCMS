@@ -18,3 +18,4 @@ pub mod sort;
 pub mod cache_ttl;
 pub mod cache_helpers;
 pub mod paginate;
+pub mod bin_utils;
