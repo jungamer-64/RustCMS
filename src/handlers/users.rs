@@ -197,9 +197,6 @@ pub async fn update_user(
     #[cfg(feature = "search")]
     state.search_index_user_safe(&user).await;
 
-    // Clear cache
-    #[cfg(feature = "cache")]
-    state.invalidate_user_caches(id).await;
 
     Ok(ApiOk(UserInfo::from(&user)))
 }
@@ -240,9 +237,6 @@ pub async fn delete_user(
     #[cfg(feature = "search")]
     state.search_remove_user_safe(id).await;
 
-    // Clear cache
-    #[cfg(feature = "cache")]
-    state.invalidate_user_caches(id).await;
 
     Ok(ApiOk(json!({
         "success": true,

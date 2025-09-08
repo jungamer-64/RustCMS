@@ -705,12 +705,18 @@ impl AppState {
 
     #[cfg(feature = "database")]
     pub async fn db_update_user(&self, id: uuid::Uuid, request: crate::models::UpdateUserRequest) -> crate::Result<crate::models::User> {
-    timed_op!(self, "db", self.database.update_user(id, request))
+    let user = timed_op!(self, "db", self.database.update_user(id, request))?;
+    #[cfg(feature = "cache")]
+    self.invalidate_user_caches(id).await;
+    Ok(user)
     }
 
     #[cfg(feature = "database")]
     pub async fn db_delete_user(&self, id: uuid::Uuid) -> crate::Result<()> {
-    timed_op!(self, "db", self.database.delete_user(id))
+    let res = timed_op!(self, "db", self.database.delete_user(id))?;
+    #[cfg(feature = "cache")]
+    self.invalidate_user_caches(id).await;
+    Ok(res)
     }
 
     #[cfg(feature = "database")]
