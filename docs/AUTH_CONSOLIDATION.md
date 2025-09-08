@@ -52,9 +52,9 @@ curl -H "Authorization: Bearer <biscuit_token>" \
 4. **Audit Trail**: Better tracking and logging through unified auth system
 
 ### Backward Compatibility
-- **Deprecated Functions**: `check_admin_token()` and `get_admin_token()` still exist but emit deprecation warnings
-- **Admin Middleware**: `admin_auth_layer` still exists but is deprecated and unused
-- **Environment Variables**: `ADMIN_TOKEN` environment variable no longer used but won't cause errors
+
+- Legacy admin token path removed entirely (`check_admin_token()`, `get_admin_token()`, `admin_auth_layer`).
+- `ADMIN_TOKEN` environment variable is ignored if present.
 
 ### Testing
 - ✅ All existing tests pass

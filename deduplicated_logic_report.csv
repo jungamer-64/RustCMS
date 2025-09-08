@@ -1,5 +1,5 @@
 area,canonical_impl,file,notes,replaced_examples
-cache_keys,ListCacheKey & entity_id_key,src/utils/cache_key.rs,Unified list/entity cache key construction,build_posts_cache_key|build_users_cache_key (legacy wrappers retained)
+cache_keys,ListCacheKey & entity_id_key,src/utils/cache_key.rs,Unified list/entity cache key construction,build_posts_cache_key|build_users_cache_key
 api_delete_response,delete_with & ok_message,src/utils/response_ext.rs,Standard JSON success/delete responses,handlers/posts.rs::delete_post|handlers/users.rs::delete_user|handlers/api_keys.rs::revoke_api_key (was raw Json/status)
 create_entity,create_entity,src/utils/crud.rs,Generic create (201 + ApiOk) with optional hook,handlers/posts.rs::create_post|handlers/admin.rs::create_post (was inline DB + mapping)
 update_entity,update_entity,src/utils/crud.rs,Generic update with optional post-hook (search indexing),handlers/posts.rs::update_post|handlers/users.rs::update_user (was direct calls + indexing)
@@ -16,3 +16,5 @@ auth_migration_docs,Auth response migration guide,docs/AUTH_MIGRATION_V2.md,Expl
 auth_refresh_unify,Refresh endpoint unified to AuthSuccessResponse,src/handlers/auth.rs|src/utils/auth_response.rs|src/auth/mod.rs,Extends refresh output to full unified schema,handlers/auth.rs::refresh_token
 auth_refresh_biscuit_rotation,Refresh issues new biscuit access token,src/auth/mod.rs|tests/biscuit_token_flow_tests.rs,Backward compatibility: biscuit_token now populated on refresh,auth::refresh_access_token
 auth_refresh_response_removal,Removed legacy RefreshResponse,src/auth/mod.rs|src/handlers/auth.rs|docs/AUTH_MIGRATION_V2.md,Refresh now directly builds AuthSuccessResponse tokens tuple,refresh_access_token handler
+admin_token_legacy_removal,Removed admin_auth_layer & admin token utils,src/middleware/mod.rs|<deleted>/src/middleware/admin_auth.rs|<deleted>/src/utils/auth_utils.rs,Use Biscuit + role/permission checks instead,check_admin_token|get_admin_token|admin_auth_layer
+posts_cache_key_fn_removal,Removed deprecated build_posts_cache_key,src/handlers/posts.rs,Function no longer needed after ListCacheKey adoption,build_posts_cache_key

@@ -68,19 +68,6 @@ dto_from_model!(PostDto, Post, |p| PostDto {
 
 // Posts list now directly returns Paginated<PostDto> instead of wrapper
 
-#[deprecated(note = "Use ListCacheKey::Posts.to_cache_key() (and build_list_cache_key for non-canonical bases)")]
-pub(crate) fn build_posts_cache_key(base: &str, page: u32, limit: u32, status: &Option<String>, author: &Option<Uuid>, tag: &Option<String>, sort: &Option<String>) -> String {
-    if base == "posts" {
-        ListCacheKey::Posts { page, limit, status, author, tag, sort }.to_cache_key()
-    } else {
-        crate::utils::cache_key::build_list_cache_key(
-            base,
-            page,
-            limit,
-            &[("status", status.clone()), ("author", author.map(|u| u.to_string())), ("tag", tag.clone()), ("sort", sort.clone())],
-        )
-    }
-}
 
 // Shared helper to fetch paginated posts with caching and filters
 pub(crate) async fn paginate_posts(
