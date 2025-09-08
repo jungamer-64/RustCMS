@@ -14,6 +14,7 @@ use uuid::Uuid;
 use crate::utils::{common_types::UserInfo, cache_key::{entity_id_key, ListCacheKey}};
 use std::sync::Arc;
 use crate::utils::response_ext::ApiOk;
+use crate::utils::crud;
 use crate::{models::UpdateUserRequest, AppState, Result};
 use crate::models::pagination::{normalize_page_limit, Paginated};
 
@@ -207,15 +208,18 @@ pub async fn update_user(
     Path(id): Path<Uuid>,
     Json(request): Json<UpdateUserRequest>,
 ) -> Result<impl IntoResponse> {
-    // Update in database (record DB timing)
-    let user = state.db_update_user(id, request).await?;
-
-    // Update search index
-    #[cfg(feature = "search")]
-    state.search_index_user_safe(&user).await;
-
-
-    Ok(ApiOk(UserInfo::from(&user)))
+    let api_ok = crud::update_entity(
+        state.clone(),
+        id,
+        request,
+        |st, uid, req| async move { st.db_update_user(uid, req).await },
+        |u: &crate::models::user::User| UserInfo::from(u),
+        Some(|u: crate::models::user::User, st: AppState| async move {
+            #[cfg(feature = "search")]
+            st.search_index_user_safe(&u).await;
+        })
+    ).await?;
+    Ok(api_ok)
 }
 
 /// Delete user (soft delete by deactivating)

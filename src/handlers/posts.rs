@@ -346,10 +346,20 @@ pub async fn update_post(
     Path(id): Path<Uuid>,
     Json(request): Json<UpdatePostRequest>,
 ) -> Result<impl IntoResponse> {
-    let post = state.db_update_post(id, request).await?;
-    #[cfg(feature = "search")]
-    state.search_index_post_safe(&post).await;
-    Ok(ApiOk(PostDto::from(&post)))
+    let api_ok = crud::update_entity(
+        state.clone(),
+        id,
+        request,
+        |st, pid, req| async move { st.db_update_post(pid, req).await },
+        |p: &crate::models::post::Post| PostDto::from(p),
+    Some(|p: crate::models::post::Post, st: AppState| async move {
+            #[cfg(feature = "search")]
+            {
+        st.search_index_post_safe(&p).await;
+            }
+        })
+    ).await?;
+    Ok(api_ok)
 }
 
 /// Delete post
