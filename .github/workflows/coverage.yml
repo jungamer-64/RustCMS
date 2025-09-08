@@ -1,0 +1,51 @@
+# .github/workflows/coverage.yml
+
+name: Code Coverage
+
+# mainブランチにpushされた時、またはプルリクエストが作成された時に実行
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  run-coverage:
+    name: Run Coverage and Upload to Codacy
+    runs-on: ubuntu-latest
+    steps:
+      # 1. リポジトリのコードをチェックアウト
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Rustのツールチェインをセットアップ
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      # 3. cargo-tarpaulinをインストール
+      # キャッシュを利用して2回目以降のインストールを高速化
+      - name: Cache cargo-tarpaulin
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-tarpaulin
+          key: ${{ runner.os }}-cargo-tarpaulin-v0.27.3 # バージョンを固定
+
+      - name: Install cargo-tarpaulin
+        run: |
+          if ! [ -f ~/.cargo/bin/cargo-tarpaulin ]; then
+            cargo install cargo-tarpaulin --version 0.27.3
+          fi
+        
+      # 4. カバレッジレポートを生成
+      # --out Lcov でLCOV形式のレポートを生成し、lcov.infoというファイルに出力
+      - name: Generate code coverage
+        run: cargo tarpaulin --verbose --workspace --out Lcov
+
+      # 5. 生成されたレポートをCodacyにアップロード
+      - name: Upload coverage to Codacy
+        uses: codacy/codacy-coverage-reporter-action@v1
+        with:
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+          coverage-reports: lcov.info # レポートファイルのパスを指定
