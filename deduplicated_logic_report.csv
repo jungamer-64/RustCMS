@@ -1,0 +1,6 @@
+File,Function_or_Block,Canonical_Implementation,Notes
+src/utils/cache_key.rs,ListCacheKey / entity_id_key,Yes,Replaces build_posts_cache_key & build_users_cache_key wrappers
+src/handlers/posts.rs,build_posts_cache_key (deprecated wrapper),Uses ListCacheKey internally,Maintained for backward compatibility during transition
+src/handlers/posts.rs,get_post,Yes,Now uses entity_id_key helper
+src/handlers/users.rs,get_user,Yes,Now uses entity_id_key helper
+src/handlers/users.rs,get_users,Yes,Uses ListCacheKey::Users instead of custom builder
