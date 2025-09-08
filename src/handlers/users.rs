@@ -82,23 +82,19 @@ pub async fn get_users(
         let role = query.role.clone();
         let active = query.active;
         let sort = query.sort.clone();
-        crate::utils::cache_helpers::cache_or_compute(
+        crate::utils::paginate::fetch_paginated_cached(
             state.clone(),
-            &cache_key,
+            cache_key,
             crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
+            page,
+            limit,
             move || async move {
-                crate::utils::paginate::fetch_paginated(
-                    page,
-                    limit,
-                    || async {
-                        let users = state
-                            .db_get_users(page, limit, role.clone(), active, sort.clone())
-                            .await?;
-                        Ok(users.iter().map(UserInfo::from).collect())
-                    },
-                    || async { state.db_count_users_filtered(role.clone(), active).await },
-                ).await
+                let users = state
+                    .db_get_users(page, limit, role.clone(), active, sort.clone())
+                    .await?;
+                Ok(users.iter().map(UserInfo::from).collect())
             },
+            move || async move { state.db_count_users_filtered(role.clone(), active).await },
         ).await?
     };
     Ok(ApiOk(response))
@@ -300,30 +296,26 @@ pub async fn get_user_posts(
     let status = query.status.clone();
     let tag = query.tag.clone();
     let sort = query.sort.clone();
-    let response = crate::utils::cache_helpers::cache_or_compute(
+    let response = crate::utils::paginate::fetch_paginated_cached(
         state.clone(),
-        &cache_key,
+        cache_key,
         crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
+        page,
+        limit,
         move || async move {
-            crate::utils::paginate::fetch_paginated(
-                page,
-                limit,
-                || async {
-                    let posts = state
-                        .db_get_posts(
-                            page,
-                            limit,
-                            status.clone(),
-                            Some(id),
-                            tag.clone(),
-                            sort.clone(),
-                        )
-                        .await?;
-                    Ok(posts.iter().map(crate::handlers::posts::PostDto::from).collect())
-                },
-                || async { state.db_count_posts_filtered(status.clone(), Some(id), tag.clone()).await },
-            ).await
+            let posts = state
+                .db_get_posts(
+                    page,
+                    limit,
+                    status.clone(),
+                    Some(id),
+                    tag.clone(),
+                    sort.clone(),
+                )
+                .await?;
+            Ok(posts.iter().map(crate::handlers::posts::PostDto::from).collect())
         },
+        move || async move { state.db_count_posts_filtered(status.clone(), Some(id), tag.clone()).await },
     ).await?;
     return Ok(ApiOk(response));
 }

@@ -230,23 +230,19 @@ pub async fn get_posts(
     let author = query.author;
     let tag = query.tag.clone();
     let sort = query.sort.clone();
-    let response: Paginated<PostDto> = crate::utils::cache_helpers::cache_or_compute(
+    let response: Paginated<PostDto> = crate::utils::paginate::fetch_paginated_cached(
         state.clone(),
-        &cache_key,
+        cache_key,
         crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
+        page,
+        limit,
         move || async move {
-            crate::utils::paginate::fetch_paginated(
-                page,
-                limit,
-                || async {
-                    let posts = state
-                        .db_get_posts(page, limit, status.clone(), author, tag.clone(), sort.clone())
-                        .await?;
-                    Ok(posts.iter().map(PostDto::from).collect())
-                },
-                || async { state.db_count_posts_filtered(status.clone(), author, tag.clone()).await },
-            ).await
+            let posts = state
+                .db_get_posts(page, limit, status.clone(), author, tag.clone(), sort.clone())
+                .await?;
+            Ok(posts.iter().map(PostDto::from).collect())
         },
+        move || async move { state.db_count_posts_filtered(status.clone(), author, tag.clone()).await },
     ).await?;
     Ok(ApiOk(response))
 }
@@ -368,23 +364,19 @@ pub async fn get_posts_by_tag(
     let author = query.author;
     let sort = query.sort.clone();
     let t = tag.clone();
-    let response: Paginated<PostDto> = crate::utils::cache_helpers::cache_or_compute(
+    let response: Paginated<PostDto> = crate::utils::paginate::fetch_paginated_cached(
         state.clone(),
-        &cache_key,
+        cache_key,
         crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
+        page,
+        limit,
         move || async move {
-            crate::utils::paginate::fetch_paginated(
-                page,
-                limit,
-                || async {
-                    let posts = state
-                        .db_get_posts(page, limit, status.clone(), author, Some(t.clone()), sort.clone())
-                        .await?;
-                    Ok(posts.iter().map(PostDto::from).collect())
-                },
-                || async { state.db_count_posts_filtered(status.clone(), author, Some(t.clone())).await },
-            ).await
+            let posts = state
+                .db_get_posts(page, limit, status.clone(), author, Some(t.clone()), sort.clone())
+                .await?;
+            Ok(posts.iter().map(PostDto::from).collect())
         },
+        move || async move { state.db_count_posts_filtered(status.clone(), author, Some(t.clone())).await },
     ).await?;
     Ok(ApiOk(response))
 }

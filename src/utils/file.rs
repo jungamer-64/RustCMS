@@ -196,15 +196,24 @@ pub async fn delete_file_async(path: &Path) -> Result<(), FileError> {
 /// ファイル情報を取得
 pub fn get_file_info(path: &Path) -> Result<FileInfo, FileError> {
     let metadata = fs::metadata(path)?;
+    Ok(build_file_info_from_parts(
+        path,
+        metadata.len(),
+        || calculate_file_hash(path),
+    )?)
+}
+
+/// 非同期でファイル情報を取得
+pub async fn get_file_info_async(path: &Path) -> Result<FileInfo, FileError> {
+    let metadata = async_fs::metadata(path).await?;
+    // Adapt sync builder by deferring only the hash as async
     let filename = path
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or(FileError::InvalidPath)?;
-
     let extension = get_file_extension(filename).unwrap_or_default();
     let mime_type = get_mime_type(&extension);
-    let hash = calculate_file_hash(path)?;
-
+    let hash = calculate_file_hash_async(path).await?;
     Ok(FileInfo {
         name: filename.to_string(),
         extension,
@@ -214,22 +223,22 @@ pub fn get_file_info(path: &Path) -> Result<FileInfo, FileError> {
     })
 }
 
-/// 非同期でファイル情報を取得
-pub async fn get_file_info_async(path: &Path) -> Result<FileInfo, FileError> {
-    let metadata = async_fs::metadata(path).await?;
+/// Internal helper: assemble FileInfo given a path, size and a hash supplier.
+fn build_file_info_from_parts<F>(path: &Path, size: u64, hash_fn: F) -> Result<FileInfo, FileError>
+where
+    F: FnOnce() -> Result<String, FileError>,
+{
     let filename = path
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or(FileError::InvalidPath)?;
-
     let extension = get_file_extension(filename).unwrap_or_default();
     let mime_type = get_mime_type(&extension);
-    let hash = calculate_file_hash_async(path).await?;
-
+    let hash = hash_fn()?;
     Ok(FileInfo {
         name: filename.to_string(),
         extension,
-        size: metadata.len(),
+        size,
         mime_type,
         hash,
     })
