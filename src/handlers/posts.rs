@@ -113,8 +113,6 @@ pub async fn create_post(
     Json(request): Json<CreatePostRequest>,
 ) -> Result<impl IntoResponse> {
     let post = state.db_create_post(request).await?;
-    #[cfg(feature = "cache")]
-    state.cache_invalidate_prefix("posts:*").await;
     #[cfg(feature = "search")]
     state.search_index_post_safe(&post).await;
     Ok((StatusCode::CREATED, ApiOk(PostDto::from(&post))))
@@ -303,8 +301,6 @@ pub async fn update_post(
     let post = state.db_update_post(id, request).await?;
     #[cfg(feature = "search")]
     state.search_index_post_safe(&post).await;
-    #[cfg(feature = "cache")]
-    state.invalidate_post_caches(id).await;
     Ok(ApiOk(PostDto::from(&post)))
 }
 
@@ -338,8 +334,6 @@ pub async fn delete_post(
     state.db_delete_post(id).await?;
     #[cfg(feature = "search")]
     state.search_remove_post_safe(id).await;
-    #[cfg(feature = "cache")]
-    state.invalidate_post_caches(id).await;
     Ok(ApiOk(json!({
         "success": true,
         "message": "Post deleted successfully"

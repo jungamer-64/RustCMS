@@ -51,19 +51,32 @@ impl PostRepository {
         T: serde::Serialize + Clone + Send + Sync + 'static,
     {
         if let Some(v) = value {
-            self.cache.set(cache_key, v, ttl).await?;
+            self.set_cache(cache_key, v, ttl).await?;
         }
         Ok(())
     }
 
+    // Helper: set cache and record metrics
+    async fn set_cache<T>(&self, cache_key: &str, value: &T, ttl: Option<u64>) -> Result<()>
+    where
+        T: serde::Serialize + Clone + Send + Sync + 'static,
+    {
+        self.cache.set(cache_key, value, ttl).await?;
+        // record a quick metric indicating a cache set
+        self.metrics.record_cache_operation("set", true, std::time::Duration::from_millis(1));
+        Ok(())
+    }
+
+    // Helper: invalidate caches related to a single post (by id) and the posts list pattern.
+    async fn invalidate_post_caches(&self, id: &Uuid) -> Result<()> {
+        let cache_key = cache_keys::post(&id.to_string());
+        self.cache.delete(&cache_key).await?;
+        self.cache.delete_pattern("posts:list:*").await?;
+        Ok(())
+    }
+
     pub async fn create(&self, req: CreatePostRequest, author_id: Uuid) -> Result<Post> {
-        let timer = crate::monitoring::metrics::start_timer(
-            "database_query_duration_seconds",
-            vec![
-                ("operation".to_string(), "insert".to_string()),
-                ("table".to_string(), "posts".to_string()),
-            ],
-        );
+    let timer = self.start_db_timer("insert");
 
         let id = Uuid::new_v4();
         let now = Utc::now();
@@ -120,13 +133,7 @@ impl PostRepository {
     }
 
     pub async fn get_by_slug(&self, slug: &str) -> Result<Option<Post>> {
-        let timer = crate::monitoring::metrics::start_timer(
-            "database_query_duration_seconds",
-            vec![
-                ("operation".to_string(), "select".to_string()),
-                ("table".to_string(), "posts".to_string()),
-            ],
-        );
+    let timer = self.start_db_timer("select");
 
         let post = sqlx::query_as!(
             Post,
@@ -204,19 +211,13 @@ impl PostRepository {
         };
 
     // Cache the result
-    self.cache.set(&cache_key, &response, Some(60)).await?; // 1 minute cache
+    self.set_cache(&cache_key, &response, Some(60)).await?; // 1 minute cache
 
         Ok(response)
     }
 
     pub async fn update(&self, id: Uuid, req: UpdatePostRequest) -> Result<Post> {
-        let timer = crate::monitoring::metrics::start_timer(
-            "database_query_duration_seconds",
-            vec![
-                ("operation".to_string(), "update".to_string()),
-                ("table".to_string(), "posts".to_string()),
-            ],
-        );
+    let timer = self.start_db_timer("update");
 
         let now = Utc::now();
         
@@ -252,22 +253,14 @@ impl PostRepository {
 
         timer.stop();
 
-        // Invalidate cache
-        let cache_key = cache_keys::post(&id.to_string());
-        self.cache.delete(&cache_key).await?;
-        self.cache.delete_pattern("posts:list:*").await?;
+    // Invalidate caches for this post & post lists
+    self.invalidate_post_caches(&id).await?;
 
         Ok(post)
     }
 
     pub async fn delete(&self, id: Uuid) -> Result<()> {
-        let timer = crate::monitoring::metrics::start_timer(
-            "database_query_duration_seconds",
-            vec![
-                ("operation".to_string(), "delete".to_string()),
-                ("table".to_string(), "posts".to_string()),
-            ],
-        );
+    let timer = self.start_db_timer("delete");
 
         let result = sqlx::query!("DELETE FROM posts WHERE id = $1", id)
             .execute(&self.db)
@@ -279,22 +272,14 @@ impl PostRepository {
             return Err(AppError::NotFound("Post not found".to_string()));
         }
 
-        // Invalidate cache
-        let cache_key = cache_keys::post(&id.to_string());
-        self.cache.delete(&cache_key).await?;
-        self.cache.delete_pattern("posts:list:*").await?;
+    // Invalidate caches for this post & post lists
+    self.invalidate_post_caches(&id).await?;
 
         Ok(())
     }
 
     pub async fn search(&self, query: &str, filter: PostFilter) -> Result<PostResponse> {
-        let timer = crate::monitoring::metrics::start_timer(
-            "database_query_duration_seconds",
-            vec![
-                ("operation".to_string(), "search".to_string()),
-                ("table".to_string(), "posts".to_string()),
-            ],
-        );
+    let timer = self.start_db_timer("search");
 
         let offset = (filter.page - 1) * filter.limit;
         
