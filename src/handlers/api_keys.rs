@@ -4,6 +4,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{AppState, Result};
+use crate::utils::response_ext::{ApiOk, delete_with};
 
 #[derive(Serialize, Deserialize, ToSchema)]
 pub struct CreateApiKeyPayload {
@@ -27,10 +28,10 @@ pub struct CreatedApiKeyResponse {
         })
     )
 )))))]
-pub async fn create_api_key(State(state): State<AppState>, Extension(auth): Extension<crate::auth::AuthContext>, Json(payload): Json<CreateApiKeyPayload>) -> Result<(axum::http::StatusCode, Json<CreatedApiKeyResponse>)> {
+pub async fn create_api_key(State(state): State<AppState>, Extension(auth): Extension<crate::auth::AuthContext>, Json(payload): Json<CreateApiKeyPayload>) -> Result<(axum::http::StatusCode, ApiOk<CreatedApiKeyResponse>)> {
     let (api_key, raw) = state.db_create_api_key(payload.name, auth.user_id, payload.permissions).await?;
     tracing::info!(api_key_id=%api_key.id, user_id=%auth.user_id, masked_raw=%crate::models::api_key::ApiKey::mask_raw(&raw), "api key created");
-    Ok((axum::http::StatusCode::CREATED, Json(CreatedApiKeyResponse { api_key, raw_key: raw })))
+    Ok((axum::http::StatusCode::CREATED, ApiOk(CreatedApiKeyResponse { api_key, raw_key: raw })))
 }
 
 #[utoipa::path(get, path="/api/v1/api-keys", security(("BearerAuth" = [])), responses((status=200, body=[crate::models::ApiKeyResponse], examples((
@@ -39,18 +40,29 @@ pub async fn create_api_key(State(state): State<AppState>, Extension(auth): Exte
         value = json!([{ "id": "550e8400-e29b-41d4-a716-446655440000", "name": "integration", "permissions": ["read:posts"], "revoked": false }])
     )
 )))))]
-pub async fn list_api_keys(State(state): State<AppState>, Extension(auth): Extension<crate::auth::AuthContext>) -> Result<Json<Vec<crate::models::ApiKeyResponse>>> {
+pub async fn list_api_keys(State(state): State<AppState>, Extension(auth): Extension<crate::auth::AuthContext>) -> Result<ApiOk<Vec<crate::models::ApiKeyResponse>>> {
     let keys = state.db_list_api_keys(auth.user_id, false).await?;
-    Ok(Json(keys))
+    Ok(ApiOk(keys))
 }
 
-#[utoipa::path(delete, path="/api/v1/api-keys/{id}", security(("BearerAuth" = [])), params(("id"=Uuid, Path)), responses((status=200, examples((
+#[derive(Serialize, ToSchema)]
+pub struct ApiKeyStatus {
+    pub status: &'static str,
+}
+
+#[utoipa::path(delete, path="/api/v1/api-keys/{id}", security(("BearerAuth" = [])), params(("id"=Uuid, Path)), responses((status=200, description="Revoked", body=crate::utils::api_types::ApiResponse<serde_json::Value>, examples((
     "Revoked" = (
         summary = "APIキー失効",
-        value = json!({"status": "revoked"})
+        value = json!({
+            "success": true,
+            "data": {"message": "API key revoked"},
+            "message": null,
+            "error": null,
+            "validation_errors": null
+        })
     )
 )))))]
-pub async fn revoke_api_key(State(state): State<AppState>, Extension(auth): Extension<crate::auth::AuthContext>, Path(id): Path<Uuid>) -> Result<Json<serde_json::Value>> {
-    state.db_revoke_api_key_owned(id, auth.user_id).await?;
-    Ok(Json(serde_json::json!({"status":"revoked"})))
+pub async fn revoke_api_key(State(state): State<AppState>, Extension(auth): Extension<crate::auth::AuthContext>, Path(id): Path<Uuid>) -> Result<impl axum::response::IntoResponse> {
+    let fut = async move { state.db_revoke_api_key_owned(id, auth.user_id).await.map(|_| ()) };
+    delete_with(fut, "API key revoked").await
 }
