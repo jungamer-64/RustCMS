@@ -7,11 +7,14 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+#[cfg(feature = "legacy-auth-flat")]
+use serde::Serialize;
 use utoipa::ToSchema;
 use serde_json::json;
 
-use crate::utils::{common_types::UserInfo};
+#[cfg(feature = "legacy-auth-flat")]
+use crate::utils::common_types::UserInfo;
 use crate::utils::response_ext::ApiOk;
 use crate::utils::auth_response::AuthSuccessResponse;
 use crate::{auth::LoginRequest, models::CreateUserRequest, AppState, Result};
@@ -26,7 +29,8 @@ pub struct RegisterRequest {
     pub last_name: Option<String>,
 }
 
-/// 旧 LoginResponse 型 (後方互換のため残留) - 新規コードは AuthSuccessResponse を使用してください
+#[cfg(feature = "legacy-auth-flat")]
+/// 旧 LoginResponse 型 (feature = legacy-auth-flat 有効時のみ公開) - 新規コードは AuthSuccessResponse を使用してください
 #[allow(dead_code)]
 #[derive(Debug, Serialize, ToSchema)]
 pub struct LoginResponse {
@@ -40,6 +44,7 @@ pub struct LoginResponse {
     pub token: String,
 }
 
+#[cfg(feature = "legacy-auth-flat")]
 impl From<AuthSuccessResponse> for LoginResponse {
     fn from(a: AuthSuccessResponse) -> Self {
         LoginResponse { success: a.success, access_token: a.access_token, refresh_token: a.refresh_token, biscuit_token: a.biscuit_token, user: a.user, expires_in: a.expires_in, session_id: a.session_id, token: a.token }
@@ -254,17 +259,6 @@ pub struct RefreshRequest { pub refresh_token: String }
 )]
 pub async fn refresh_token(State(state): State<AppState>, Json(body): Json<RefreshRequest>) -> Result<impl IntoResponse> {
     let (tokens, user) = state.auth_refresh_access_token(&body.refresh_token).await?;
-    let access_token = tokens.access_token.clone();
-    let auth_response = crate::utils::auth_response::AuthSuccessResponse {
-        success: true,
-        tokens: tokens.clone(),
-        user,
-        access_token: access_token.clone(),
-        refresh_token: tokens.refresh_token.clone(),
-        biscuit_token: tokens.biscuit_token.clone(),
-        expires_in: tokens.expires_in,
-        session_id: tokens.session_id.clone(),
-        token: access_token,
-    };
+    let auth_response = crate::utils::auth_response::AuthSuccessResponse::from_parts(&tokens, user);
     Ok(ApiOk(auth_response))
 }

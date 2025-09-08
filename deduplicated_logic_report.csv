@@ -18,3 +18,6 @@ auth_refresh_biscuit_rotation,Refresh issues new biscuit access token,src/auth/m
 auth_refresh_response_removal,Removed legacy RefreshResponse,src/auth/mod.rs|src/handlers/auth.rs|docs/AUTH_MIGRATION_V2.md,Refresh now directly builds AuthSuccessResponse tokens tuple,refresh_access_token handler
 admin_token_legacy_removal,Removed admin_auth_layer & admin token utils,src/middleware/mod.rs|<deleted>/src/middleware/admin_auth.rs|<deleted>/src/utils/auth_utils.rs,Use Biscuit + role/permission checks instead,check_admin_token|get_admin_token|admin_auth_layer
 posts_cache_key_fn_removal,Removed deprecated build_posts_cache_key,src/handlers/posts.rs,Function no longer needed after ListCacheKey adoption,build_posts_cache_key
+auth_flat_fields_deprecation,Deprecated flattened token fields in AuthSuccessResponse,src/utils/auth_response.rs,Guides clients to use nested tokens.*,access_token|refresh_token|biscuit_token|expires_in|session_id|token
+legacy_auth_flat_feature_gating,LoginResponse behind feature gate,src/handlers/auth.rs|src/openapi.rs,Feature legacy-auth-flat controls legacy schema exposure,LoginResponse schema unconditional inclusion
+refresh_tamper_negative_tests,Tamper & garbage refresh rejection,tests/biscuit_refresh_tamper_tests.rs,Ensures signature and structural validation for refresh tokens,tampered_refresh_token_rejected|random_garbage_token_rejected

@@ -11,6 +11,7 @@ categories = ["web-programming", "database"]
 autobins = false
 default-run = "cms-server"
 
+
 [lib]
 name = "cms_backend"
 path = "src/lib.rs"
@@ -182,6 +183,7 @@ rpassword = "7.3"
 auth = ["dep:argon2", "dep:biscuit-auth"]
 cache = ["dep:deadpool-redis", "dep:redis"]
 dev-tools = []
+legacy-auth-flat = [] # expose deprecated LoginResponse schema & flattened fields in OpenAPI
 compression = []
 database = ["dep:deadpool-diesel", "dep:diesel", "dep:diesel-derive-enum", "dep:diesel_migrations", "dep:r2d2"]
 default = ["auth", "cache", "compression", "database", "email", "search"]

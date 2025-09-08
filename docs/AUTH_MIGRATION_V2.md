@@ -3,6 +3,17 @@
 日付: 2025-09-09  
 対象バージョン: 次回マイナーバージョン (後方互換段階) → 将来メジャーで旧型削除予定
 
+## Feature Flag (`legacy-auth-flat`)
+
+旧 `LoginResponse` 型（およびその OpenAPI スキーマ露出）は Cargo feature `legacy-auth-flat` 有効時のみコンパイル/ドキュメント化されるようになりました。デフォルトでは無効であり、新規クライアントは統一スキーマ `AuthSuccessResponse` のみを参照します。
+
+```bash
+# 旧 LoginResponse を含めたい場合のみ
+cargo build --features legacy-auth-flat
+```
+
+これにより、後方互換を維持しつつ警告 (deprecated フィールド) を利用した移行促進が可能です。将来のメジャーでは feature 自体を削除予定です。
+
 ## 概要
 
 `login` / `register` エンドポイントの認証レスポンスが旧 `LoginResponse` から **統一スキーマ `AuthSuccessResponse`** に移行しました。新スキーマは `tokens` コンテナを中心とした構造を提供しつつ、旧クライアントを壊さないためフラットなトークンフィールドも併置しています。
@@ -72,16 +83,17 @@ function extractTokens(r: AuthSuccessResponse) {
 | フェーズ | 内容 | 状態 |
 |---------|------|------|
 | Phase 1 | 新スキーマ導入＋旧フィールド温存 | 完了 |
-| Phase 2 | クライアントガイド/ドキュメント公開 (本ファイル) | 本コミット |
-| Phase 3 | `token` / フラットフィールド deprecate (warning 注記) | 未実施 |
-| Phase 4 | メジャーリリースでフラットフィールド削除 | 予定 |
+| Phase 2 | クライアントガイド/ドキュメント公開 (本ファイル) | 完了 |
+| Phase 3 | `token` / フラットフィールド deprecate + feature gate (`legacy-auth-flat`) | 完了 |
+| Phase 4 | メジャーリリースでフラットフィールド削除 & feature 削除 | 予定 |
 
 ## アクションアイテム
 
 | ID | 項目 | 優先度 |
 |----|------|--------|
 | A1 | refresh エンドポイントも統一レスポンスへ移行 (オプション: `AuthSuccessResponse`) | 完了 |
-| A2 | `token` フィールドに `#[deprecated]` 属性付与 (警告拡散検証後) | Medium |
+| A2 | `token` フィールドに `#[deprecated]` 属性付与 (警告拡散検証後) | 完了 |
+| A4 | `legacy-auth-flat` feature の最終削除 (メジャー) | Low |
 | A3 | `AuthSuccess<T>::extra` 利用シナリオ検討 (2FA, 拡張 claims) | Low |
 
 ## 互換性とテスト

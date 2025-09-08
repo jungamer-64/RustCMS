@@ -18,10 +18,22 @@ impl Modify for SecurityAddon {
         let mut http = Http::new(HttpAuthScheme::Bearer);
         http.bearer_format = Some("Biscuit".to_string());
         components.add_security_scheme("BearerAuth", SecurityScheme::Http(http));
+
+        #[cfg(feature = "legacy-auth-flat")]
+        {
+            use utoipa::ToSchema;
+            if !components.schemas.contains_key("LoginResponse") {
+                components.schemas.insert(
+                    "LoginResponse".to_string(),
+                    <crate::handlers::auth::LoginResponse as ToSchema>::schema(),
+                );
+            }
+        }
     }
 }
 
 // (Schemas temporarily minimized during refactor; extend later as needed)
+
 
 #[derive(OpenApi)]
 #[openapi(
@@ -84,7 +96,6 @@ impl Modify for SecurityAddon {
             // Auth
             crate::handlers::auth::RegisterRequest,
             crate::auth::LoginRequest,
-            crate::handlers::auth::LoginResponse,
             crate::utils::auth_response::AuthSuccessResponse,
             crate::handlers::auth::RefreshRequest,
             crate::utils::auth_response::AuthSuccessResponse,

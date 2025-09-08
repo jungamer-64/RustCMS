@@ -47,24 +47,47 @@ pub struct AuthSuccessResponse {
     pub tokens: AuthTokens,
     pub user: UserInfo,
     // --- Backward compatible flattened fields ---
+    #[deprecated(note = "Use tokens.access_token")]
     pub access_token: String,
+    #[deprecated(note = "Use tokens.refresh_token")]
     pub refresh_token: String,
+    #[deprecated(note = "Use tokens.biscuit_token")]
     pub biscuit_token: String,
+    #[deprecated(note = "Use tokens.expires_in")]
     pub expires_in: i64,
+    #[deprecated(note = "Use tokens.session_id")]
     pub session_id: String,
     /// 旧クライアント互換 (token == access_token)
+    #[deprecated(note = "Use tokens.access_token (alias)")]
     pub token: String,
 }
 
 impl From<crate::auth::AuthResponse> for AuthSuccessResponse {
     fn from(a: crate::auth::AuthResponse) -> Self {
-    let access_token = a.access_token.clone();
-    let refresh_token = a.refresh_token.clone();
-    let biscuit_token = a.biscuit_token.clone();
-    let expires_in = a.expires_in;
-    let session_id = a.session_id.clone();
-    let user = a.user;
-    let tokens = AuthTokens { access_token: access_token.clone(), refresh_token: refresh_token.clone(), biscuit_token: biscuit_token.clone(), expires_in, session_id: session_id.clone() };
-    AuthSuccessResponse { success: true, tokens, user, access_token: access_token.clone(), refresh_token, biscuit_token, expires_in, session_id, token: access_token }
+        let tokens = AuthTokens {
+            access_token: a.access_token,
+            refresh_token: a.refresh_token,
+            biscuit_token: a.biscuit_token,
+            expires_in: a.expires_in,
+            session_id: a.session_id,
+        };
+        AuthSuccessResponse::from_parts(&tokens, a.user)
+    }
+}
+
+impl AuthSuccessResponse {
+    pub fn from_parts(tokens: &AuthTokens, user: UserInfo) -> Self {
+        // Centralize deprecated flattened field population
+        Self {
+            success: true,
+            tokens: tokens.clone(),
+            user,
+            access_token: tokens.access_token.clone(),
+            refresh_token: tokens.refresh_token.clone(),
+            biscuit_token: tokens.biscuit_token.clone(),
+            expires_in: tokens.expires_in,
+            session_id: tokens.session_id.clone(),
+            token: tokens.access_token.clone(),
+        }
     }
 }
