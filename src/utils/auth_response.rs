@@ -70,18 +70,13 @@ pub struct AuthSuccessResponse {
 
 impl From<crate::auth::AuthResponse> for AuthSuccessResponse {
     fn from(a: crate::auth::AuthResponse) -> Self {
-        let tokens: AuthTokens = a.clone().into();
-        let access = tokens.access_token.clone();
-        AuthSuccessResponse {
-            success: true,
-            tokens,
-            user: a.user,
-            access_token: access.clone(),
-            refresh_token: a.refresh_token,
-            biscuit_token: a.biscuit_token,
-            expires_in: a.expires_in,
-            session_id: a.session_id,
-            token: access,
-        }
+    let access_token = a.access_token.clone();
+    let refresh_token = a.refresh_token.clone();
+    let biscuit_token = a.biscuit_token.clone();
+    let expires_in = a.expires_in;
+    let session_id = a.session_id.clone();
+    let user = a.user;
+    let tokens = AuthTokens { access_token: access_token.clone(), refresh_token: refresh_token.clone(), biscuit_token: biscuit_token.clone(), expires_in, session_id: session_id.clone() };
+    AuthSuccessResponse { success: true, tokens, user, access_token: access_token.clone(), refresh_token, biscuit_token, expires_in, session_id, token: access_token }
     }
 }
