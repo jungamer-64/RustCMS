@@ -1,7 +1,8 @@
 use crate::utils::common_types::UserInfo;
 use serde::Serialize;
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AuthTokens {
     pub access_token: String,
     pub refresh_token: String,
@@ -45,6 +46,42 @@ impl From<crate::auth::RefreshResponse> for AuthTokens {
             biscuit_token: String::new(),
             expires_in: r.expires_in,
             session_id: r.session_id,
+        }
+    }
+}
+
+/// 統一認証レスポンス (login/register 用)
+///
+/// tokens オブジェクトに加え、後方互換のため従来フラットなフィールド (access_token / refresh_token / biscuit_token / expires_in / session_id / token) も保持する。
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AuthSuccessResponse {
+    pub success: bool,
+    pub tokens: AuthTokens,
+    pub user: UserInfo,
+    // --- Backward compatible flattened fields ---
+    pub access_token: String,
+    pub refresh_token: String,
+    pub biscuit_token: String,
+    pub expires_in: i64,
+    pub session_id: String,
+    /// 旧クライアント互換 (token == access_token)
+    pub token: String,
+}
+
+impl From<crate::auth::AuthResponse> for AuthSuccessResponse {
+    fn from(a: crate::auth::AuthResponse) -> Self {
+        let tokens: AuthTokens = a.clone().into();
+        let access = tokens.access_token.clone();
+        AuthSuccessResponse {
+            success: true,
+            tokens,
+            user: a.user,
+            access_token: access.clone(),
+            refresh_token: a.refresh_token,
+            biscuit_token: a.biscuit_token,
+            expires_in: a.expires_in,
+            session_id: a.session_id,
+            token: access,
         }
     }
 }
