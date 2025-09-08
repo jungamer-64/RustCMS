@@ -42,8 +42,7 @@ impl From<crate::auth::RefreshResponse> for AuthTokens {
         AuthTokens {
             access_token: r.access_token,
             refresh_token: r.refresh_token,
-            // RefreshResponse には biscuit_token が含まれないため空文字列で埋める (将来的に付与する場合はここで拡張)
-            biscuit_token: String::new(),
+            biscuit_token: r.biscuit_token.unwrap_or_default(),
             expires_in: r.expires_in,
             session_id: r.session_id,
         }

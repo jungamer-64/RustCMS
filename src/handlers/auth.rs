@@ -222,6 +222,7 @@ pub async fn profile(
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RefreshRequest { pub refresh_token: String }
 
+#[deprecated(note = "Use AuthSuccessResponse; this thin wrapper will be removed in a future release")]
 #[derive(Debug, Serialize, ToSchema)]
 pub struct RefreshResponse { pub success: bool, pub access_token: String, pub expires_in: i64, pub session_id: String, pub refresh_token: String }
 
@@ -231,16 +232,20 @@ pub struct RefreshResponse { pub success: bool, pub access_token: String, pub ex
     tag = "Auth",
     request_body = RefreshRequest,
     responses(
-        (status = 200, description = "Token refreshed", body = RefreshResponse,
+        (status = 200, description = "Token refreshed", body = crate::utils::auth_response::AuthSuccessResponse,
             examples((
                 "Refreshed" = (
                     summary = "トークン更新成功",
                     value = json!({
                         "success": true,
+                        "tokens": {"access_token": "NEW_ACCESS_TOKEN_SAMPLE", "refresh_token": "NEW_REFRESH_TOKEN_SAMPLE", "biscuit_token": "", "expires_in": 3600, "session_id": "sess_123"},
+                        "user": {"id": "uuid", "username": "user", "email": "user@example.com", "first_name": null, "last_name": null, "role": "Subscriber", "is_active": true, "email_verified": true, "last_login": null, "created_at": "2025-01-01T00:00:00Z", "updated_at": "2025-01-01T00:00:00Z"},
                         "access_token": "NEW_ACCESS_TOKEN_SAMPLE",
+                        "refresh_token": "NEW_REFRESH_TOKEN_SAMPLE",
+                        "biscuit_token": "",
                         "expires_in": 3600,
                         "session_id": "sess_123",
-                        "refresh_token": "NEW_REFRESH_TOKEN_SAMPLE"
+                        "token": "NEW_ACCESS_TOKEN_SAMPLE"
                     })
                 )
             ))
@@ -251,8 +256,24 @@ pub struct RefreshResponse { pub success: bool, pub access_token: String, pub ex
 )]
 pub async fn refresh_token(State(state): State<AppState>, Json(body): Json<RefreshRequest>) -> Result<impl IntoResponse> {
     let refreshed = state.auth_refresh_access_token(&body.refresh_token).await?;
-    // 既存の公開スキーマ (RefreshResponse) はそのまま返しつつ内部的には AuthTokens へ統一
-    let tokens: AuthTokens = refreshed.into();
-    let resp = RefreshResponse { success: true, access_token: tokens.access_token.clone(), expires_in: tokens.expires_in, session_id: tokens.session_id.clone(), refresh_token: tokens.refresh_token.clone() };
-    Ok(ApiOk(resp))
+    let tokens: AuthTokens = refreshed.clone().into();
+    // 確実に user 情報が含まれている保証が無い場合のフォールバック
+    let user = refreshed.user;
+    let access_token = tokens.access_token.clone();
+    let refresh_token = tokens.refresh_token.clone();
+    let biscuit_token = tokens.biscuit_token.clone();
+    let session_id = tokens.session_id.clone();
+    let expires_in = tokens.expires_in;
+    let auth_response = crate::utils::auth_response::AuthSuccessResponse {
+        success: true,
+        tokens,
+        user,
+        access_token: access_token.clone(),
+        refresh_token: refresh_token.clone(),
+        biscuit_token: biscuit_token.clone(),
+        expires_in,
+        session_id: session_id.clone(),
+        token: access_token,
+    };
+    Ok(ApiOk(auth_response))
 }
