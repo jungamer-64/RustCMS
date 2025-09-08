@@ -105,31 +105,30 @@ pub(crate) async fn paginate_posts(
 ) -> Result<Paginated<PostDto>> {
     use std::sync::Arc;
     let filters = Arc::new((status.clone(), author, tag.clone(), sort.clone()));
-
-    let response: Paginated<PostDto> = crate::utils::paginate::fetch_paginated_cached_with_filters(
+    let response: Paginated<PostDto> = crate::utils::paginate::fetch_paginated_cached_mapped(
         state.clone(),
         cache_key,
         crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
         page,
         limit,
-        filters,
-        |f| {
+        {
             let state = state.clone();
+            let f = filters.clone();
             move || async move {
                 let (status, author, tag, sort) = (*f).clone();
-                let posts = state.db_get_posts(page, limit, status, author, tag, sort).await?;
-                Ok(posts.iter().map(PostDto::from).collect())
+                state.db_get_posts(page, limit, status, author, tag, sort).await
             }
         },
-        |f| {
+        {
             let state = state.clone();
+            let f = filters.clone();
             move || async move {
                 let (status, author, tag, _) = (*f).clone();
                 state.db_count_posts_filtered(status, author, tag).await
             }
         },
-    )
-    .await?;
+        |p| PostDto::from(p),
+    ).await?;
     Ok(response)
 }
 

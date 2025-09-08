@@ -41,28 +41,29 @@ pub(crate) async fn paginate_users(
     cache_key: String,
 ) -> Result<Paginated<UserInfo>> {
     let filters = Arc::new((role.clone(), active, sort.clone()));
-    let response: Paginated<UserInfo> = crate::utils::paginate::fetch_paginated_cached_with_filters(
+    let response: Paginated<UserInfo> = crate::utils::paginate::fetch_paginated_cached_mapped(
         state.clone(),
         cache_key,
         crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
         page,
         limit,
-        filters,
-        |f| {
+        {
             let state = state.clone();
+            let f = filters.clone();
             move || async move {
                 let (role, active, sort) = (*f).clone();
-                let users = state.db_get_users(page, limit, role, active, sort).await?;
-                Ok(users.iter().map(UserInfo::from).collect())
+                state.db_get_users(page, limit, role, active, sort).await
             }
         },
-        |f| {
+        {
             let state = state.clone();
+            let f = filters.clone();
             move || async move {
                 let (role, active, _) = (*f).clone();
                 state.db_count_users_filtered(role, active).await
             }
         },
+        |u| UserInfo::from(u),
     ).await?;
     Ok(response)
 }

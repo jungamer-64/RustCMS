@@ -76,3 +76,37 @@ where
 
     fetch_paginated_cached(state, cache_key, ttl_seconds, page, limit, move || fitems(), move || fcount()).await
 }
+
+/// Variant where the item fetch returns raw models `M` and a separate mapper converts them to `T`.
+/// This removes repetitive `iter().map(...).collect()` boilerplate in handlers.
+pub async fn fetch_paginated_cached_mapped<T, M, FI, FC, FutI, FutC, Map>(
+    state: crate::AppState,
+    cache_key: String,
+    ttl_seconds: u64,
+    page: u32,
+    limit: u32,
+    fetch_models: FI,
+    count_total: FC,
+    map: Map,
+) -> crate::Result<Paginated<T>>
+where
+    FI: FnOnce() -> FutI + Send + 'static,
+    FutI: std::future::Future<Output = crate::Result<Vec<M>>> + Send + 'static,
+    FC: FnOnce() -> FutC + Send + 'static,
+    FutC: std::future::Future<Output = crate::Result<usize>> + Send + 'static,
+    Map: Fn(&M) -> T + Send + Sync + 'static,
+    T: Send + Sync + 'static + serde::Serialize + for<'de> serde::Deserialize<'de>,
+    M: Send + Sync + 'static,
+{
+    crate::utils::cache_helpers::cache_or_compute(
+        state,
+        &cache_key,
+        ttl_seconds,
+        move || async move {
+            let models = fetch_models().await?;
+            let total = count_total().await?;
+            let items: Vec<T> = models.iter().map(|m| map(m)).collect();
+            Ok(Paginated::new(items, total, page, limit))
+        }
+    ).await
+}
