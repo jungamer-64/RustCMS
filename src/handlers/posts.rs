@@ -4,7 +4,6 @@
 
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
     response::{IntoResponse, Json},
 };
 use serde::{Deserialize, Serialize};
@@ -13,6 +12,7 @@ use uuid::Uuid;
 
 use crate::utils::cache_key::{ListCacheKey, entity_id_key};
 use crate::utils::response_ext::delete_with;
+use crate::utils::crud;
 use crate::utils::response_ext::ApiOk;
 use crate::{
     models::{CreatePostRequest, Post, UpdatePostRequest},
@@ -173,10 +173,23 @@ pub async fn create_post(
     State(state): State<AppState>,
     Json(request): Json<CreatePostRequest>,
 ) -> Result<impl IntoResponse> {
-    let post = state.db_create_post(request).await?;
+    // Perform create then (if feature enabled) index.
     #[cfg(feature = "search")]
-    state.search_index_post_safe(&post).await;
-    Ok((StatusCode::CREATED, ApiOk(PostDto::from(&post))))
+    let hook = Some(|model: &Post, st: AppState| {
+        let m = model.clone();
+        async move { st.search_index_post_safe(&m).await }
+    });
+    #[cfg(not(feature = "search"))]
+    let hook: Option<fn(&Post, AppState) -> _> = None;
+
+    let (status, api_ok) = crud::create_entity(
+        state.clone(),
+        request,
+        |st, req| async move { st.db_create_post(req).await },
+        |m: &Post| PostDto::from(m),
+        hook,
+    ).await?;
+    Ok((status, api_ok))
 }
 
 /// Get post by ID
