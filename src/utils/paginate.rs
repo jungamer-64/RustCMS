@@ -36,7 +36,8 @@ where
     FutI: std::future::Future<Output = crate::Result<Vec<T>>> + Send + 'static,
     FC: FnOnce() -> FutC + Send + 'static,
     FutC: std::future::Future<Output = crate::Result<usize>> + Send + 'static,
-    T: Send + 'static,
+    // Cached value Paginated<T> must be (de)serializable and Send across tasks
+    T: Send + Sync + 'static + serde::Serialize + for<'de> serde::Deserialize<'de>,
 {
     crate::utils::cache_helpers::cache_or_compute(
         state,

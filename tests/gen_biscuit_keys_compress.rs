@@ -1,46 +1,16 @@
-use assert_cmd::Command;
-use std::fs;
-use tempfile::tempdir;
+mod helpers;
+use helpers::common::{make_temp_dirs, run_cargo_gen_biscuit_keys, find_gz_in_dir};
 
 // Full (slower) compression test; fast variant exists in gen_biscuit_keys_compress_fast.rs
 #[test]
 fn compress_creates_gz_backup() {
-    let tmp = tempdir().unwrap();
-    let out_dir = tmp.path().join("keys");
-    let backup_dir = tmp.path().join("backups");
-    fs::create_dir_all(&out_dir).unwrap();
-    fs::create_dir_all(&backup_dir).unwrap();
+    let (_tmp, out_dir, backup_dir) = make_temp_dirs();
 
     // First run to create initial files via `cargo run --bin gen_biscuit_keys -- ...`
-    let mut cmd = Command::new("cargo");
-    cmd.arg("run").arg("--manifest-path").arg("Cargo.toml").arg("--bin").arg("gen_biscuit_keys").arg("--")
-        .arg("--format").arg("files")
-        .arg("--out-dir").arg(out_dir.to_string_lossy().as_ref())
-        .arg("--backup")
-        .arg("--backup-dir").arg(backup_dir.to_string_lossy().as_ref())
-        .arg("--force");
-    cmd.assert().success();
+    run_cargo_gen_biscuit_keys(&["--format", "files", "--out-dir", out_dir.to_string_lossy().as_ref(), "--backup", "--backup-dir", backup_dir.to_string_lossy().as_ref(), "--force"]);
 
     // run again with compress (no artificial delay; binary should be fast)
-    let mut cmd = Command::new("cargo");
-    cmd.arg("run").arg("--manifest-path").arg("Cargo.toml").arg("--bin").arg("gen_biscuit_keys").arg("--")
-        .arg("--format").arg("files")
-        .arg("--out-dir").arg(out_dir.to_string_lossy().as_ref())
-        .arg("--backup")
-        .arg("--backup-dir").arg(backup_dir.to_string_lossy().as_ref())
-        .arg("--backup-compress")
-        .arg("--force");
-    cmd.assert().success();
+    run_cargo_gen_biscuit_keys(&["--format", "files", "--out-dir", out_dir.to_string_lossy().as_ref(), "--backup", "--backup-dir", backup_dir.to_string_lossy().as_ref(), "--backup-compress", "--force"]);
 
-    // verify there's at least one .gz file in backup_dir
-    let mut found = false;
-    for entry in fs::read_dir(&backup_dir).unwrap() {
-        let entry = entry.unwrap();
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.ends_with(".gz") {
-            found = true;
-            break;
-        }
-    }
-    assert!(found, "expected at least one .gz backup file");
+    assert!(find_gz_in_dir(&backup_dir), "expected at least one .gz backup file");
 }

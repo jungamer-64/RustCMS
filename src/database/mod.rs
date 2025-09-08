@@ -14,6 +14,25 @@ use crate::{
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use uuid::Uuid;
 
+// Small helpers to reduce repeated error mapping patterns across DB helpers.
+fn map_diesel_result<T>(res: std::result::Result<T, diesel::result::Error>, not_found_msg: &str, ctx: &str) -> Result<T> {
+    match res {
+        Ok(v) => Ok(v),
+        Err(e) => match e {
+            diesel::result::Error::NotFound => Err(crate::AppError::NotFound(not_found_msg.to_string())),
+            other => Err(crate::AppError::Internal(format!("{}: {}", ctx, other))),
+        },
+    }
+}
+
+fn ensure_affected_nonzero(affected: usize, not_found_msg: &str) -> Result<()> {
+    if affected == 0 {
+        Err(crate::AppError::NotFound(not_found_msg.to_string()))
+    } else {
+        Ok(())
+    }
+}
+
 // Diesel 2.x の embed_migrations: Cargo.toml からの相対パスでディレクトリ配下の
 // up.sql / down.sql を持つバージョンディレクトリを埋め込む。
 // 以前: 存在しない feature(with-migrations) と fallback(".") でビルド失敗を誘発していたため撤去。
@@ -242,13 +261,11 @@ impl Database {
         use crate::database::schema::posts::dsl as posts_dsl;
 
         let mut conn = self.get_connection()?;
-        let post = posts_dsl::posts
-            .find(_id)
-            .first::<Post>(&mut conn)
-            .map_err(|e| match e {
-                diesel::result::Error::NotFound => crate::AppError::NotFound("Post not found".to_string()),
-                other => crate::AppError::Internal(format!("Failed to fetch post: {}", other)),
-            })?;
+        let post = map_diesel_result(
+            posts_dsl::posts.find(_id).first::<Post>(&mut conn),
+            "Post not found",
+            "Failed to fetch post",
+        )?;
 
         Ok(post)
     }
@@ -329,13 +346,11 @@ impl Database {
         let mut conn = self.get_connection()?;
 
         // Load existing to compute derived fields and keep unchanged values
-    let existing = posts_dsl::posts
-            .find(_id)
-            .first::<Post>(&mut conn)
-            .map_err(|e| match e {
-                diesel::result::Error::NotFound => crate::AppError::NotFound("Post not found".to_string()),
-                other => crate::AppError::Internal(format!("Failed to fetch post: {}", other)),
-            })?;
+        let existing = map_diesel_result(
+            posts_dsl::posts.find(_id).first::<Post>(&mut conn),
+            "Post not found",
+            "Failed to fetch post",
+        )?;
 
         // Compute new values
         let new_title = _request.title.as_ref().cloned().unwrap_or_else(|| existing.title.clone());
@@ -391,9 +406,7 @@ impl Database {
         let affected = diesel::delete(posts_dsl::posts.find(_id))
             .execute(&mut conn)
             .map_err(|e| crate::AppError::Internal(format!("Failed to delete post: {}", e)))?;
-        if affected == 0 {
-            return Err(crate::AppError::NotFound("Post not found".to_string()));
-        }
+        ensure_affected_nonzero(affected as usize, "Post not found")?;
         Ok(())
     }
 
@@ -463,7 +476,7 @@ impl Database {
         let mut conn = self.get_connection()?;
         let affected = User::delete(&mut conn, id)
             .map_err(|e| crate::AppError::Internal(format!("Failed to delete user: {}", e)))?;
-        if affected == 0 { return Err(crate::AppError::NotFound("User not found".to_string())); }
+        ensure_affected_nonzero(affected as usize, "User not found")?;
         Ok(())
     }
 
@@ -477,7 +490,7 @@ impl Database {
             .set((users_dsl::password_hash.eq(Some(hash)), users_dsl::updated_at.eq(chrono::Utc::now())))
             .execute(&mut conn)
             .map_err(|e| crate::AppError::Internal(format!("Failed to reset password: {}", e)))?;
-        if affected == 0 { return Err(crate::AppError::NotFound("User not found".to_string())); }
+        ensure_affected_nonzero(affected as usize, "User not found")?;
         Ok(())
     }
 

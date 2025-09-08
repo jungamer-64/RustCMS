@@ -1,9 +1,9 @@
+mod helpers;
 use assert_cmd::Command;
 // Needed for `Command::cargo_bin` extension method
 #[allow(unused_imports)]
 use assert_cmd::cargo::CommandCargoExt;
-use std::fs;
-use tempfile::tempdir;
+use helpers::common::{make_temp_dirs, find_gz_in_dir};
 
 // Fast path compression test gated by env flag to skip full two-run sequence.
 #[test]
@@ -13,11 +13,7 @@ fn compress_creates_gz_backup_fast() {
         eprintln!("skipping fast compression test (set FAST_KEY_TESTS=1 to enable)");
         return;
     }
-    let tmp = tempdir().unwrap();
-    let out_dir = tmp.path().join("keys");
-    let backup_dir = tmp.path().join("backups");
-    fs::create_dir_all(&out_dir).unwrap();
-    fs::create_dir_all(&backup_dir).unwrap();
+    let (_tmp, out_dir, backup_dir) = make_temp_dirs();
 
     // First create initial key files (no backup yet)
     let mut first = Command::cargo_bin("gen_biscuit_keys").expect("build binary");
@@ -36,11 +32,5 @@ fn compress_creates_gz_backup_fast() {
         .arg("--force");
     second.assert().success();
 
-    let mut found = false;
-    for entry in fs::read_dir(&backup_dir).unwrap() {
-        let entry = entry.unwrap();
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.ends_with(".gz") { found = true; break; }
-    }
-    assert!(found, "expected at least one .gz backup file (fast test)");
+    assert!(find_gz_in_dir(&backup_dir), "expected at least one .gz backup file (fast test)");
 }

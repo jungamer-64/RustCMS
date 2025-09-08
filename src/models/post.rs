@@ -278,7 +278,7 @@ impl Post {
         if let Some(excerpt) = &self.excerpt {
             excerpt.clone()
         } else {
-            let content_text = strip_html(&self.content);
+            let content_text = crate::utils::text::strip_html(&self.content);
             if content_text.len() <= length {
                 content_text
             } else {
@@ -337,31 +337,12 @@ impl CreatePostRequest {
 
     /// Validate and clean tags
     pub fn clean_tags(&self) -> Vec<String> {
-        self.tags
-            .as_ref()
-            .map(|tags| {
-                tags.iter()
-                    .filter_map(|tag| {
-                        let cleaned = tag.trim().to_lowercase();
-                        if cleaned.len() > 2 && cleaned.len() < 50 {
-                            Some(cleaned)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<std::collections::HashSet<_>>()
-                    .into_iter()
-                    .collect()
-            })
-            .unwrap_or_default()
+    crate::utils::text::clean_tags(self.tags.as_ref())
     }
 
     /// Clean categories
     pub fn clean_categories(&self) -> Vec<String> {
-        self.category
-            .as_ref()
-            .map(|cat| vec![cat.trim().to_lowercase()])
-            .unwrap_or_default()
+    crate::utils::text::clean_categories(self.category.as_ref())
     }
 
     /// Convert to NewPost for database insertion
@@ -443,20 +424,12 @@ pub fn generate_slug(title: &str) -> String {
     crate::utils::url_encoding::generate_safe_slug(title)
 }
 
-/// Strip HTML tags from content (basic implementation)
-fn strip_html(content: &str) -> String {
-    // Basic HTML tag removal - in production you'd use a proper HTML parser
-    let tag_regex = regex::Regex::new(r"<[^>]*>").unwrap();
-    tag_regex
-        .replace_all(content, " ")
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-}
+// strip_html moved to `src/utils/text.rs` to reduce duplication across models
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::text::strip_html;
 
     #[test]
     fn test_generate_slug() {

@@ -2,6 +2,8 @@ pub mod api_types;
 pub mod auth_utils;
 pub mod cache_key;
 pub mod common_types;
+pub mod dup;
+pub mod text;
 pub mod date;
 pub mod error;
 pub mod file;

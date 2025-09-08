@@ -39,6 +39,27 @@ impl CacheKeyBuilder {
     }
 }
 
+/// Helper to build a common list-style cache key used by many handlers.
+///
+/// Accepts a base (e.g. "posts" or "users"), page/limit and a slice of
+/// (label, Option<String>) pairs for additional labeled segments. When the
+/// Option is None the key will encode the segment as "label:all" using
+/// `kv_opt` semantics.
+pub fn build_list_cache_key(base: &str, page: u32, limit: u32, pairs: &[(&str, Option<String>)]) -> String {
+    let mut b = CacheKeyBuilder::new(base).kv("page", page).kv("limit", limit);
+    for (k, v) in pairs {
+        match v {
+            Some(val) => {
+                b = b.kv(k, val);
+            }
+            None => {
+                b = b.kv_opt::<String>(k, None);
+            }
+        }
+    }
+    b.build()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

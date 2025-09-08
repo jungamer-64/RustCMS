@@ -1,6 +1,7 @@
 use sqlx::{PgPool, Row};
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
+use serde::de::DeserializeOwned;
 use crate::{
     error::{AppError, Result},
     cache::manager::{CacheManager, cache_keys},
@@ -18,6 +19,19 @@ pub struct PostRepository {
 impl PostRepository {
     pub fn new(db: PgPool, cache: CacheManager, metrics: PerformanceMonitor) -> Self {
         Self { db, cache, metrics }
+    }
+
+    // Generic helper to attempt reading a typed value from cache and record metrics.
+    async fn try_get_cache<T>(&self, cache_key: &str) -> Result<Option<T>>
+    where
+        T: DeserializeOwned + Clone + Send + Sync + 'static,
+    {
+        if let Some(cached) = self.cache.get::<T>(cache_key).await? {
+            self.metrics.record_cache_operation("get", true, std::time::Duration::from_millis(1));
+            return Ok(Some(cached));
+        }
+        self.metrics.record_cache_operation("get", false, std::time::Duration::from_millis(1));
+        Ok(None)
     }
 
     pub async fn create(&self, req: CreatePostRequest, author_id: Uuid) -> Result<Post> {
@@ -64,12 +78,9 @@ impl PostRepository {
         let cache_key = cache_keys::post(&id.to_string());
         
         // Try cache first
-        if let Some(cached_post) = self.cache.get::<Post>(&cache_key).await? {
-            self.metrics.record_cache_operation("get", true, std::time::Duration::from_millis(1));
+        if let Some(cached_post) = self.try_get_cache::<Post>(&cache_key).await? {
             return Ok(Some(cached_post));
         }
-
-        self.metrics.record_cache_operation("get", false, std::time::Duration::from_millis(1));
 
         let timer = crate::monitoring::metrics::start_timer(
             "database_query_duration_seconds",
@@ -123,12 +134,9 @@ impl PostRepository {
         let cache_key = cache_keys::posts_list(filter.page, filter.limit, filter.published);
         
         // Try cache first
-        if let Some(cached_response) = self.cache.get::<PostResponse>(&cache_key).await? {
-            self.metrics.record_cache_operation("get", true, std::time::Duration::from_millis(1));
+        if let Some(cached_response) = self.try_get_cache::<PostResponse>(&cache_key).await? {
             return Ok(cached_response);
         }
-
-        self.metrics.record_cache_operation("get", false, std::time::Duration::from_millis(1));
 
         let offset = (filter.page - 1) * filter.limit;
         

@@ -12,7 +12,7 @@ use utoipa::ToSchema;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::utils::{cache_key::CacheKeyBuilder};
+use crate::utils::{cache_key::CacheKeyBuilder, dup};
 use crate::utils::response_ext::ApiOk;
 use crate::{
     models::{CreatePostRequest, Post, UpdatePostRequest},
@@ -217,19 +217,29 @@ pub async fn get_posts(
     Query(query): Query<PostQuery>,
 ) -> Result<impl IntoResponse> {
     let (page, limit) = normalize_page_limit(query.page, query.limit);
-    let cache_key = CacheKeyBuilder::new("posts")
-        .kv("page", page)
-        .kv("limit", limit)
-        .kv_opt("status", query.status.clone())
-        .kv_opt("author", query.author)
-        .kv_opt("tag", query.tag.clone())
-        .kv_opt("sort", query.sort.clone())
-        .build();
-    // clone parameters for move into closure
+    let cache_key = crate::utils::cache_key::build_list_cache_key(
+        "posts",
+        page,
+        limit,
+        &[
+            ("status", query.status.clone()),
+            ("author", query.author.map(|u| u.to_string())),
+            ("tag", query.tag.clone()),
+            ("sort", query.sort.clone()),
+        ],
+    );
+    // clone parameters for move into closure (use helper to avoid repeated `.clone()`)
     let status = query.status.clone();
     let author = query.author;
     let tag = query.tag.clone();
     let sort = query.sort.clone();
+
+    // duplicate small clonables for the two closures
+    let (state1, state2) = dup::dup(&state);
+    let (status1, status2) = dup::dup(&status);
+    let (tag1, tag2) = dup::dup(&tag);
+    let (sort1, _sort2) = dup::dup(&sort); // sort not needed in second closure here
+    let author1 = author;
     let response: Paginated<PostDto> = crate::utils::paginate::fetch_paginated_cached(
         state.clone(),
         cache_key,
@@ -237,12 +247,12 @@ pub async fn get_posts(
         page,
         limit,
         move || async move {
-            let posts = state
-                .db_get_posts(page, limit, status.clone(), author, tag.clone(), sort.clone())
+            let posts = state1
+                .db_get_posts(page, limit, status1.clone(), author1, tag1.clone(), sort1.clone())
                 .await?;
             Ok(posts.iter().map(PostDto::from).collect())
         },
-        move || async move { state.db_count_posts_filtered(status.clone(), author, tag.clone()).await },
+        move || async move { state2.db_count_posts_filtered(status2, author, tag2).await },
     ).await?;
     Ok(ApiOk(response))
 }
@@ -352,18 +362,27 @@ pub async fn get_posts_by_tag(
     Query(query): Query<PostQuery>,
 ) -> Result<impl IntoResponse> {
     let (page, limit) = normalize_page_limit(query.page, query.limit);
-    let cache_key = CacheKeyBuilder::new("posts:tag")
-        .kv("tag", &tag)
-        .kv("page", page)
-        .kv("limit", limit)
-        .kv_opt("status", query.status.clone())
-        .kv_opt("author", query.author)
-        .kv_opt("sort", query.sort.clone())
-        .build();
+    let cache_key = crate::utils::cache_key::build_list_cache_key(
+        "posts:tag",
+        page,
+        limit,
+        &[
+            ("tag", Some(tag.clone())),
+            ("status", query.status.clone()),
+            ("author", query.author.map(|u| u.to_string())),
+            ("sort", query.sort.clone()),
+        ],
+    );
     let status = query.status.clone();
     let author = query.author;
     let sort = query.sort.clone();
     let t = tag.clone();
+
+    let (state1, state2) = dup::dup(&state);
+    let (status1, status2) = dup::dup(&status);
+    let (t1, t2) = dup::dup(&t);
+    let (sort1, _sort2) = dup::dup(&sort);
+    let author1 = author;
     let response: Paginated<PostDto> = crate::utils::paginate::fetch_paginated_cached(
         state.clone(),
         cache_key,
@@ -371,12 +390,12 @@ pub async fn get_posts_by_tag(
         page,
         limit,
         move || async move {
-            let posts = state
-                .db_get_posts(page, limit, status.clone(), author, Some(t.clone()), sort.clone())
+            let posts = state1
+                .db_get_posts(page, limit, status1.clone(), author1, Some(t1.clone()), sort1.clone())
                 .await?;
             Ok(posts.iter().map(PostDto::from).collect())
         },
-        move || async move { state.db_count_posts_filtered(status.clone(), author, Some(t.clone())).await },
+        move || async move { state2.db_count_posts_filtered(status2, author, Some(t2)).await },
     ).await?;
     Ok(ApiOk(response))
 }
