@@ -155,18 +155,7 @@ pub struct AuthResponse {
     pub session_id: String,
 }
 
-/// Refresh response (rotated tokens)
-#[derive(Debug, Serialize, ToSchema, Clone)]
-pub struct RefreshResponse {
-    pub access_token: String,
-    pub expires_in: i64,
-    pub session_id: String,
-    pub refresh_token: String,
-    /// Optional biscuit token (added for unified AuthTokens compatibility)
-    pub biscuit_token: Option<String>,
-    /// User info (optional until refresh endpoint fully loads user)
-    pub user: UserInfo,
-}
+// RefreshResponse removed: refresh now returns AuthTokens + User directly at handler layer.
 
 /// Authentication context
 #[derive(Debug, Clone)]
@@ -383,13 +372,14 @@ impl AuthService {
     /// - セッションに保存している refresh_version と一致した場合のみ有効
     /// - 使用成功時に refresh_version をインクリメントし新しい refresh_token を発行 (旧トークンは無効化)
     /// - アクセストークンは 1h、リフレッシュは都度 30d (スライディング) とする
-    pub async fn refresh_access_token(&self, refresh_token: &str) -> Result<RefreshResponse> {
+    pub async fn refresh_access_token(&self, refresh_token: &str) -> Result<(crate::utils::auth_response::AuthTokens, UserInfo)> {
         let parsed = self.parse_refresh_biscuit(refresh_token)?; // token_type 検証込み
         let (new_version, user) = self.bump_and_load_user(&parsed).await?;
         let (access_exp, refresh_exp) = self.compute_expiries(false);
     let (access_token, new_refresh_token, expires_in) = self.issue_access_and_refresh(&user, &parsed.session_id, new_version, access_exp, refresh_exp)?;
-    // For backward compatibility we also populate deprecated biscuit_token with the access token.
-    Ok(RefreshResponse { access_token: access_token.clone(), expires_in, session_id: parsed.session_id, refresh_token: new_refresh_token, biscuit_token: Some(access_token), user: UserInfo::from(user) })
+        let user_info = UserInfo::from(&user);
+        let tokens = crate::utils::auth_response::AuthTokens { access_token: access_token.clone(), refresh_token: new_refresh_token, biscuit_token: access_token.clone(), expires_in, session_id: parsed.session_id };
+        Ok((tokens, user_info))
     }
 
     // セッション version をインクリメントしユーザーを取得 (有効性検査込み)

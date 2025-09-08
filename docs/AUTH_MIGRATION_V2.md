@@ -16,7 +16,7 @@ AuthSuccessResponse {
 }
 ```
 
-`token` フィールドは `access_token` のエイリアス (旧クライアント互換) です。`refresh` エンドポイントは現状従来レスポンス (`RefreshResponse`) を返しますが、内部的には `AuthTokens` へ正規化されています。
+`token` フィールドは `access_token` のエイリアス (旧クライアント互換) です。`refresh` エンドポイントも現在は直接 `AuthSuccessResponse` 互換構造を返し、内部で `AuthTokens` を一貫利用します (旧 `RefreshResponse` は削除済み)。
 
 ## 目的
 
@@ -57,7 +57,7 @@ function extractTokens(r: AuthSuccessResponse) {
 |----------------|------|--------|
 | POST /api/v1/auth/login | レスポンス型を AuthSuccessResponse に変更 | 旧フィールド残存 |
 | POST /api/v1/auth/register | 同上 | 同上 |
-| POST /api/v1/auth/refresh | 内部的に AuthTokens 利用 (外形は旧型) | 完全互換 |
+| POST /api/v1/auth/refresh | レスポンスを AuthSuccessResponse 互換形式に統一 | 完全互換 |
 
 ## サーバ内部実装ポイント
 
@@ -80,7 +80,7 @@ function extractTokens(r: AuthSuccessResponse) {
 
 | ID | 項目 | 優先度 |
 |----|------|--------|
-| A1 | refresh エンドポイントも統一レスポンスへ移行 (オプション: `AuthSuccessResponse`) | Medium |
+| A1 | refresh エンドポイントも統一レスポンスへ移行 (オプション: `AuthSuccessResponse`) | 完了 |
 | A2 | `token` フィールドに `#[deprecated]` 属性付与 (警告拡散検証後) | Medium |
 | A3 | `AuthSuccess<T>::extra` 利用シナリオ検討 (2FA, 拡張 claims) | Low |
 

@@ -13,7 +13,7 @@ use serde_json::json;
 
 use crate::utils::{common_types::UserInfo};
 use crate::utils::response_ext::ApiOk;
-use crate::utils::auth_response::{AuthTokens, AuthSuccessResponse};
+use crate::utils::auth_response::AuthSuccessResponse;
 use crate::{auth::LoginRequest, models::CreateUserRequest, AppState, Result};
 
 /// Registration request
@@ -222,9 +222,7 @@ pub async fn profile(
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RefreshRequest { pub refresh_token: String }
 
-#[deprecated(note = "Use AuthSuccessResponse; this thin wrapper will be removed in a future release")]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct RefreshResponse { pub success: bool, pub access_token: String, pub expires_in: i64, pub session_id: String, pub refresh_token: String }
+// Legacy RefreshResponse removed: handler now always returns AuthSuccessResponse
 
 #[utoipa::path(
     post,
@@ -255,24 +253,17 @@ pub struct RefreshResponse { pub success: bool, pub access_token: String, pub ex
     )
 )]
 pub async fn refresh_token(State(state): State<AppState>, Json(body): Json<RefreshRequest>) -> Result<impl IntoResponse> {
-    let refreshed = state.auth_refresh_access_token(&body.refresh_token).await?;
-    let tokens: AuthTokens = refreshed.clone().into();
-    // 確実に user 情報が含まれている保証が無い場合のフォールバック
-    let user = refreshed.user;
+    let (tokens, user) = state.auth_refresh_access_token(&body.refresh_token).await?;
     let access_token = tokens.access_token.clone();
-    let refresh_token = tokens.refresh_token.clone();
-    let biscuit_token = tokens.biscuit_token.clone();
-    let session_id = tokens.session_id.clone();
-    let expires_in = tokens.expires_in;
     let auth_response = crate::utils::auth_response::AuthSuccessResponse {
         success: true,
-        tokens,
+        tokens: tokens.clone(),
         user,
         access_token: access_token.clone(),
-        refresh_token: refresh_token.clone(),
-        biscuit_token: biscuit_token.clone(),
-        expires_in,
-        session_id: session_id.clone(),
+        refresh_token: tokens.refresh_token.clone(),
+        biscuit_token: tokens.biscuit_token.clone(),
+        expires_in: tokens.expires_in,
+        session_id: tokens.session_id.clone(),
         token: access_token,
     };
     Ok(ApiOk(auth_response))

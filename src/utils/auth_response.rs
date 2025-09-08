@@ -2,7 +2,7 @@ use crate::utils::common_types::UserInfo;
 use serde::Serialize;
 use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema, Clone)]
 pub struct AuthTokens {
     pub access_token: String,
     pub refresh_token: String,
@@ -37,17 +37,6 @@ impl From<crate::auth::AuthResponse> for AuthTokens {
     }
 }
 
-impl From<crate::auth::RefreshResponse> for AuthTokens {
-    fn from(r: crate::auth::RefreshResponse) -> Self {
-        AuthTokens {
-            access_token: r.access_token,
-            refresh_token: r.refresh_token,
-            biscuit_token: r.biscuit_token.unwrap_or_default(),
-            expires_in: r.expires_in,
-            session_id: r.session_id,
-        }
-    }
-}
 
 /// 統一認証レスポンス (login/register 用)
 ///

@@ -668,7 +668,7 @@ impl AppState {
     }
 
     #[cfg(feature = "auth")]
-    pub async fn auth_refresh_access_token(&self, refresh_token: &str) -> crate::Result<crate::auth::RefreshResponse> {
+    pub async fn auth_refresh_access_token(&self, refresh_token: &str) -> crate::Result<(crate::utils::auth_response::AuthTokens, crate::utils::common_types::UserInfo)> {
     timed_op!(self, "auth", self.auth.refresh_access_token(refresh_token))
     }
 

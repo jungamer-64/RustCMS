@@ -69,15 +69,15 @@ async fn biscuit_refresh_rotation_invalidate_old() {
     let ctx = auth.verify_jwt(&issued.access_token).await.expect("verify access");
     assert_eq!(ctx.user_id, user.id);
 
-    let rotated = auth.refresh_access_token(&issued.refresh_token).await.expect("refresh");
-    assert_ne!(rotated.access_token, issued.access_token);
-    assert_ne!(rotated.refresh_token, issued.refresh_token);
-    // biscuit_token (deprecated outward) now populated with the access token for backward compatibility
-    assert_eq!(rotated.biscuit_token.as_deref(), Some(rotated.access_token.as_str()));
+    let (rotated_tokens, _rot_user) = auth.refresh_access_token(&issued.refresh_token).await.expect("refresh");
+    assert_ne!(rotated_tokens.access_token, issued.access_token);
+    assert_ne!(rotated_tokens.refresh_token, issued.refresh_token);
+    // biscuit_token populated with access token for backward compatibility
+    assert_eq!(rotated_tokens.biscuit_token, rotated_tokens.access_token);
 
     // Old refresh must now fail
     assert!(auth.refresh_access_token(&issued.refresh_token).await.is_err());
 
     // Using a refresh token as if it were an access token should fail verification
-    assert!(auth.verify_jwt(&rotated.refresh_token).await.is_err());
+    assert!(auth.verify_jwt(&rotated_tokens.refresh_token).await.is_err());
 }

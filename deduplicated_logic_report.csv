@@ -15,3 +15,4 @@ dto_from_model_macro,dto_from_model!,src/utils/dto.rs,Generates &T and owned con
 auth_migration_docs,Auth response migration guide,docs/AUTH_MIGRATION_V2.md,Explains transition to AuthSuccessResponse,handlers/auth.rs (login/register) unified schema
 auth_refresh_unify,Refresh endpoint unified to AuthSuccessResponse,src/handlers/auth.rs|src/utils/auth_response.rs|src/auth/mod.rs,Extends refresh output to full unified schema,handlers/auth.rs::refresh_token
 auth_refresh_biscuit_rotation,Refresh issues new biscuit access token,src/auth/mod.rs|tests/biscuit_token_flow_tests.rs,Backward compatibility: biscuit_token now populated on refresh,auth::refresh_access_token
+auth_refresh_response_removal,Removed legacy RefreshResponse,src/auth/mod.rs|src/handlers/auth.rs|docs/AUTH_MIGRATION_V2.md,Refresh now directly builds AuthSuccessResponse tokens tuple,refresh_access_token handler
