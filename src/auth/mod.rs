@@ -598,3 +598,12 @@ impl AuthService {
     Ok(token)
     }
 }
+
+/// Helper function to check if user has admin permissions
+pub fn require_admin_permission(auth_context: &AuthContext) -> crate::Result<()> {
+    if auth_context.permissions.iter().any(|p| p == "admin") {
+        Ok(())
+    } else {
+        Err(AuthError::InsufficientPermissions.into())
+    }
+}

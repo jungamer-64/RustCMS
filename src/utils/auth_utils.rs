@@ -6,6 +6,11 @@ use std::env;
 
 /// Check if the provided admin token is valid
 /// This is a simple token-based authentication for admin endpoints
+/// 
+/// # Deprecated
+/// This function is deprecated in favor of Biscuit-based authentication with role permissions.
+/// Use the unified authentication system with "admin" permission checking instead.
+#[deprecated(note = "Use Biscuit authentication with admin permission checking instead")]
 pub fn check_admin_token(req_token: &str) -> bool {
     env::var("ADMIN_TOKEN")
         .map(|t| t == req_token)
@@ -13,6 +18,11 @@ pub fn check_admin_token(req_token: &str) -> bool {
 }
 
 /// Get the admin token from environment
+/// 
+/// # Deprecated
+/// This function is deprecated in favor of Biscuit-based authentication with role permissions.
+/// Use the unified authentication system with "admin" permission checking instead.
+#[deprecated(note = "Use Biscuit authentication with admin permission checking instead")]
 pub fn get_admin_token() -> Option<String> {
     env::var("ADMIN_TOKEN").ok()
 }

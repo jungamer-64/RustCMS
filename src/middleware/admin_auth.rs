@@ -2,6 +2,11 @@ use axum::{extract::Request, http::StatusCode, middleware::Next, response::Respo
 
 /// Simple admin token header guard middleware.
 /// Validates `x-admin-token` using utils::auth_utils::check_admin_token.
+/// 
+/// # Deprecated
+/// This middleware is deprecated in favor of the unified Biscuit authentication system.
+/// Use `auth_middleware` with admin permission checking in handlers instead.
+#[deprecated(note = "Use auth_middleware with admin permission checking instead")]
 pub async fn admin_auth_layer(
     req: Request,
     next: Next,

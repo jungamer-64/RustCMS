@@ -16,7 +16,7 @@ impl Modify for SecurityAddon {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         let components = openapi.components.get_or_insert(Default::default());
         let mut http = Http::new(HttpAuthScheme::Bearer);
-        http.bearer_format = Some("JWT".to_string());
+        http.bearer_format = Some("Biscuit".to_string());
         components.add_security_scheme("BearerAuth", SecurityScheme::Http(http));
     }
 }
