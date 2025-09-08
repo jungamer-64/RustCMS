@@ -12,7 +12,8 @@ use utoipa::ToSchema;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::utils::{common_types::UserInfo, cache_key::CacheKeyBuilder, dup};
+use crate::utils::{common_types::UserInfo, cache_key::CacheKeyBuilder};
+use std::sync::Arc;
 use crate::utils::response_ext::ApiOk;
 use crate::{models::UpdateUserRequest, AppState, Result};
 use crate::models::pagination::{normalize_page_limit, Paginated};
@@ -81,30 +82,31 @@ pub async fn get_users(
         ],
     );
 
-    let response = {
-    let role = query.role.clone();
-    let active = query.active;
-    let sort = query.sort.clone();
+    let filters = Arc::new((query.role.clone(), query.active, query.sort.clone()));
+    let f1 = filters.clone();
+    let f2 = filters.clone();
 
-    let (state1, state2) = dup::dup(&state);
-    let (role1, role2) = dup::dup(&role);
-    let (sort1, _sort2) = dup::dup(&sort);
-    let active1 = active;
-        crate::utils::paginate::fetch_paginated_cached(
-            state.clone(),
-            cache_key,
-            crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
-            page,
-            limit,
-            move || async move {
-                let users = state1
-                    .db_get_users(page, limit, role1.clone(), active1, sort1.clone())
-                    .await?;
-                Ok(users.iter().map(UserInfo::from).collect())
-            },
-            move || async move { state2.db_count_users_filtered(role2, active).await },
-        ).await?
-    };
+    let state1 = state.clone();
+    let state2 = state.clone();
+
+    let response = crate::utils::paginate::fetch_paginated_cached(
+        state.clone(),
+        cache_key,
+        crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
+        page,
+        limit,
+        move || async move {
+            let (role1, active1, sort1) = (*f1).clone();
+            let users = state1
+                .db_get_users(page, limit, role1, active1, sort1)
+                .await?;
+            Ok(users.iter().map(UserInfo::from).collect())
+        },
+        move || async move {
+            let (role2, active2, _) = (*f2).clone();
+            state2.db_count_users_filtered(role2, active2).await
+        },
+    ).await?;
     Ok(ApiOk(response))
 }
 
@@ -304,14 +306,13 @@ pub async fn get_user_posts(
             ("sort", query.sort.clone()),
         ],
     );
-    let status = query.status.clone();
-    let tag = query.tag.clone();
-    let sort = query.sort.clone();
+    let filters = Arc::new((query.status.clone(), query.tag.clone(), query.sort.clone()));
+    let f1 = filters.clone();
+    let f2 = filters.clone();
 
-    let (state1, state2) = dup::dup(&state);
-    let (status1, status2) = dup::dup(&status);
-    let (tag1, tag2) = dup::dup(&tag);
-    let (sort1, _sort2) = dup::dup(&sort);
+    let state1 = state.clone();
+    let state2 = state.clone();
+
     let response = crate::utils::paginate::fetch_paginated_cached(
         state.clone(),
         cache_key,
@@ -319,19 +320,16 @@ pub async fn get_user_posts(
         page,
         limit,
         move || async move {
+            let (status1, tag1, sort1) = (*f1).clone();
             let posts = state1
-                .db_get_posts(
-                    page,
-                    limit,
-                    status1.clone(),
-                    Some(id),
-                    tag1.clone(),
-                    sort1.clone(),
-                )
+                .db_get_posts(page, limit, status1, Some(id), tag1, sort1)
                 .await?;
             Ok(posts.iter().map(crate::handlers::posts::PostDto::from).collect())
         },
-        move || async move { state2.db_count_posts_filtered(status2, Some(id), tag2).await },
+        move || async move {
+            let (status2, tag2, _) = (*f2).clone();
+            state2.db_count_posts_filtered(status2, Some(id), tag2).await
+        },
     ).await?;
     return Ok(ApiOk(response));
 }

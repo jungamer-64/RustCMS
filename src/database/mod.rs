@@ -33,6 +33,11 @@ fn ensure_affected_nonzero(affected: usize, not_found_msg: &str) -> Result<()> {
     }
 }
 
+// Helper to map arbitrary DB errors into AppError::Internal with a context message.
+fn map_internal_err<T, E: std::fmt::Display>(res: std::result::Result<T, E>, ctx: &str) -> Result<T> {
+    res.map_err(|e| crate::AppError::Internal(format!("{}: {}", ctx, e)))
+}
+
 // Diesel 2.x の embed_migrations: Cargo.toml からの相対パスでディレクトリ配下の
 // up.sql / down.sql を持つバージョンディレクトリを埋め込む。
 // 以前: 存在しない feature(with-migrations) と fallback(".") でビルド失敗を誘発していたため撤去。
@@ -121,17 +126,20 @@ impl Database {
     /// Find a user by email
     pub async fn get_user_by_email(&self, email: &str) -> Result<User> {
         let mut conn = self.get_connection()?;
-        let user =
-            crate::models::User::find_by_email(&mut conn, email)
-                .map_err(|e| crate::AppError::Internal(format!("DB error finding user by email: {}", e)))?;
+        let user = map_internal_err(
+            crate::models::User::find_by_email(&mut conn, email),
+            "DB error finding user by email",
+        )?;
         Ok(user)
     }
 
     /// Update user's last login timestamp
     pub async fn update_last_login(&self, id: Uuid) -> Result<()> {
         let mut conn = self.get_connection()?;
-        crate::models::User::update_last_login(&mut conn, id)
-            .map_err(|e| crate::AppError::Internal(format!("DB error updating last_login: {}", e)))?;
+        map_internal_err(
+            crate::models::User::update_last_login(&mut conn, id),
+            "DB error updating last_login",
+        )?;
         Ok(())
     }
 
@@ -177,19 +185,20 @@ impl Database {
             _ => query.order(users_dsl::created_at.desc()),
         };
 
-        let results = query
-            .offset(offset)
-            .limit(limit)
-            .load::<User>(&mut conn)
-            .map_err(|e| crate::AppError::Internal(format!("Failed to list users: {}", e)))?;
+        let results = map_internal_err(
+            query.offset(offset).limit(limit).load::<User>(&mut conn),
+            "Failed to list users",
+        )?;
 
         Ok(results)
     }
 
     pub async fn update_user(&self, id: Uuid, request: UpdateUserRequest) -> Result<User> {
         let mut conn = self.get_connection()?;
-        let updated = User::update(&mut conn, id, &request)
-            .map_err(|e| crate::AppError::Internal(format!("Failed to update user: {}", e)))?;
+        let updated = map_internal_err(
+            User::update(&mut conn, id, &request),
+            "Failed to update user",
+        )?;
         Ok(updated)
     }
 
@@ -197,10 +206,10 @@ impl Database {
         use diesel::prelude::*;
         use crate::database::schema::users::dsl as users_dsl;
         let mut conn = self.get_connection()?;
-        let total: i64 = users_dsl::users
-            .count()
-            .get_result(&mut conn)
-            .map_err(|e| crate::AppError::Internal(format!("Failed to count users: {}", e)))?;
+        let total: i64 = map_internal_err(
+            users_dsl::users.count().get_result(&mut conn),
+            "Failed to count users",
+        )?;
         Ok(total as usize)
     }
 
@@ -218,10 +227,10 @@ impl Database {
             query = query.filter(users_dsl::is_active.eq(active));
         }
 
-        let total: i64 = query
-            .count()
-            .get_result(&mut conn)
-            .map_err(|e| crate::AppError::Internal(format!("Failed to count users (filtered): {}", e)))?;
+        let total: i64 = map_internal_err(
+            query.count().get_result(&mut conn),
+            "Failed to count users (filtered)",
+        )?;
         Ok(total as usize)
     }
 
@@ -248,10 +257,10 @@ impl Database {
         // Insert and return the created post
         use crate::database::schema::posts::dsl as posts_dsl;
 
-        let inserted: Post = diesel::insert_into(posts_dsl::posts)
-            .values(&new_post)
-            .get_result(&mut conn)
-            .map_err(|e| crate::AppError::Internal(format!("Failed to create post: {}", e)))?;
+        let inserted: Post = map_internal_err(
+            diesel::insert_into(posts_dsl::posts).values(&new_post).get_result(&mut conn),
+            "Failed to create post",
+        )?;
 
     Ok(inserted)
     }
@@ -330,11 +339,10 @@ impl Database {
             _ => query.order(posts_dsl::created_at.desc()),
         };
 
-        let results = query
-            .offset(offset)
-            .limit(limit)
-            .load::<Post>(&mut conn)
-            .map_err(|e| crate::AppError::Internal(format!("Failed to list posts: {}", e)))?;
+        let results = map_internal_err(
+            query.offset(offset).limit(limit).load::<Post>(&mut conn),
+            "Failed to list posts",
+        )?;
 
         Ok(results)
     }
@@ -403,9 +411,10 @@ impl Database {
         use diesel::prelude::*;
         use crate::database::schema::posts::dsl as posts_dsl;
         let mut conn = self.get_connection()?;
-        let affected = diesel::delete(posts_dsl::posts.find(_id))
-            .execute(&mut conn)
-            .map_err(|e| crate::AppError::Internal(format!("Failed to delete post: {}", e)))?;
+        let affected = map_internal_err(
+            diesel::delete(posts_dsl::posts.find(_id)).execute(&mut conn),
+            "Failed to delete post",
+        )?;
         ensure_affected_nonzero(affected as usize, "Post not found")?;
         Ok(())
     }
@@ -421,10 +430,10 @@ impl Database {
             use diesel::PgArrayExpressionMethods;
             query = query.filter(posts_dsl::tags.contains(vec![tag.to_string()]));
         }
-        let total: i64 = query
-            .count()
-            .get_result(&mut conn)
-            .map_err(|e| crate::AppError::Internal(format!("Failed to count posts: {}", e)))?;
+        let total: i64 = map_internal_err(
+            query.count().get_result(&mut conn),
+            "Failed to count posts",
+        )?;
         Ok(total as usize)
     }
 
@@ -452,10 +461,10 @@ impl Database {
             query = query.filter(posts_dsl::tags.contains(vec![tag.clone()]));
         }
 
-        let total: i64 = query
-            .count()
-            .get_result(&mut conn)
-            .map_err(|e| crate::AppError::Internal(format!("Failed to count posts (filtered): {}", e)))?;
+        let total: i64 = map_internal_err(
+            query.count().get_result(&mut conn),
+            "Failed to count posts (filtered)",
+        )?;
         Ok(total as usize)
     }
 
@@ -463,19 +472,23 @@ impl Database {
         use diesel::prelude::*;
         use crate::database::schema::posts::dsl as posts_dsl;
         let mut conn = self.get_connection()?;
-        let total: i64 = posts_dsl::posts
-            .filter(posts_dsl::author_id.eq(author))
-            .count()
-            .get_result(&mut conn)
-            .map_err(|e| crate::AppError::Internal(format!("Failed to count posts by author: {}", e)))?;
+        let total: i64 = map_internal_err(
+            posts_dsl::posts
+                .filter(posts_dsl::author_id.eq(author))
+                .count()
+                .get_result(&mut conn),
+            "Failed to count posts by author",
+        )?;
         Ok(total as usize)
     }
 
     /// Delete a user by ID
     pub async fn delete_user(&self, id: Uuid) -> Result<()> {
         let mut conn = self.get_connection()?;
-        let affected = User::delete(&mut conn, id)
-            .map_err(|e| crate::AppError::Internal(format!("Failed to delete user: {}", e)))?;
+        let affected = map_internal_err(
+            User::delete(&mut conn, id),
+            "Failed to delete user",
+        )?;
         ensure_affected_nonzero(affected as usize, "User not found")?;
         Ok(())
     }
@@ -486,10 +499,12 @@ impl Database {
         use crate::database::schema::users::dsl as users_dsl;
         let mut conn = self.get_connection()?;
         let hash = crate::utils::password::hash_password(new_password)?;
-        let affected = diesel::update(users_dsl::users.find(id))
-            .set((users_dsl::password_hash.eq(Some(hash)), users_dsl::updated_at.eq(chrono::Utc::now())))
-            .execute(&mut conn)
-            .map_err(|e| crate::AppError::Internal(format!("Failed to reset password: {}", e)))?;
+        let affected = map_internal_err(
+            diesel::update(users_dsl::users.find(id))
+                .set((users_dsl::password_hash.eq(Some(hash)), users_dsl::updated_at.eq(chrono::Utc::now())))
+                .execute(&mut conn),
+            "Failed to reset password",
+        )?;
         ensure_affected_nonzero(affected as usize, "User not found")?;
         Ok(())
     }
