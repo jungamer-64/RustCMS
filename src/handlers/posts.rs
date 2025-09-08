@@ -9,10 +9,10 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
-use serde_json::json;
 use uuid::Uuid;
 
 use crate::utils::cache_key::{ListCacheKey, entity_id_key};
+use crate::utils::response_ext::delete_with;
 use crate::utils::response_ext::ApiOk;
 use crate::{
     models::{CreatePostRequest, Post, UpdatePostRequest},
@@ -366,13 +366,13 @@ pub async fn delete_post(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
-    state.db_delete_post(id).await?;
-    #[cfg(feature = "search")]
-    state.search_remove_post_safe(id).await;
-    Ok(ApiOk(json!({
-        "success": true,
-        "message": "Post deleted successfully"
-    })))
+    let fut = async {
+        state.db_delete_post(id).await?;
+        #[cfg(feature = "search")]
+        state.search_remove_post_safe(id).await;
+        Ok::<(), crate::AppError>(())
+    };
+    delete_with(fut, "Post deleted successfully").await
 }
 
 /// Get posts by tag

@@ -9,7 +9,6 @@ use axum::{
 };
 use serde::Deserialize;
 use utoipa::ToSchema;
-use serde_json::json;
 use uuid::Uuid;
 
 use crate::utils::{common_types::UserInfo, cache_key::{entity_id_key, ListCacheKey}};
@@ -248,18 +247,13 @@ pub async fn delete_user(
 ) -> Result<impl IntoResponse> {
     // Soft delete by deactivating
     let update_request = UpdateUserRequest::deactivate();
-
-    let _user = state.db_update_user(id, update_request).await?;
-
-    // Remove from search index
-    #[cfg(feature = "search")]
-    state.search_remove_user_safe(id).await;
-
-
-    Ok(ApiOk(json!({
-        "success": true,
-        "message": "User deactivated successfully"
-    })))
+    let fut = async {
+        let _user = state.db_update_user(id, update_request).await?;
+        #[cfg(feature = "search")]
+        state.search_remove_user_safe(id).await;
+        Ok::<(), crate::AppError>(())
+    };
+    crate::utils::response_ext::delete_with(fut, "User deactivated successfully").await
 }
 
 /// Get user's posts
