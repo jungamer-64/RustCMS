@@ -16,3 +16,9 @@ fn biscuit_ok() {
 fn invalid_scheme() {
     assert!(parse_authorization_header("Basic a:b").is_none());
 }
+
+#[test]
+fn extra_spaces_trimmed() {
+    let t = parse_authorization_header("  Bearer   tok  ").unwrap();
+    assert_eq!(t, "tok");
+}

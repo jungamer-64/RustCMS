@@ -138,12 +138,17 @@ cargo insta accept
 └─────────────────┘
 ```
 
-## � 認証（実装とドキュメントの同期）
+## 🔐 認証（実装とドキュメントの同期）
 
 - 標準ヘッダ: `Authorization: Bearer <token>`
 - 互換許容: `Authorization: Biscuit <token>`（ミドルウェアで同等に検証）
 
-公開/保護はルータ構成で管理します。保護ルートには認証ミドルウェアを適用し、ハンドラは `Extension<crate::auth::AuthContext>` を受け取ることで検証済みユーザ情報を利用できます。
+公開/保護はルータ構成で管理します。
+
+- 公開: `/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/refresh`, `/api/v1/health/**`, `/api/docs/**`, `/api/v1/metrics`
+- 保護: `/api/v1/posts/**`, `/api/v1/users/**`, `/api/v1/api-keys/**`, `/api/v1/auth/logout`, `/api/v1/auth/profile`
+
+保護ルートには認証ミドルウェアが適用され、ハンドラは `Extension<crate::auth::AuthContext>` で検証済みユーザ情報を利用できます。
 
 
 ## �🛠️ クイックスタート
