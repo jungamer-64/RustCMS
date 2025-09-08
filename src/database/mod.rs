@@ -294,22 +294,19 @@ impl Database {
         self.with_conn(|conn| {
             let mut query = users_dsl::users.into_boxed();
             apply_user_filters!(query, _role, _active);
-
-        let (sort_col, desc) = {
-            let allowed = ["created_at", "updated_at", "username"];
-            let (c, d) = crate::utils::sort::parse_sort(_sort, "created_at", true, &allowed);
-            (c, d)
-        };
-
-        apply_order_match!(
-            query,
-            sort_col,
-            desc,
-            users_dsl::created_at.desc(),
-            "created_at" => (users_dsl::created_at.asc(), users_dsl::created_at.desc()),
-            "updated_at" => (users_dsl::updated_at.asc(), users_dsl::updated_at.desc()),
-            "username" => (users_dsl::username.asc(), users_dsl::username.desc()),
-        );
+            {
+                let allowed = ["created_at", "updated_at", "username"];
+                let (col, desc) = crate::utils::sort::parse_sort(_sort.clone(), "created_at", true, &allowed);
+                apply_order_match!(
+                    query,
+                    col,
+                    desc,
+                    users_dsl::created_at.desc(),
+                    "created_at" => (users_dsl::created_at.asc(), users_dsl::created_at.desc()),
+                    "updated_at" => (users_dsl::updated_at.asc(), users_dsl::updated_at.desc()),
+                    "username" => (users_dsl::username.asc(), users_dsl::username.desc()),
+                );
+            }
 
             let results = self.run_query(|| query.offset(offset).limit(limit).load::<User>(conn), "Failed to list users")?;
             Ok(results)
@@ -389,14 +386,12 @@ impl Database {
             let mut query = posts_dsl::posts.into_boxed();
             apply_post_filters!(query, _status, _author, _tag);
 
-        // Sort parsing via common helper; supports created_at, updated_at, published_at, title and optional '-' prefix
         let (sort_col, desc) = {
             let allowed = ["created_at", "updated_at", "published_at", "title"];
             let (c, d) = crate::utils::sort::parse_sort(_sort, "created_at", true, &allowed);
             (c, d)
         };
 
-        // published_at needs composite for null handling; handle via default and explicit arms
         if sort_col == "published_at" {
             query = if desc {
                 query.order((posts_dsl::published_at.is_null().asc(), posts_dsl::published_at.desc()))
@@ -421,25 +416,45 @@ impl Database {
     }
 
     pub async fn update_post(&self, _id: Uuid, _request: UpdatePostRequest) -> Result<Post> {
+        // Step 1 load + compute
+        let (changes, updated_at) = self.prepare_post_update(_id, &_request).await?;
+        // Step 2 persist
+        let updated = self.persist_post_update(_id, &changes).await?;
+        // Step 3 (optional future: trigger search index update / events) - placeholder uses updated_at to avoid unused warning
+        let _ = updated_at; // reserved for future instrumentation
+        Ok(updated)
+    }
+
+    async fn prepare_post_update(&self, id: Uuid, req: &UpdatePostRequest) -> Result<(PostUpdateData, chrono::NaiveDateTime)> {
+        use diesel::prelude::*;
+        use crate::database::schema::posts::dsl as posts_dsl;
+        // fetch existing inside connection scope
+        self.with_conn(|conn| {
+            let existing = self.get_one_query(|| posts_dsl::posts.find(id).first::<Post>(conn), "Post not found", "Failed to fetch post")?;
+            let mut data = compute_post_update_data(&existing, req);
+            data = Self::build_post_changes(existing, data);
+            let ts = chrono::Utc::now().naive_utc();
+            Ok((data, ts))
+        })
+    }
+
+    async fn persist_post_update(&self, id: Uuid, changes: &PostUpdateData) -> Result<Post> {
         use diesel::prelude::*;
         use crate::database::schema::posts::dsl as posts_dsl;
         self.with_conn(|conn| {
-            let existing = self.get_one_query(|| posts_dsl::posts.find(_id).first::<Post>(conn), "Post not found", "Failed to fetch post")?;
-            let update_input = compute_post_update_data(&existing, &_request);
-            let changes = Self::build_post_changes(existing, update_input);
-            let updated = self.run_query(|| diesel::update(posts_dsl::posts.find(_id))
+            let updated = self.run_query(|| diesel::update(posts_dsl::posts.find(id))
                 .set((
-                    posts_dsl::title.eq(changes.title),
-                    posts_dsl::slug.eq(changes.slug),
-                    posts_dsl::content.eq(changes.content),
-                    posts_dsl::excerpt.eq(changes.excerpt),
-                    posts_dsl::tags.eq(changes.tags),
-                    posts_dsl::categories.eq(changes.categories),
-                    posts_dsl::meta_title.eq(changes.meta_title),
-                    posts_dsl::meta_description.eq(changes.meta_description),
-                    posts_dsl::status.eq(changes.status),
-                    posts_dsl::published_at.eq(changes.published_at),
-                    posts_dsl::updated_at.eq(changes.updated_at),
+                    posts_dsl::title.eq(&changes.title),
+                    posts_dsl::slug.eq(&changes.slug),
+                    posts_dsl::content.eq(&changes.content),
+                    posts_dsl::excerpt.eq(&changes.excerpt),
+                    posts_dsl::tags.eq(&changes.tags),
+                    posts_dsl::categories.eq(&changes.categories),
+                    posts_dsl::meta_title.eq(&changes.meta_title),
+                    posts_dsl::meta_description.eq(&changes.meta_description),
+                    posts_dsl::status.eq(&changes.status),
+                    posts_dsl::published_at.eq(&changes.published_at),
+                    posts_dsl::updated_at.eq(&changes.updated_at),
                 ))
                 .get_result::<Post>(conn), "Failed to update post")?;
             Ok(updated)
