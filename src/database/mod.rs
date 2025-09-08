@@ -122,26 +122,14 @@ fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpd
         .as_ref()
         .cloned()
         .unwrap_or_else(|| existing.content.clone());
-    let excerpt = if req.excerpt.is_some() {
-        req.excerpt.clone()
-    } else {
-        existing.excerpt.clone()
-    };
-    let tags = req.tags.clone().unwrap_or_else(|| existing.tags.clone());
-    let categories = match &req.category {
-        Some(cat) => vec![cat.trim().to_lowercase()],
-        None => existing.categories.clone(),
-    };
-    let meta_title = if req.meta_title.is_some() {
-        req.meta_title.clone()
-    } else {
-        existing.meta_title.clone()
-    };
-    let meta_description = if req.meta_description.is_some() {
-        req.meta_description.clone()
-    } else {
-        existing.meta_description.clone()
-    };
+        let excerpt = merge_opt(&req.excerpt, &existing.excerpt);
+        let tags = merge_opt(&req.tags, &existing.tags);
+        let categories = match &req.category {
+            Some(cat) => vec![cat.trim().to_lowercase()],
+            None => existing.categories.clone(),
+        };
+        let meta_title = merge_opt(&req.meta_title, &existing.meta_title);
+        let meta_description = merge_opt(&req.meta_description, &existing.meta_description);
 
     // status / published_at handling
     let mut status = if let Some(st) = &req.status {
@@ -180,6 +168,10 @@ fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpd
         published_at,
         updated_at,
     }
+}
+
+fn merge_opt<T: Clone>(candidate: &Option<T>, current: &T) -> T {
+    candidate.clone().unwrap_or_else(|| current.clone())
 }
 
 // Diesel 2.x の embed_migrations: Cargo.toml からの相対パスでディレクトリ配下の
@@ -431,35 +423,40 @@ impl Database {
     pub async fn update_post(&self, _id: Uuid, _request: UpdatePostRequest) -> Result<Post> {
         use diesel::prelude::*;
         use crate::database::schema::posts::dsl as posts_dsl;
-        
-        // Extract compute-and-update into a scoped block for readability
         self.with_conn(|conn| {
-            // Load existing to compute derived fields and keep unchanged values
             let existing = self.get_one_query(|| posts_dsl::posts.find(_id).first::<Post>(conn), "Post not found", "Failed to fetch post")?;
-
-            // Compute all update values in one place
-            let update = compute_post_update_data(&existing, &_request);
-
-            // Apply update
+            let update_input = compute_post_update_data(&existing, &_request);
+            let changes = Self::build_post_changes(existing, update_input);
             let updated = self.run_query(|| diesel::update(posts_dsl::posts.find(_id))
                 .set((
-                    posts_dsl::title.eq(update.title),
-                    posts_dsl::slug.eq(update.slug),
-                    posts_dsl::content.eq(update.content),
-                    posts_dsl::excerpt.eq(update.excerpt),
-                    posts_dsl::tags.eq(update.tags),
-                    posts_dsl::categories.eq(update.categories),
-                    posts_dsl::meta_title.eq(update.meta_title),
-                    posts_dsl::meta_description.eq(update.meta_description),
-                    posts_dsl::status.eq(update.status),
-                    posts_dsl::published_at.eq(update.published_at),
-                    posts_dsl::updated_at.eq(update.updated_at),
+                    posts_dsl::title.eq(changes.title),
+                    posts_dsl::slug.eq(changes.slug),
+                    posts_dsl::content.eq(changes.content),
+                    posts_dsl::excerpt.eq(changes.excerpt),
+                    posts_dsl::tags.eq(changes.tags),
+                    posts_dsl::categories.eq(changes.categories),
+                    posts_dsl::meta_title.eq(changes.meta_title),
+                    posts_dsl::meta_description.eq(changes.meta_description),
+                    posts_dsl::status.eq(changes.status),
+                    posts_dsl::published_at.eq(changes.published_at),
+                    posts_dsl::updated_at.eq(changes.updated_at),
                 ))
                 .get_result::<Post>(conn), "Failed to update post")?;
-
             Ok(updated)
         })
     }
+
+    fn build_post_changes(existing: Post, mut data: PostUpdateData) -> PostUpdateData {
+        // status/publish_at normalization kept here to shrink complexity in caller
+        if data.status == "published" && existing.published_at.is_none() && data.published_at.is_none() {
+            data.published_at = Some(chrono::Utc::now().naive_utc());
+        } else if data.status == "draft" { // ensure draft clears published_at
+            data.published_at = None;
+        }
+        data
+    }
+
+    // (helper removed; original in-function sorting logic retained to avoid type privacy complications)
 
     pub async fn delete_post(&self, _id: Uuid) -> Result<()> {
         use diesel::prelude::*;

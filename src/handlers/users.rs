@@ -40,9 +40,7 @@ pub(crate) async fn paginate_users(
     sort: Option<String>,
     cache_key: String,
 ) -> Result<Paginated<UserInfo>> {
-    use std::sync::Arc;
     let filters = Arc::new((role.clone(), active, sort.clone()));
-
     let response: Paginated<UserInfo> = crate::utils::paginate::fetch_paginated_cached_with_filters(
         state.clone(),
         cache_key,
@@ -65,8 +63,7 @@ pub(crate) async fn paginate_users(
                 state.db_count_users_filtered(role, active).await
             }
         },
-    )
-    .await?;
+    ).await?;
     Ok(response)
 }
 
@@ -314,46 +311,27 @@ pub async fn get_user_posts(
     Query(query): Query<crate::handlers::posts::PostQuery>,
 ) -> Result<impl IntoResponse> {
     let (page, limit) = normalize_page_limit(query.page, query.limit);
-    let cache_key = crate::utils::cache_key::build_list_cache_key(
+    let tag_opt = query.tag.clone();
+    let cache_key = crate::handlers::posts::build_posts_cache_key(
         "user_posts:user",
         page,
         limit,
-        &[
-            ("user", Some(id.to_string())),
-            ("status", query.status.clone()),
-            ("tag", query.tag.clone()),
-            ("sort", query.sort.clone()),
-        ],
+        &query.status,
+        &Some(id),
+        &tag_opt,
+        &query.sort,
     );
-    // 共通ヘルパーに統一
-    let filters = Arc::new((query.status.clone(), Some(id), query.tag.clone(), query.sort.clone()));
-
-    let response = crate::utils::paginate::fetch_paginated_cached_with_filters(
+    let resp = crate::handlers::posts::paginate_posts(
         state.clone(),
-        cache_key,
-        crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
         page,
         limit,
-        filters,
-        |f| {
-            let state = state.clone();
-            move || async move {
-                let (status, author_opt, tag, sort) = (*f).clone();
-                let posts = state
-                    .db_get_posts(page, limit, status, author_opt, tag, sort)
-                    .await?;
-                Ok(posts.iter().map(crate::handlers::posts::PostDto::from).collect())
-            }
-        },
-        |f| {
-            let state = state.clone();
-            move || async move {
-                let (status, author_opt, tag, _) = (*f).clone();
-                state.db_count_posts_filtered(status, author_opt, tag).await
-            }
-        },
+        query.status.clone(),
+        Some(id),
+        tag_opt,
+        query.sort.clone(),
+        cache_key,
     ).await?;
-    Ok(ApiOk(response))
+    Ok(ApiOk(resp))
 }
 
 /// Change user role (admin only)

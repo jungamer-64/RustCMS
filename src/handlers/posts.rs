@@ -71,6 +71,29 @@ impl From<&Post> for PostDto {
 
 // Posts list now directly returns Paginated<PostDto> instead of wrapper
 
+// Helper to build a consistent cache key for any posts listing variant (base/tag variations)
+pub(crate) fn build_posts_cache_key(
+    base: &str,
+    page: u32,
+    limit: u32,
+    status: &Option<String>,
+    author: &Option<Uuid>,
+    tag: &Option<String>,
+    sort: &Option<String>,
+) -> String {
+    crate::utils::cache_key::build_list_cache_key(
+        base,
+        page,
+        limit,
+        &[
+            ("status", status.clone()),
+            ("author", author.map(|u| u.to_string())),
+            ("tag", tag.clone()),
+            ("sort", sort.clone()),
+        ],
+    )
+}
+
 // Shared helper to fetch paginated posts with caching and filters
 pub(crate) async fn paginate_posts(
     state: AppState,
@@ -256,16 +279,14 @@ pub async fn get_posts(
     Query(query): Query<PostQuery>,
 ) -> Result<impl IntoResponse> {
     let (page, limit) = normalize_page_limit(query.page, query.limit);
-    let cache_key = crate::utils::cache_key::build_list_cache_key(
+    let cache_key = build_posts_cache_key(
         "posts",
         page,
         limit,
-        &[
-            ("status", query.status.clone()),
-            ("author", query.author.map(|u| u.to_string())),
-            ("tag", query.tag.clone()),
-            ("sort", query.sort.clone()),
-        ],
+        &query.status,
+        &query.author,
+        &query.tag,
+        &query.sort,
     );
     let resp = paginate_posts(
         state.clone(),
@@ -382,16 +403,15 @@ pub async fn get_posts_by_tag(
     Query(query): Query<PostQuery>,
 ) -> Result<impl IntoResponse> {
     let (page, limit) = normalize_page_limit(query.page, query.limit);
-    let cache_key = crate::utils::cache_key::build_list_cache_key(
+    let tag_opt = Some(tag.clone());
+    let cache_key = build_posts_cache_key(
         "posts:tag",
         page,
         limit,
-        &[
-            ("tag", Some(tag.clone())),
-            ("status", query.status.clone()),
-            ("author", query.author.map(|u| u.to_string())),
-            ("sort", query.sort.clone()),
-        ],
+        &query.status,
+        &query.author,
+        &tag_opt,
+        &query.sort,
     );
     let resp = paginate_posts(
         state.clone(),
