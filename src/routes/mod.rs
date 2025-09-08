@@ -128,11 +128,11 @@ fn user_routes() -> Router<AppState> {
 fn admin_routes() -> Router<AppState> {
     use crate::handlers::admin;
     use axum::middleware;
-    use crate::middleware::admin_auth::admin_auth_layer;
+    use crate::middleware::auth::auth_middleware;
     Router::new()
         .route("/posts", get(admin::list_posts).post(admin::create_post))
         .route("/posts/:id", delete(admin::delete_post))
-        .layer(middleware::from_fn(admin_auth_layer))
+        .layer(middleware::from_fn(auth_middleware))
 }
 
 #[cfg(all(feature = "database", feature = "auth"))]
