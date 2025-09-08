@@ -1,9 +1,10 @@
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json, Extension};
+use axum::{extract::{State, Path}, http::StatusCode, response::IntoResponse, Json, Extension};
 // diesel traits are not needed here anymore; all DB ops go through AppState wrappers
 use serde::Deserialize;
 
 use crate::utils::{common_types::PostSummary};
-use crate::utils::response_ext::ApiOk;
+use crate::utils::response_ext::{ApiOk, delete_with};
+use crate::utils::crud;
 use crate::{AppState, Result};
 use crate::auth::{AuthContext, require_admin_permission};
 
@@ -26,53 +27,22 @@ pub struct CreatePostBody {
     pub published: Option<bool>,
 }
 
-pub async fn create_post(
-    State(state): State<AppState>,
-    Extension(auth): Extension<AuthContext>,
-    Json(payload): Json<CreatePostBody>,
-) -> Result<(StatusCode, impl IntoResponse)> {
-    // Check admin permissions (Biscuit-based authorization)
+pub async fn create_post(State(state): State<AppState>, Extension(auth): Extension<AuthContext>, Json(payload): Json<CreatePostBody>) -> Result<(StatusCode, impl IntoResponse)> {
     require_admin_permission(&auth)?;
-
-    // Build CreatePostRequest
-    let req = crate::models::post::CreatePostRequest {
-        title: payload.title,
-        content: payload.content,
-        excerpt: None,
-        slug: None,
-        published: payload.published,
-        tags: None,
-        category: None,
-        featured_image: None,
-        meta_title: None,
-        meta_description: None,
-        published_at: None,
-        status: None,
-    };
-
-    let post = state.db_create_post(req).await?;
-
-    let out = PostSummary {
-        id: post.id.to_string(),
-        title: post.title,
-        author_id: post.author_id.to_string(),
-        status: post.status,
-        created_at: post.created_at.to_rfc3339(),
-    };
-
-    Ok((StatusCode::CREATED, ApiOk(out)))
+    let req = crate::models::post::CreatePostRequest { title: payload.title, content: payload.content, excerpt: None, slug: None, published: payload.published, tags: None, category: None, featured_image: None, meta_title: None, meta_description: None, published_at: None, status: None };
+    let (status, api_ok) = crud::create_entity(
+        state.clone(),
+        req,
+        |st, r| async move { st.db_create_post(r).await },
+        |p: &crate::models::post::Post| PostSummary { id: p.id.to_string(), title: p.title.clone(), author_id: p.author_id.to_string(), status: p.status.clone(), created_at: p.created_at.to_rfc3339() },
+        Some(|_p: &crate::models::post::Post, _st: AppState| async move { }),
+    ).await?;
+    Ok((status, api_ok))
 }
 
-pub async fn delete_post(
-    State(state): State<AppState>,
-    Extension(auth): Extension<AuthContext>,
-    axum::extract::Path(id): axum::extract::Path<String>,
-) -> Result<StatusCode> {
-    // Check admin permissions (Biscuit-based authorization)
+pub async fn delete_post(State(state): State<AppState>, Extension(auth): Extension<AuthContext>, Path(id): Path<uuid::Uuid>) -> Result<impl IntoResponse> {
     require_admin_permission(&auth)?;
-
-    let uuid = uuid::Uuid::parse_str(&id)
-        .map_err(|_| crate::AppError::BadRequest("invalid uuid".to_string()))?;
-    state.db_admin_delete_post(uuid).await?;
-    Ok(StatusCode::NO_CONTENT)
+    let fut = async move { state.db_admin_delete_post(id).await.map(|_| ()) };
+    // Reuse delete_with for consistent JSON payload (admin previously returned 204)
+    delete_with(fut, "Post deleted successfully").await
 }
