@@ -4,6 +4,7 @@ use axum::{
     response::Response,
 };
 use tower::{Layer, Service};
+use crate::middleware::common::{BoxServiceFuture, forward_poll_ready};
 
 /// Security headers middleware for enterprise security compliance
 #[derive(Clone)]
@@ -42,15 +43,13 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>,
-    >;
+    type Future = BoxServiceFuture<Self::Response, Self::Error>;
 
     fn poll_ready(
         &mut self,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.service.poll_ready(cx)
+    forward_poll_ready(&mut self.service, cx)
     }
 
     fn call(&mut self, request: Request<B>) -> Self::Future {

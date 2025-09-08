@@ -1,6 +1,7 @@
 use axum::{extract::Request, http::HeaderValue, response::Response};
 use tower::{Layer, Service};
 use uuid::Uuid;
+use crate::middleware::common::{BoxServiceFuture, forward_poll_ready};
 
 /// Request ID middleware for distributed tracing
 #[derive(Clone)]
@@ -39,15 +40,13 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>,
-    >;
+    type Future = BoxServiceFuture<Self::Response, Self::Error>;
 
     fn poll_ready(
         &mut self,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.service.poll_ready(cx)
+    forward_poll_ready(&mut self.service, cx)
     }
 
     fn call(&mut self, mut request: Request<B>) -> Self::Future {
