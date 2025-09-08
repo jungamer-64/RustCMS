@@ -123,12 +123,6 @@ pub async fn get_users(
     Ok(ApiOk(resp))
 }
 
-// Helper to build consistent cache key for users listing
-// Deprecated: replaced by ListCacheKey::Users; kept temporarily if other modules reference it.
-#[deprecated(note = "Use ListCacheKey::Users.to_cache_key() directly")]
-pub(crate) fn build_users_cache_key(page: u32, limit: u32, role: &Option<String>, active: Option<bool>, sort: &Option<String>) -> String {
-    ListCacheKey::Users { page, limit, role, active, sort }.to_cache_key()
-}
 
 /// Get user by ID
 #[utoipa::path(

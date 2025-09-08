@@ -91,6 +91,8 @@ pub(crate) async fn paginate_posts(
     author: Option<Uuid>,
     tag: Option<String>,
     sort: Option<String>,
+    // Posts list now directly returns Paginated<PostDto> instead of wrapper
+
     cache_key: String,
 ) -> Result<Paginated<PostDto>> {
     use std::sync::Arc;

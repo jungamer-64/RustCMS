@@ -387,8 +387,9 @@ impl AuthService {
         let parsed = self.parse_refresh_biscuit(refresh_token)?; // token_type 検証込み
         let (new_version, user) = self.bump_and_load_user(&parsed).await?;
         let (access_exp, refresh_exp) = self.compute_expiries(false);
-        let (access_token, new_refresh_token, expires_in) = self.issue_access_and_refresh(&user, &parsed.session_id, new_version, access_exp, refresh_exp)?;
-        Ok(RefreshResponse { access_token, expires_in, session_id: parsed.session_id, refresh_token: new_refresh_token, biscuit_token: None, user: UserInfo::from(user) })
+    let (access_token, new_refresh_token, expires_in) = self.issue_access_and_refresh(&user, &parsed.session_id, new_version, access_exp, refresh_exp)?;
+    // For backward compatibility we also populate deprecated biscuit_token with the access token.
+    Ok(RefreshResponse { access_token: access_token.clone(), expires_in, session_id: parsed.session_id, refresh_token: new_refresh_token, biscuit_token: Some(access_token), user: UserInfo::from(user) })
     }
 
     // セッション version をインクリメントしユーザーを取得 (有効性検査込み)

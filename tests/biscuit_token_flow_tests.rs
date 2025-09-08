@@ -72,8 +72,8 @@ async fn biscuit_refresh_rotation_invalidate_old() {
     let rotated = auth.refresh_access_token(&issued.refresh_token).await.expect("refresh");
     assert_ne!(rotated.access_token, issued.access_token);
     assert_ne!(rotated.refresh_token, issued.refresh_token);
-    // biscuit_token (deprecated outward) is None on refresh path currently
-    assert!(rotated.biscuit_token.is_none());
+    // biscuit_token (deprecated outward) now populated with the access token for backward compatibility
+    assert_eq!(rotated.biscuit_token.as_deref(), Some(rotated.access_token.as_str()));
 
     // Old refresh must now fail
     assert!(auth.refresh_access_token(&issued.refresh_token).await.is_err());
