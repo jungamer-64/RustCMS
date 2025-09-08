@@ -13,7 +13,7 @@ use serde_json::json;
 
 use crate::utils::{common_types::UserInfo};
 use crate::utils::response_ext::ApiOk;
-use crate::utils::auth_response::AuthTokens;
+use crate::utils::auth_response::{AuthTokens, AuthSuccessResponse};
 use crate::{auth::LoginRequest, models::CreateUserRequest, AppState, Result};
 
 /// Registration request
@@ -26,7 +26,9 @@ pub struct RegisterRequest {
     pub last_name: Option<String>,
 }
 
-/// Login response
+/// 旧 LoginResponse 型 (後方互換のため残留)
+#[deprecated(note = "Use AuthSuccessResponse (tokens + flattened compatibility fields)")]
+#[allow(deprecated)]
 #[derive(Debug, Serialize, ToSchema)]
 pub struct LoginResponse {
     pub success: bool,
@@ -36,23 +38,13 @@ pub struct LoginResponse {
     pub user: UserInfo,
     pub expires_in: i64,
     pub session_id: String,
-    /// 後方互換: 旧クライアントが `token` を参照している可能性があるため複製
     pub token: String,
 }
 
-impl From<crate::auth::AuthResponse> for LoginResponse {
-    fn from(a: crate::auth::AuthResponse) -> Self {
-        let access = a.access_token.clone();
-        LoginResponse {
-            success: true,
-            access_token: access.clone(),
-            refresh_token: a.refresh_token,
-            biscuit_token: a.biscuit_token,
-            user: a.user,
-            expires_in: a.expires_in,
-            session_id: a.session_id,
-            token: access,
-        }
+#[allow(deprecated)]
+impl From<AuthSuccessResponse> for LoginResponse {
+    fn from(a: AuthSuccessResponse) -> Self {
+        LoginResponse { success: a.success, access_token: a.access_token, refresh_token: a.refresh_token, biscuit_token: a.biscuit_token, user: a.user, expires_in: a.expires_in, session_id: a.session_id, token: a.token }
     }
 }
 
@@ -63,16 +55,23 @@ impl From<crate::auth::AuthResponse> for LoginResponse {
     tag = "Auth",
     request_body = RegisterRequest,
     responses(
-        (status = 201, description = "User registered", body = LoginResponse,
+        (status = 201, description = "User registered", body = crate::utils::auth_response::AuthSuccessResponse,
             examples((
                 "Registered" = (
                     summary = "登録成功",
                     value = json!({
                         "success": true,
+                        "tokens": {
+                            "access_token": "ACCESS_TOKEN_SAMPLE",
+                            "refresh_token": "REFRESH_TOKEN_SAMPLE",
+                            "biscuit_token": "BISCUIT_TOKEN_SAMPLE",
+                            "expires_in": 3600,
+                            "session_id": "sess_123"
+                        },
+                        "user": {"id": "1d2e3f40-1111-2222-3333-444455556666", "username": "alice", "email": "alice@example.com", "role": "subscriber"},
                         "access_token": "ACCESS_TOKEN_SAMPLE",
                         "refresh_token": "REFRESH_TOKEN_SAMPLE",
                         "biscuit_token": "BISCUIT_TOKEN_SAMPLE",
-                        "user": {"id": "1d2e3f40-1111-2222-3333-444455556666", "username": "alice", "email": "alice@example.com", "role": "subscriber"},
                         "expires_in": 3600,
                         "session_id": "sess_123",
                         "token": "ACCESS_TOKEN_SAMPLE"
@@ -110,8 +109,8 @@ pub async fn register(
 
     // Build full auth response (access/refresh/biscuit + session) via AppState
     let auth = state.auth_build_auth_response(user, false).await?;
-    // Backward compatibility: still return LoginResponse shape externally
-    Ok((StatusCode::CREATED, ApiOk(LoginResponse::from(auth))))
+    let unified = AuthSuccessResponse::from(auth);
+    Ok((StatusCode::CREATED, ApiOk(unified)))
 }
 
 /// Login user
@@ -121,16 +120,23 @@ pub async fn register(
     tag = "Auth",
     request_body = LoginRequest,
     responses(
-        (status = 200, description = "Login success", body = LoginResponse,
+        (status = 200, description = "Login success", body = crate::utils::auth_response::AuthSuccessResponse,
             examples((
                 "LoggedIn" = (
                     summary = "ログイン成功",
                     value = json!({
                         "success": true,
+                        "tokens": {
+                            "access_token": "ACCESS_TOKEN_SAMPLE",
+                            "refresh_token": "REFRESH_TOKEN_SAMPLE",
+                            "biscuit_token": "BISCUIT_TOKEN_SAMPLE",
+                            "expires_in": 3600,
+                            "session_id": "sess_123"
+                        },
+                        "user": {"id": "1d2e3f40-1111-2222-3333-444455556666", "username": "alice", "email": "alice@example.com", "role": "subscriber"},
                         "access_token": "ACCESS_TOKEN_SAMPLE",
                         "refresh_token": "REFRESH_TOKEN_SAMPLE",
                         "biscuit_token": "BISCUIT_TOKEN_SAMPLE",
-                        "user": {"id": "1d2e3f40-1111-2222-3333-444455556666", "username": "alice", "email": "alice@example.com", "role": "subscriber"},
                         "expires_in": 3600,
                         "session_id": "sess_123",
                         "token": "ACCESS_TOKEN_SAMPLE"
@@ -154,7 +160,8 @@ pub async fn login(
     // remember_me を先に取り出してムーブを防止
     // Build full auth response
     let auth = state.auth_build_auth_response(user, remember).await?;
-    Ok(ApiOk(LoginResponse::from(auth)))
+    let unified = AuthSuccessResponse::from(auth);
+    Ok(ApiOk(unified))
 }
 
 /// Logout user
