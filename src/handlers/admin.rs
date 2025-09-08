@@ -1,15 +1,18 @@
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json, Extension};
 // diesel traits are not needed here anymore; all DB ops go through AppState wrappers
 use serde::Deserialize;
 
 use crate::utils::{common_types::PostSummary};
 use crate::utils::response_ext::ApiOk;
 use crate::{AppState, Result};
+use crate::auth::{AuthContext, require_admin_permission};
 
 pub async fn list_posts(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
 ) -> Result<impl IntoResponse> {
-    // Admin authentication is enforced by middleware at /api/v1/admin
+    // Check admin permissions (Biscuit-based authorization)
+    require_admin_permission(&auth)?;
 
     let out: Vec<PostSummary> = state.db_admin_list_recent_posts(100).await?;
 
@@ -25,9 +28,11 @@ pub struct CreatePostBody {
 
 pub async fn create_post(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Json(payload): Json<CreatePostBody>,
 ) -> Result<(StatusCode, impl IntoResponse)> {
-    // Admin authentication is enforced by middleware at /api/v1/admin
+    // Check admin permissions (Biscuit-based authorization)
+    require_admin_permission(&auth)?;
 
     // Build CreatePostRequest
     let req = crate::models::post::CreatePostRequest {
@@ -60,9 +65,11 @@ pub async fn create_post(
 
 pub async fn delete_post(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     axum::extract::Path(id): axum::extract::Path<String>,
 ) -> Result<StatusCode> {
-    // Admin authentication is enforced by middleware at /api/v1/admin
+    // Check admin permissions (Biscuit-based authorization)
+    require_admin_permission(&auth)?;
 
     let uuid = uuid::Uuid::parse_str(&id)
         .map_err(|_| crate::AppError::BadRequest("invalid uuid".to_string()))?;
