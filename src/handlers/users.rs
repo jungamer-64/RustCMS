@@ -106,18 +106,8 @@ pub async fn get_users(
     Query(query): Query<UserQuery>,
 ) -> Result<impl IntoResponse> {
     let (page, limit) = normalize_page_limit(query.page, query.limit);
-
-    // Build cache key
-    let cache_key = crate::utils::cache_key::build_list_cache_key(
-        "users",
-        page,
-        limit,
-        &[
-            ("role", query.role.clone()),
-            ("active", query.active.map(|b| b.to_string())),
-            ("sort", query.sort.clone()),
-        ],
-    );
+    // Build cache key (use helper to keep parity with posts)
+    let cache_key = build_users_cache_key(page, limit, &query.role, query.active, &query.sort);
 
     let resp = paginate_users(
         state.clone(),
@@ -130,6 +120,26 @@ pub async fn get_users(
     )
     .await?;
     Ok(ApiOk(resp))
+}
+
+// Helper to build consistent cache key for users listing
+pub(crate) fn build_users_cache_key(
+    page: u32,
+    limit: u32,
+    role: &Option<String>,
+    active: Option<bool>,
+    sort: &Option<String>,
+) -> String {
+    crate::utils::cache_key::build_list_cache_key(
+        "users",
+        page,
+        limit,
+        &[
+            ("role", role.clone()),
+            ("active", active.map(|b| b.to_string())),
+            ("sort", sort.clone()),
+        ],
+    )
 }
 
 /// Get user by ID

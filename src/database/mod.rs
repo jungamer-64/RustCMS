@@ -66,6 +66,49 @@ macro_rules! apply_order_match {
     }};
 }
 
+// Macro to apply the usual user sorting rules (keeps Diesel types hidden inside macro)
+macro_rules! apply_user_sort {
+    ($query:ident, $sort:expr) => {{
+        let allowed = ["created_at", "updated_at", "username"];
+        let (col, desc) = crate::utils::sort::parse_sort($sort.clone(), "created_at", true, &allowed);
+        apply_order_match!(
+            $query,
+            col,
+            desc,
+            crate::database::schema::users::dsl::created_at.desc(),
+            "created_at" => (crate::database::schema::users::dsl::created_at.asc(), crate::database::schema::users::dsl::created_at.desc()),
+            "updated_at" => (crate::database::schema::users::dsl::updated_at.asc(), crate::database::schema::users::dsl::updated_at.desc()),
+            "username" => (crate::database::schema::users::dsl::username.asc(), crate::database::schema::users::dsl::username.desc()),
+        );
+    }};
+}
+
+// Macro to apply the usual post sorting rules (includes special-case for published_at)
+macro_rules! apply_post_sort {
+    ($query:ident, $sort:expr) => {{
+        let allowed = ["created_at", "updated_at", "published_at", "title"];
+        let (sort_col, desc) = crate::utils::sort::parse_sort($sort, "created_at", true, &allowed);
+        if sort_col == "published_at" {
+            // Use fully-qualified dsl path here to avoid requiring local imports at call site
+            $query = if desc {
+                $query.order((crate::database::schema::posts::dsl::published_at.is_null().asc(), crate::database::schema::posts::dsl::published_at.desc()))
+            } else {
+                $query.order((crate::database::schema::posts::dsl::published_at.is_null().desc(), crate::database::schema::posts::dsl::published_at.asc()))
+            };
+        } else {
+            apply_order_match!(
+                $query,
+                sort_col,
+                desc,
+                crate::database::schema::posts::dsl::created_at.desc(),
+                "created_at" => (crate::database::schema::posts::dsl::created_at.asc(), crate::database::schema::posts::dsl::created_at.desc()),
+                "updated_at" => (crate::database::schema::posts::dsl::updated_at.asc(), crate::database::schema::posts::dsl::updated_at.desc()),
+                "title" => (crate::database::schema::posts::dsl::title.asc(), crate::database::schema::posts::dsl::title.desc()),
+            );
+        }
+    }};
+}
+
 // Small helpers to reduce repeated error mapping patterns across DB helpers.
 fn map_diesel_result<T>(res: std::result::Result<T, diesel::result::Error>, not_found_msg: &str, ctx: &str) -> Result<T> {
     match res {
@@ -122,14 +165,14 @@ fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpd
         .as_ref()
         .cloned()
         .unwrap_or_else(|| existing.content.clone());
-        let excerpt = merge_opt(&req.excerpt, &existing.excerpt);
-        let tags = merge_opt(&req.tags, &existing.tags);
+    let excerpt = merge_opt_option(&req.excerpt, &existing.excerpt);
+    let tags = merge_opt(&req.tags, &existing.tags);
         let categories = match &req.category {
             Some(cat) => vec![cat.trim().to_lowercase()],
             None => existing.categories.clone(),
         };
-        let meta_title = merge_opt(&req.meta_title, &existing.meta_title);
-        let meta_description = merge_opt(&req.meta_description, &existing.meta_description);
+    let meta_title = merge_opt_option(&req.meta_title, &existing.meta_title);
+    let meta_description = merge_opt_option(&req.meta_description, &existing.meta_description);
 
     // status / published_at handling
     let mut status = if let Some(st) = &req.status {
@@ -172,6 +215,10 @@ fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpd
 
 fn merge_opt<T: Clone>(candidate: &Option<T>, current: &T) -> T {
     candidate.clone().unwrap_or_else(|| current.clone())
+}
+
+fn merge_opt_option<T: Clone>(candidate: &Option<T>, current: &Option<T>) -> Option<T> {
+    candidate.clone().or_else(|| current.clone())
 }
 
 // Diesel 2.x の embed_migrations: Cargo.toml からの相対パスでディレクトリ配下の
@@ -294,19 +341,7 @@ impl Database {
         self.with_conn(|conn| {
             let mut query = users_dsl::users.into_boxed();
             apply_user_filters!(query, _role, _active);
-            {
-                let allowed = ["created_at", "updated_at", "username"];
-                let (col, desc) = crate::utils::sort::parse_sort(_sort.clone(), "created_at", true, &allowed);
-                apply_order_match!(
-                    query,
-                    col,
-                    desc,
-                    users_dsl::created_at.desc(),
-                    "created_at" => (users_dsl::created_at.asc(), users_dsl::created_at.desc()),
-                    "updated_at" => (users_dsl::updated_at.asc(), users_dsl::updated_at.desc()),
-                    "username" => (users_dsl::username.asc(), users_dsl::username.desc()),
-                );
-            }
+            apply_user_sort!(query, _sort);
 
             let results = self.run_query(|| query.offset(offset).limit(limit).load::<User>(conn), "Failed to list users")?;
             Ok(results)
@@ -386,29 +421,7 @@ impl Database {
             let mut query = posts_dsl::posts.into_boxed();
             apply_post_filters!(query, _status, _author, _tag);
 
-        let (sort_col, desc) = {
-            let allowed = ["created_at", "updated_at", "published_at", "title"];
-            let (c, d) = crate::utils::sort::parse_sort(_sort, "created_at", true, &allowed);
-            (c, d)
-        };
-
-        if sort_col == "published_at" {
-            query = if desc {
-                query.order((posts_dsl::published_at.is_null().asc(), posts_dsl::published_at.desc()))
-            } else {
-                query.order((posts_dsl::published_at.is_null().desc(), posts_dsl::published_at.asc()))
-            };
-        } else {
-            apply_order_match!(
-                query,
-                sort_col,
-                desc,
-                posts_dsl::created_at.desc(),
-                "created_at" => (posts_dsl::created_at.asc(), posts_dsl::created_at.desc()),
-                "updated_at" => (posts_dsl::updated_at.asc(), posts_dsl::updated_at.desc()),
-                "title" => (posts_dsl::title.asc(), posts_dsl::title.desc()),
-            );
-        }
+    apply_post_sort!(query, _sort);
 
             let results = self.run_query(|| query.offset(offset).limit(limit).load::<Post>(conn), "Failed to list posts")?;
             Ok(results)
@@ -464,7 +477,7 @@ impl Database {
     fn build_post_changes(existing: Post, mut data: PostUpdateData) -> PostUpdateData {
         // status/publish_at normalization kept here to shrink complexity in caller
         if data.status == "published" && existing.published_at.is_none() && data.published_at.is_none() {
-            data.published_at = Some(chrono::Utc::now().naive_utc());
+            data.published_at = Some(chrono::Utc::now());
         } else if data.status == "draft" { // ensure draft clears published_at
             data.published_at = None;
         }

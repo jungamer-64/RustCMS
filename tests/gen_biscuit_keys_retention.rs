@@ -1,5 +1,5 @@
 mod helpers;
-use helpers::common::{make_temp_dirs, run_gen_biscuit_keys_multiple_backups, run_cargo_gen_biscuit_keys, count_backups_with_prefix};
+use helpers::common::{make_temp_dirs, run_gen_biscuit_keys_multiple_backups, run_cargo_gen_biscuit_keys, count_backups_with_prefix, run_compressed_backup_sequence};
 
 // How many times to generate backups in the smoke portion of this test.
 const NUM_BACKUPS_TO_GENERATE: usize = 5;

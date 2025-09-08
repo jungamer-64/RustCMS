@@ -1,6 +1,6 @@
 // mod helpers; // Remove duplicate
 mod helpers;
-use helpers::common::{make_temp_dirs, run_cargo_gen_biscuit_keys, find_gz_in_dir};
+use helpers::common::{make_temp_dirs, run_cargo_gen_biscuit_keys, find_gz_in_dir, run_compressed_backup_sequence};
 
 // Fast path compression test gated by env flag to skip full two-run sequence.
 #[test]
@@ -11,10 +11,8 @@ fn compress_creates_gz_backup_fast() {
         return;
     }
     let (_tmp, out_dir, backup_dir) = make_temp_dirs();
-    // First create initial key files (no backup yet)
-    run_cargo_gen_biscuit_keys(&["--format", "files", "--out-dir", out_dir.to_string_lossy().as_ref(), "--force"]);
-    // Second run triggers backup + compression in one shot
-    run_cargo_gen_biscuit_keys(&["--format", "files", "--out-dir", out_dir.to_string_lossy().as_ref(), "--backup", "--backup-dir", backup_dir.to_string_lossy().as_ref(), "--backup-compress", "--force"]);
+    // Use same shared helper (two-pass); fast variant still gated by env
+    run_compressed_backup_sequence(out_dir.to_string_lossy().as_ref(), backup_dir.to_string_lossy().as_ref());
 
     assert!(find_gz_in_dir(&backup_dir), "expected at least one .gz backup file (fast test)");
 }

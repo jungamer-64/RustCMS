@@ -35,6 +35,14 @@ pub fn run_gen_biscuit_keys_multiple_backups(out_dir: &str, backup_dir: &str, ti
     }
 }
 
+/// Run a two-phase (initial + compressed) backup generation used by multiple tests
+pub fn run_compressed_backup_sequence(out_dir: &str, backup_dir: &str) {
+    // initial generation (creates base keys + uncompressed backup)
+    run_cargo_gen_biscuit_keys(&["--format", "files", "--out-dir", out_dir, "--backup", "--backup-dir", backup_dir, "--force"]);
+    // second pass with compression flag
+    run_cargo_gen_biscuit_keys(&["--format", "files", "--out-dir", out_dir, "--backup", "--backup-dir", backup_dir, "--backup-compress", "--force"]);
+}
+
 /// Count backups with a given prefix in a directory
 pub fn count_backups_with_prefix(backup_dir: &PathBuf, prefix: &str) -> usize {
     let mut count = 0;
