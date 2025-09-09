@@ -9,6 +9,7 @@ use axum::{
 
 use crate::{handlers, AppState};
 use crate::middleware::rate_limiting::RateLimitLayer; // unified IP rate limiting
+use crate::middleware::security::SecurityHeadersLayer; // security headers
 // logging middleware layer integration pending (currently unused)
 
 /// Create the main application router
@@ -21,6 +22,8 @@ pub fn create_router() -> Router<AppState> {
         .route("/api/v1", get(handlers::api_info))
         // Metrics
         .route("/api/v1/metrics", get(handlers::metrics::metrics))
+        // CSRF token endpoint (security hardening)
+        .route("/api/v1/csrf-token", get(crate::middleware::csrf::get_csrf_token))
         // Serve interactive docs and OpenAPI JSON at /api/docs
         .route("/api/docs", get(handlers::docs_ui))
         .route("/api/docs/openapi.json", get(handlers::openapi_json))
@@ -71,10 +74,11 @@ pub fn create_router() -> Router<AppState> {
         public = public.nest("/api/v1/search", search_routes());
     }
 
-    // Compose final router: rate limit globally, merge groups, add fallback
+    // Compose final router: apply security layers globally
     public
         .fallback(handlers::not_found)
-        .layer(RateLimitLayer::new())
+        .layer(SecurityHeadersLayer::new()) // Security headers (CSP, HSTS, etc.)
+        .layer(RateLimitLayer::new()) // Rate limiting
 }
 
 /// Authentication routes (public only)

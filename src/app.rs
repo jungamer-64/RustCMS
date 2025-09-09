@@ -92,6 +92,9 @@ pub struct AppState {
     #[cfg(feature = "search")]
     pub search: SearchService,
 
+    /// CSRF protection service (security hardening)
+    pub csrf: crate::middleware::security::CsrfService,
+
     /// Application configuration
     pub config: Arc<Config>,
 
@@ -245,6 +248,8 @@ impl AppStateBuilder {
             search: self
                 .search
                 .unwrap_or_else(|| panic!("Search service not initialized but feature enabled")),
+            // Initialize CSRF protection service (security hardening)
+            csrf: crate::middleware::security::CsrfService::new(),
             config: self.config,
             metrics: self.metrics,
             rate_limiter: Arc::new(FixedWindowLimiter::new(100, 60)), // default; real values set in from_config
@@ -387,6 +392,22 @@ impl AppState {
                     if let Ok(mut m) = state_clone.metrics.try_write() { // try_write to avoid blocking
                         m.active_sessions = active;
                     }
+                }
+            });
+        }
+
+        // CSRF token cleanup task (security hardening)
+        {
+            let state_clone = app_state.clone();
+            let cleanup_interval_secs: u64 = std::env::var("CSRF_CLEANUP_INTERVAL_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1800); // 30 minutes default
+            tokio::spawn(async move {
+                let mut ticker = tokio::time::interval(std::time::Duration::from_secs(cleanup_interval_secs));
+                loop {
+                    ticker.tick().await;
+                    state_clone.csrf.cleanup_expired_tokens().await;
                 }
             });
         }
