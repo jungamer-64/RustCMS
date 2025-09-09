@@ -42,7 +42,7 @@ impl Modify for SecurityAddon {
     info(
         title = "Enterprise CMS API",
         version = "2.0.0",
-        description = "Production-ready Content Management System API"
+    description = "Production-ready Content Management System API\n\nAuth Response Unification: The unified auth schema is AuthSuccessResponse (nested tokens object). When feature 'auth-flat-fields' is enabled, deprecated flattened token fields (access_token / refresh_token / biscuit_token / expires_in / session_id / token) are still emitted for backward compatibility; these will be removed in 3.0.0. Disable the feature to preview the post-removal shape now. If feature 'legacy-auth-flat' is enabled, the historical LoginResponse schema is included for reference only and will also be removed in 3.0.0."
     ),
     paths(
         // Generated from handler #[utoipa::path] attributes; listing here enables explicit inclusion

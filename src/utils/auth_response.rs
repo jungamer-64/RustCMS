@@ -3,6 +3,8 @@ use serde::Serialize;
 use utoipa::ToSchema;
 #[cfg(feature = "auth-flat-fields")]
 use crate::utils::deprecation::warn_once;
+#[cfg(all(feature = "auth-flat-fields", feature = "monitoring"))]
+use metrics::counter;
 
 #[derive(Debug, Serialize, ToSchema, Clone)]
 pub struct AuthTokens {
@@ -80,6 +82,9 @@ impl AuthSuccessResponse {
             );
             #[cfg(feature = "auth-flat-fields")]
             {
+                // Metrics: count each construction that still emits deprecated flattened fields
+                #[cfg(feature = "monitoring")]
+                counter!("auth_flat_fields_legacy_usage_total").increment(1);
                 return Self {
                     success: true,
                     tokens: tokens.clone(),

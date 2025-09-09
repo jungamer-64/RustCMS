@@ -303,6 +303,11 @@ path = "src/bin/cms-simple.rs"
 required-features = ["dev-tools"]
 
 [[bin]]
+name = "cms-unified"
+path = "src/bin/cms-unified.rs"
+required-features = ["dev-tools"]
+
+[[bin]]
 name = "run_with_router"
 path = "src/bin/run_with_router.rs"
 required-features = ["dev-tools"]

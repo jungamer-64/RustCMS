@@ -1,0 +1,58 @@
+{
+  "title": "Auth Unification Progress",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Flat Field Usage (24h increase)",
+      "id": 1,
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "increase(auth_flat_fields_legacy_usage_total[24h])" }
+      ],
+      "options": { "colorMode": "value", "graphMode": "none" }
+    },
+    {
+      "type": "stat",
+      "title": "LoginResponse Conversions (24h)",
+      "id": 2,
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "increase(legacy_login_response_conversion_total[24h])" }
+      ],
+      "options": { "colorMode": "value", "graphMode": "none" }
+    },
+    {
+      "type": "timeseries",
+      "title": "Cumulative Flat Field Usage",
+      "id": 3,
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "auth_flat_fields_legacy_usage_total" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Cumulative Legacy LoginResponse Conversions",
+      "id": 4,
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "legacy_login_response_conversion_total" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "type": "text",
+      "title": "Phase 4 Criteria",
+      "id": 5,
+      "options": {
+        "content": "Both 24h increases must remain 0 for agreed stabilization window (≥7 days) before removing features.",
+        "mode": "markdown"
+      }
+    }
+  ]
+}

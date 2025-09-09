@@ -165,21 +165,39 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - name: Scan for flattened auth field usage (excluding definition file)
+      - name: Run deprecation scan (src-only, human)
         run: |
-          set -e
-          echo "Scanning for deprecated flattened auth fields..."
-          PATTERN='\.access_token|\.refresh_token|\.biscuit_token|\.expires_in|\.session_id|\.token'
-          # Exclude the canonical definition file and generated/target dirs
-          matches=$(grep -R -n -E "$PATTERN" src/ | grep -v 'auth_response.rs' || true)
-          if [ -n "$matches" ]; then
-            echo "Found potential deprecated usages:" >&2
-            echo "$matches" >&2
-          else
-            echo "No external deprecated flattened field usages found." 
-          fi
-          # Always succeed (informational). Convert to failure in pre-3.0 branch if desired.
-          exit 0
+          bash scripts/deprecation-scan.sh --src-only --counts > deprecation_counts.csv
+          echo "--- CSV counts ---"; cat deprecation_counts.csv
+      - name: Run deprecation scan (JSON)
+        run: |
+          bash scripts/deprecation-scan.sh --src-only --json > deprecation_counts.json
+          echo "--- JSON counts ---"; cat deprecation_counts.json
+      - name: Upload deprecation scan artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: deprecation-scan-${{ github.sha }}
+          path: |
+            deprecation_counts.csv
+            deprecation_counts.json
+          retention-days: 10
+      - name: Auto guidance (zero streak logic)
+        run: |
+          bash scripts/deprecation-auto-guidance.sh | tee guidance.txt
+      - name: Upload guidance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deprecation-guidance-${{ github.sha }}
+          path: guidance.txt
+          retention-days: 5
+      - name: Strict check (only if all counts zero)
+        run: |
+          # If any count non-zero, skip strict check to avoid premature failure
+          if grep -q '[1-9]' deprecation_counts.json; then
+            echo "Skipping strict removal check (deprecated refs still present)"; exit 0; fi
+          echo "All counts zero - running strict removal gate";
+          bash scripts/deprecation-strict-check.sh
 
   # オプション: 将来カバレッジを追加する場合のテンプレ (disabled by default)
   # coverage:

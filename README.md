@@ -168,6 +168,50 @@ cargo insta accept
 
 本番運用で警告抑止したい場合は該当 feature を無効化、またはログフィルタで target="deprecation" を除外してください。
 
+### 収集メトリクス (Auth 統一関連)
+
+`monitoring` フィーチャ有効時、以下の統一進捗カウンタが公開 (Prometheus exporter 経由) されます。
+
+| Metric | 意味 | 減少完了条件 |
+|--------|------|--------------|
+| `auth_flat_fields_legacy_usage_total` | 旧フラットフィールドを含む `AuthSuccessResponse` が構築された回数 | 本番トラフィックで 0 維持 → `auth-flat-fields` 無効化準備完了 |
+| `legacy_login_response_conversion_total` | `LoginResponse` (互換) へ変換が行われた回数 | 0 維持 → `legacy-auth-flat` 削除準備完了 |
+
+ダッシュボード例:
+
+```promql
+increase(auth_flat_fields_legacy_usage_total[24h])
+increase(legacy_login_response_conversion_total[24h])
+```
+
+どちらも 0 が安定した期間 (例: 7–14 日) が確保できれば次期メジャー削除 PR を作成してください。
+
+補助スクリプト:
+
+```bash
+# 現在の src/ 残存を厳格判定 (ゼロ以外があれば exit 1)
+bash scripts/deprecation-strict-check.sh
+
+# 3 連続ゼロ到達トラッキング & 推奨手順表示
+bash scripts/deprecation-auto-guidance.sh
+
+# Phase 4 削除 PR ドラフト生成 (ゼロ確認後)
+bash scripts/generate_phase4_pr.sh
+```
+
+Grafana ダッシュボード例: `monitoring/grafana/auth_unification_dashboard.json` をインポート。
+
+### CI アーティファクト: Deprecated Scan
+
+`ci.yml` の `deprecated-scan` ジョブは `scripts/deprecation-scan.sh --src-only` を実行し以下をアップロードします:
+
+- `deprecation_counts.csv`
+- `deprecation_counts.json`
+
+`*.json` はダウンロード後グラフ化や履歴比較に利用できます。`--src-only` によりテスト/ドキュメント由来の許容参照を除外し、実稼働コードの残存状況のみを追跡します。
+
+将来的にゼロ到達後は `--strict` を有効化し回帰を CI 失敗に昇格させることを推奨します。
+
 ### Auth Unification Verification (デュアル + 除去プレビュー)
 
 統一認証レスポンスの両構成（フラット互換あり/なし）を検証するヘルパースクリプト:
