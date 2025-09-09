@@ -46,16 +46,19 @@ jobs:
     permissions:
       contents: read
     steps:
+      # TODO: pin this action to a full commit SHA for immutability (e.g. actions/checkout@<full-sha>)
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
       - name: Setup toolchain (stable)
+        # TODO: pin this action to a full commit SHA for immutability
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
       - name: Cache (Swatinem/rust-cache)
+        # TODO: pin this action to a full commit SHA for immutability
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> target
@@ -102,11 +105,13 @@ jobs:
             # Preview removal of deprecated flattened auth fields (disable auth-flat-fields only)
             cargo-features: "--no-default-features --features auth,cache,compression,database,search"
     steps:
+      # TODO: pin this action to a full commit SHA for immutability
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
       - name: Setup toolchain ${{ matrix.toolchain }}
+        # TODO: pin this action to a full commit SHA for immutability
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.toolchain }}
@@ -116,6 +121,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Cache (Swatinem/rust-cache)
+        # TODO: pin this action to a full commit SHA for immutability
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> target
@@ -190,6 +196,7 @@ jobs:
     permissions:
       contents: read
     steps:
+      # TODO: pin this action to a full commit SHA for immutability
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
@@ -239,6 +246,7 @@ jobs:
         with:
           fetch-depth: 1
       - name: Cache cargo registry & index
+        # TODO: pin this action to a full commit SHA for immutability
         uses: actions/cache@v4
         with:
           path: |
@@ -257,10 +265,12 @@ jobs:
     needs: lint
     if: github.event_name != 'pull_request' || github.base_ref == 'main' || github.event_name == 'schedule'
     steps:
+      # TODO: pin this action to a full commit SHA for immutability
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
       - name: Cache cargo registry & index
+        # TODO: pin this action to a full commit SHA for immutability
         uses: actions/cache@v4
         with:
           path: |
@@ -284,6 +294,7 @@ jobs:
       CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
     steps:
       - name: Checkout repository
+        # TODO: pin this action to a full commit SHA for immutability
         uses: actions/checkout@v4
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
