@@ -25,7 +25,7 @@ pub mod api_keys;
 
 /// Home page handler - integrates functionality from cms-simple
 /// Provides a web interface with quick navigation links to all available endpoints
-pub async fn home() -> impl IntoResponse {
+pub async fn home() -> impl IntoResponse { render_home_page().await }
     Html(r#"
 <!DOCTYPE html>
 <html>
