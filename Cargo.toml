@@ -295,23 +295,6 @@ path = "src/bin/rotate_api_key.rs"
 required-features = ["auth", "database"]
 
 [[bin]]
-name = "cms-lightweight"
-path = "src/bin/cms-lightweight.rs"
-required-features = ["dev-tools"]
-# DEPRECATED: Functionality integrated into main cms-server binary
-
-[[bin]]
-name = "cms-simple"
-path = "src/bin/cms-simple.rs"
-required-features = ["dev-tools"]
-# DEPRECATED: Functionality integrated into main cms-server binary
-
-[[bin]]
-name = "cms-unified"
-path = "src/bin/cms-unified.rs"
-required-features = ["dev-tools"]
-
-[[bin]]
 name = "run_with_router"
 path = "src/bin/run_with_router.rs"
 required-features = ["dev-tools"]
