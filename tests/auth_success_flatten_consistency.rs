@@ -20,6 +20,7 @@ fn sample_user() -> UserInfo {
     }
 }
 
+#[cfg(feature = "auth-flat-fields")]
 #[test]
 fn auth_success_flatten_fields_match_tokens() {
     let tokens = AuthTokens {

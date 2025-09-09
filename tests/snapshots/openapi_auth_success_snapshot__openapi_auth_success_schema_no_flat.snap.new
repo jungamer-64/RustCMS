@@ -1,0 +1,25 @@
+---
+source: tests/openapi_auth_success_snapshot.rs
+assertion_line: 39
+expression: schema
+---
+{
+  "type": "object",
+  "description": "統一認証レスポンス (login/register 用)\n\ntokens オブジェクトに加え、後方互換のため従来フラットなフィールド (access_token / refresh_token / biscuit_token / expires_in / session_id / token) も保持する。",
+  "required": [
+    "success",
+    "tokens",
+    "user"
+  ],
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "tokens": {
+      "$ref": "#/components/schemas/AuthTokens"
+    },
+    "user": {
+      "$ref": "#/components/schemas/UserInfo"
+    }
+  }
+}

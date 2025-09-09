@@ -181,13 +181,14 @@ rpassword = "7.3"
 [features]
 # Feature list (alphabetical keys). Arrays are sorted for consistency.
 auth = ["dep:argon2", "dep:biscuit-auth"]
+auth-flat-fields = [] # temporary backward-compatible flattened auth token fields (remove in 3.0.0)
 cache = ["dep:deadpool-redis", "dep:redis"]
 dev-tools = []
 legacy-auth-flat = [] # expose deprecated LoginResponse schema & flattened fields in OpenAPI
-legacy-admin-token = [] # expose deprecated ADMIN_TOKEN based auth utils & middleware
+legacy-admin-token = [] # expose deprecated ADMIN_TOKEN based auth utils & middleware (to be removed in 3.0.0)
 compression = []
 database = ["dep:deadpool-diesel", "dep:diesel", "dep:diesel-derive-enum", "dep:diesel_migrations", "dep:r2d2"]
-default = ["auth", "cache", "compression", "database", "email", "search"]
+default = ["auth", "cache", "compression", "database", "email", "search", "auth-flat-fields"]
 development = ["monitoring", "search"]
 dev = ["auth", "database"]
 email = ["dep:lettre"]

@@ -1,3 +1,5 @@
+auth_flat_fields_feature_gate,Flatten auth fields gated by feature,Cargo.toml|src/utils/auth_response.rs|tests/auth_success_flatten_consistency.rs,Allows early opt-out & prep for removal,auth-flat-fields
+legacy_admin_token_feature,Admin token legacy logic feature-gated,Cargo.toml|src/utils/auth_utils.rs,Deprecated admin token logic isolated for future removal,check_admin_token|get_admin_token
 area,canonical_impl,file,notes,replaced_examples
 cache_keys,ListCacheKey & entity_id_key,src/utils/cache_key.rs,Unified list/entity cache key construction,build_posts_cache_key|build_users_cache_key
 api_delete_response,delete_with & ok_message,src/utils/response_ext.rs,Standard JSON success/delete responses,handlers/posts.rs::delete_post|handlers/users.rs::delete_user|handlers/api_keys.rs::revoke_api_key (was raw Json/status)

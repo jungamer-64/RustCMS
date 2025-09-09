@@ -38,18 +38,23 @@ pub struct AuthSuccessResponse {
     pub success: bool,
     pub tokens: AuthTokens,
     pub user: UserInfo,
-    // --- Backward compatible flattened fields ---
+    #[cfg(feature = "auth-flat-fields")]
     #[deprecated(note = "Use tokens.access_token (will be removed in 3.0.0)")]
     pub access_token: String,
+    #[cfg(feature = "auth-flat-fields")]
     #[deprecated(note = "Use tokens.refresh_token (will be removed in 3.0.0)")]
     pub refresh_token: String,
+    #[cfg(feature = "auth-flat-fields")]
     #[deprecated(note = "Use tokens.biscuit_token (will be removed in 3.0.0)")]
     pub biscuit_token: String,
+    #[cfg(feature = "auth-flat-fields")]
     #[deprecated(note = "Use tokens.expires_in (will be removed in 3.0.0)")]
     pub expires_in: i64,
+    #[cfg(feature = "auth-flat-fields")]
     #[deprecated(note = "Use tokens.session_id (will be removed in 3.0.0)")]
     pub session_id: String,
     /// 旧クライアント互換 (token == access_token)
+    #[cfg(feature = "auth-flat-fields")]
     #[deprecated(note = "Use tokens.access_token (alias, will be removed in 3.0.0)")]
     pub token: String,
 }
@@ -60,19 +65,23 @@ impl From<crate::auth::AuthResponse> for AuthSuccessResponse {
 
 impl AuthSuccessResponse {
     pub fn from_parts(tokens: &AuthTokens, user: UserInfo) -> Self {
-    // Centralize deprecated flattened field population
-    #[allow(deprecated)]
-    let resp = Self {
+        #[allow(deprecated)]
+        Self {
             success: true,
             tokens: tokens.clone(),
             user,
+            #[cfg(feature = "auth-flat-fields")]
             access_token: tokens.access_token.clone(),
+            #[cfg(feature = "auth-flat-fields")]
             refresh_token: tokens.refresh_token.clone(),
+            #[cfg(feature = "auth-flat-fields")]
             biscuit_token: tokens.biscuit_token.clone(),
+            #[cfg(feature = "auth-flat-fields")]
             expires_in: tokens.expires_in,
+            #[cfg(feature = "auth-flat-fields")]
             session_id: tokens.session_id.clone(),
+            #[cfg(feature = "auth-flat-fields")]
             token: tokens.access_token.clone(),
-    };
-    resp
+        }
     }
 }
