@@ -19,6 +19,8 @@ path = "src/lib.rs"
 [[bin]]
 name = "cms-server"
 path = "src/main.rs"
+# NOTE: This unified binary integrates functionality from cms-lightweight, cms-simple, and cms-unified
+# It serves as the single entry point for the RustCMS backend
 
 [[bin]]
 name = "cms-migrate"
@@ -296,11 +298,13 @@ required-features = ["auth", "database"]
 name = "cms-lightweight"
 path = "src/bin/cms-lightweight.rs"
 required-features = ["dev-tools"]
+# DEPRECATED: Functionality integrated into main cms-server binary
 
 [[bin]]
 name = "cms-simple"
 path = "src/bin/cms-simple.rs"
 required-features = ["dev-tools"]
+# DEPRECATED: Functionality integrated into main cms-server binary
 
 [[bin]]
 name = "cms-unified"
