@@ -427,8 +427,9 @@ impl AuthService {
         Ok(b64)
     }
 
-    /// (旧互換) verify_jwt -> Biscuit access 検証
-    #[deprecated(note = "Use verify_biscuit(state, token) or auth_middleware injected AuthContext")]
+    /// (旧互換) verify_jwt -> Biscuit access 検証 (deprecated, behind legacy-auth-flat for eventual removal)
+    #[cfg(feature = "legacy-auth-flat")]
+    #[deprecated(note = "Use verify_biscuit(state, token) or auth_middleware injected AuthContext (will be removed in 3.0.0)")]
     pub async fn verify_jwt(&self, token: &str) -> Result<AuthContext> { self.verify_biscuit_generic(token, Some("access")).await }
 
     /// Biscuit トークン検証 (AppState 経由でユーザー確認 & メトリクス計測用ラッパーと組み合わせて利用)

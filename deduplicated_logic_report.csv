@@ -31,3 +31,5 @@ openapi_phase4_comment,Add Phase 4 removal comment for LoginResponse schema,src/
 openapi_snapshot_guard,Add OpenAPI schema snapshot test,tests/openapi_snapshot.rs,Detects unintended schema regressions & legacy schema leakage,insta snapshot
 openapi_auth_success_schema_guard,Focused AuthSuccessResponse schema snapshot,tests/openapi_auth_success_snapshot.rs,Guards structure & deprecated fields until Phase 4,auth_success_schema only
 auth_success_flatten_consistency_guard,Flattened auth fields consistency test,tests/auth_success_flatten_consistency.rs,Ensures deprecated fields mirror tokens.* until removal,assert equality
+verify_jwt_feature_gate,Gate deprecated verify_jwt by legacy-auth-flat,src/auth/mod.rs,Prepares removal of old JWT-style accessor by Phase 4,#[cfg(feature)] around verify_jwt
+legacy_admin_token_feature_gate,Gate legacy admin token utils & middleware,Cargo.toml|src/utils/auth_utils.rs|src/middleware/admin_auth.rs,Optional retention of ADMIN_TOKEN path until 3.0.0,check_admin_token|get_admin_token|admin_auth_layer gated

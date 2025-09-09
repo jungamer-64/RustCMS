@@ -2,6 +2,9 @@
 //!
 //! Common authentication helper functions
 
+#![allow(deprecated)] // internal deprecations intentionally retained under feature gate
+
+#[cfg(feature = "legacy-admin-token")]
 use std::env;
 
 /// Check if the provided admin token is valid
@@ -10,7 +13,8 @@ use std::env;
 /// # Deprecated
 /// This function is deprecated in favor of Biscuit-based authentication with role permissions.
 /// Use the unified authentication system with "admin" permission checking instead.
-#[deprecated(note = "Use Biscuit authentication with admin permission checking instead")]
+#[cfg(feature = "legacy-admin-token")]
+#[deprecated(note = "Use Biscuit authentication with admin permission checking instead (will be removed in 3.0.0)")]
 pub fn check_admin_token(req_token: &str) -> bool {
     env::var("ADMIN_TOKEN")
         .map(|t| t == req_token)
@@ -22,12 +26,13 @@ pub fn check_admin_token(req_token: &str) -> bool {
 /// # Deprecated
 /// This function is deprecated in favor of Biscuit-based authentication with role permissions.
 /// Use the unified authentication system with "admin" permission checking instead.
-#[deprecated(note = "Use Biscuit authentication with admin permission checking instead")]
+#[cfg(feature = "legacy-admin-token")]
+#[deprecated(note = "Use Biscuit authentication with admin permission checking instead (will be removed in 3.0.0)")]
 pub fn get_admin_token() -> Option<String> {
     env::var("ADMIN_TOKEN").ok()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-admin-token"))]
 mod tests {
     use super::*;
     use std::env;
@@ -36,6 +41,7 @@ mod tests {
     // Mutex to ensure tests run sequentially to avoid env var conflicts
     static TEST_MUTEX: Mutex<()> = Mutex::new(());
 
+    #[cfg(feature = "legacy-admin-token")]
     #[test]
     fn test_check_admin_token() {
         let _lock = TEST_MUTEX.lock().unwrap();
@@ -61,6 +67,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-admin-token")]
     #[test]
     fn test_check_admin_token_empty() {
         let _lock = TEST_MUTEX.lock().unwrap();
@@ -80,6 +87,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-admin-token")]
     #[test]
     fn test_get_admin_token() {
         let _lock = TEST_MUTEX.lock().unwrap();
@@ -106,6 +114,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-admin-token")]
     #[test]
     fn test_check_admin_token_special_characters() {
         let _lock = TEST_MUTEX.lock().unwrap();
@@ -126,6 +135,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-admin-token")]
     #[test]
     fn test_check_admin_token_unicode() {
         let _lock = TEST_MUTEX.lock().unwrap();

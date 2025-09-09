@@ -184,6 +184,7 @@ auth = ["dep:argon2", "dep:biscuit-auth"]
 cache = ["dep:deadpool-redis", "dep:redis"]
 dev-tools = []
 legacy-auth-flat = [] # expose deprecated LoginResponse schema & flattened fields in OpenAPI
+legacy-admin-token = [] # expose deprecated ADMIN_TOKEN based auth utils & middleware
 compression = []
 database = ["dep:deadpool-diesel", "dep:diesel", "dep:diesel-derive-enum", "dep:diesel_migrations", "dep:r2d2"]
 default = ["auth", "cache", "compression", "database", "email", "search"]
