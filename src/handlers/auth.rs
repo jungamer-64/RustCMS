@@ -12,11 +12,12 @@ use serde::Deserialize;
 use serde::Serialize;
 use utoipa::ToSchema;
 use serde_json::json;
+#[cfg(all(feature = "legacy-auth-flat", feature = "monitoring"))]
+use metrics::counter;
 
 #[cfg(feature = "legacy-auth-flat")]
 use crate::utils::common_types::UserInfo;
 use crate::utils::response_ext::ApiOk;
-use crate::utils::auth_response::AuthSuccessResponse;
 use crate::{auth::LoginRequest, models::CreateUserRequest, AppState, Result};
 
 /// Registration request
@@ -33,6 +34,7 @@ pub struct RegisterRequest {
 /// 旧 LoginResponse 型 (feature = legacy-auth-flat 有効時のみ公開) - 新規コードは AuthSuccessResponse を使用してください
 #[allow(dead_code)]
 #[derive(Debug, Serialize, ToSchema)]
+#[cfg_attr(feature = "legacy-auth-flat", deprecated(note = "Use AuthSuccessResponse (feature legacy-auth-flat will be removed in 3.0.0)") )]
 pub struct LoginResponse {
     pub success: bool,
     pub access_token: String,
@@ -47,7 +49,30 @@ pub struct LoginResponse {
 #[cfg(feature = "legacy-auth-flat")]
 impl From<AuthSuccessResponse> for LoginResponse {
     fn from(a: AuthSuccessResponse) -> Self {
-        LoginResponse { success: a.success, access_token: a.access_token, refresh_token: a.refresh_token, biscuit_token: a.biscuit_token, user: a.user, expires_in: a.expires_in, session_id: a.session_id, token: a.token }
+        // Emit one-time runtime warning when legacy LoginResponse mapping is exercised.
+        #[cfg(feature = "legacy-auth-flat")]
+        {
+            use crate::utils::deprecation::warn_once;
+            warn_once(
+                "legacy_login_response",
+                "LoginResponse conversion invoked; migrate consumers to AuthSuccessResponse (flattened fields removed in 3.0.0).",
+            );
+            // Metrics: track remaining legacy LoginResponse conversions
+            #[cfg(feature = "monitoring")]
+            counter!("legacy_login_response_conversion_total").increment(1);
+        }
+        // Avoid referencing deprecated flattened fields directly; derive from unified tokens.
+        let AuthSuccessResponse { success, tokens, user, .. } = a;
+        LoginResponse {
+            success,
+            access_token: tokens.access_token.clone(),
+            refresh_token: tokens.refresh_token.clone(),
+            biscuit_token: tokens.biscuit_token.clone(),
+            user,
+            expires_in: tokens.expires_in,
+            session_id: tokens.session_id.clone(),
+            token: tokens.access_token.clone(),
+        }
     }
 }
 
@@ -61,7 +86,7 @@ impl From<AuthSuccessResponse> for LoginResponse {
         (status = 201, description = "User registered", body = crate::utils::auth_response::AuthSuccessResponse,
             examples((
                 "Registered" = (
-                    summary = "登録成功",
+                    summary = "登録成功 (unified tokens; flat legacy fields may appear when feature auth-flat-fields is enabled)",
                     value = json!({
                         "success": true,
                         "tokens": {
@@ -71,13 +96,9 @@ impl From<AuthSuccessResponse> for LoginResponse {
                             "expires_in": 3600,
                             "session_id": "sess_123"
                         },
-                        "user": {"id": "1d2e3f40-1111-2222-3333-444455556666", "username": "alice", "email": "alice@example.com", "role": "subscriber"},
-                        "access_token": "ACCESS_TOKEN_SAMPLE",
-                        "refresh_token": "REFRESH_TOKEN_SAMPLE",
-                        "biscuit_token": "BISCUIT_TOKEN_SAMPLE",
-                        "expires_in": 3600,
-                        "session_id": "sess_123",
-                        "token": "ACCESS_TOKEN_SAMPLE"
+                        "user": {"id": "1d2e3f40-1111-2222-3333-444455556666", "username": "alice", "email": "alice@example.com", "role": "subscriber"}
+                        // NOTE: When feature auth-flat-fields is ON the response also repeats
+                        // access_token / refresh_token / biscuit_token / expires_in / session_id / token at top-level (deprecated)
                     })
                 )
             ))
@@ -110,9 +131,8 @@ pub async fn register(
         eprintln!("Failed to index user for search: {}", e);
     }
 
-    // Build full auth response (access/refresh/biscuit + session) via AppState
-    let auth = state.auth_build_auth_response(user, false).await?;
-    let unified = AuthSuccessResponse::from(auth);
+    // Build full unified auth success response via new convenience wrapper
+    let unified = state.auth_build_success_response(user, false).await?;
     Ok((StatusCode::CREATED, ApiOk(unified)))
 }
 
@@ -126,7 +146,7 @@ pub async fn register(
         (status = 200, description = "Login success", body = crate::utils::auth_response::AuthSuccessResponse,
             examples((
                 "LoggedIn" = (
-                    summary = "ログイン成功",
+                    summary = "ログイン成功 (unified tokens; flat legacy fields may appear when feature auth-flat-fields is enabled)",
                     value = json!({
                         "success": true,
                         "tokens": {
@@ -136,13 +156,8 @@ pub async fn register(
                             "expires_in": 3600,
                             "session_id": "sess_123"
                         },
-                        "user": {"id": "1d2e3f40-1111-2222-3333-444455556666", "username": "alice", "email": "alice@example.com", "role": "subscriber"},
-                        "access_token": "ACCESS_TOKEN_SAMPLE",
-                        "refresh_token": "REFRESH_TOKEN_SAMPLE",
-                        "biscuit_token": "BISCUIT_TOKEN_SAMPLE",
-                        "expires_in": 3600,
-                        "session_id": "sess_123",
-                        "token": "ACCESS_TOKEN_SAMPLE"
+                        "user": {"id": "1d2e3f40-1111-2222-3333-444455556666", "username": "alice", "email": "alice@example.com", "role": "subscriber"}
+                        // NOTE: When feature auth-flat-fields is ON the response also repeats deprecated flat fields
                     })
                 )
             ))
@@ -161,9 +176,8 @@ pub async fn login(
     let user = state.auth_authenticate(request).await?;
 
     // remember_me を先に取り出してムーブを防止
-    // Build full auth response
-    let auth = state.auth_build_auth_response(user, remember).await?;
-    let unified = AuthSuccessResponse::from(auth);
+    // Build full unified auth success response via convenience wrapper
+    let unified = state.auth_build_success_response(user, remember).await?;
     Ok(ApiOk(unified))
 }
 
@@ -258,7 +272,6 @@ pub struct RefreshRequest { pub refresh_token: String }
     )
 )]
 pub async fn refresh_token(State(state): State<AppState>, Json(body): Json<RefreshRequest>) -> Result<impl IntoResponse> {
-    let (tokens, user) = state.auth_refresh_access_token(&body.refresh_token).await?;
-    let auth_response = crate::utils::auth_response::AuthSuccessResponse::from_parts(&tokens, user);
-    Ok(ApiOk(auth_response))
+    let unified = state.auth_refresh_success_response(&body.refresh_token).await?;
+    Ok(ApiOk(unified))
 }

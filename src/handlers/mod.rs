@@ -23,6 +23,100 @@ pub mod api_keys;
 
 // (previously had redundant re-exports here; modules are public via `pub mod` already)
 
+/// Home page handler - integrates functionality from cms-simple
+/// Provides a web interface with quick navigation links to all available endpoints
+pub async fn home() -> impl IntoResponse { render_home_page().await }
+    Html(r#"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Rust CMS - Unified Backend</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+        h2 { color: #495057; margin-top: 30px; }
+        .api-link { background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px; transition: background 0.3s; }
+        .api-link:hover { background: #0056b3; }
+        .feature-list { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0; }
+        .status { background: #d4edda; color: #155724; padding: 10px; border-radius: 4px; margin: 15px 0; }
+        .endpoint { background: #e9ecef; padding: 10px; margin: 5px 0; border-left: 4px solid #007bff; border-radius: 4px; }
+        .integration-note { background: #fff3cd; color: #856404; padding: 10px; border-radius: 4px; margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Rust CMS - Unified Backend</h1>
+        
+        <div class="status">
+            <strong>Status:</strong> ✅ Unified server integrating cms-lightweight + cms-simple + cms-unified functionality
+        </div>
+        
+        <div class="integration-note">
+            <strong>🔗 Integration Complete:</strong> This unified server replaces the separate cms-lightweight, cms-simple, and cms-unified binaries with a single, comprehensive solution.
+        </div>
+        
+        <p>High-performance, unified Content Management System built with Rust and Axum.</p>
+        
+        <h2>🔗 Quick Links</h2>
+        <a href="/api/v1/health" class="api-link">Health Check</a>
+        <a href="/api/docs" class="api-link">API Documentation</a>
+        <a href="/api/v1" class="api-link">API Info</a>
+        <a href="/api/v1/metrics" class="api-link">Metrics</a>
+        
+        <h2>📋 Available Endpoints</h2>
+        <div class="endpoint"><strong>GET /</strong> - This home page</div>
+        <div class="endpoint"><strong>GET /api/v1</strong> - API information</div>
+        <div class="endpoint"><strong>GET /api/docs</strong> - Interactive API documentation</div>
+        <div class="endpoint"><strong>GET /api/v1/health/*</strong> - Health check endpoints</div>
+        <div class="endpoint"><strong>GET /api/v1/metrics</strong> - Prometheus metrics</div>
+        
+        <h2>🎯 Integrated Features</h2>
+        <div class="feature-list">
+            <h3>From cms-lightweight:</h3>
+            <ul>
+                <li>✅ Minimal startup and configuration</li>
+                <li>✅ Lightweight initialization</li>
+                <li>✅ Shared AppState management</li>
+            </ul>
+            
+            <h3>From cms-simple:</h3>
+            <ul>
+                <li>✅ Web interface and home page</li>
+                <li>✅ In-memory data store for development</li>
+                <li>✅ CORS support</li>
+                <li>✅ Comprehensive API documentation</li>
+            </ul>
+            
+            <h3>From cms-unified:</h3>
+            <ul>
+                <li>✅ Consolidated endpoint structure</li>
+                <li>✅ Unified API response format</li>
+                <li>✅ Pagination support</li>
+            </ul>
+            
+            <h3>Production Features:</h3>
+            <ul>
+                <li>🔐 Authentication (when enabled)</li>
+                <li>💾 Database support (when enabled)</li>
+                <li>🔍 Full-text search (when enabled)</li>
+                <li>📊 Metrics and monitoring</li>
+                <li>🛡️ Rate limiting</li>
+            </ul>
+        </div>
+        
+        <h2>💡 Usage</h2>
+        <p>This unified server automatically adapts based on enabled features:</p>
+        <ul>
+            <li><strong>Development mode:</strong> Run without database features for quick prototyping</li>
+            <li><strong>Production mode:</strong> Enable all features for full functionality</li>
+        </ul>
+    </div>
+</body>
+</html>
+    "#.to_string())
+}
+
 /// API information endpoint
 pub async fn api_info() -> impl IntoResponse {
     Json(json!({
@@ -35,7 +129,8 @@ pub async fn api_info() -> impl IntoResponse {
             "health": "/api/v1/health"
         },
     "documentation": "/api/docs",
-        "status": "operational"
+        "status": "operational",
+        "integration": "unified-cms (cms-lightweight + cms-simple + cms-unified)"
     }))
 }
 

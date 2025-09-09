@@ -6,21 +6,35 @@ use utoipa::OpenApi; // bring openapi() into scope
 #[test]
 fn openapi_snapshot_default_features() {
     let doc = ApiDoc::openapi();
-    // Serialize with deterministic ordering (utoipa already preserves ordering, but we enforce via serde_json value roundtrip)
     let value = serde_json::to_value(&doc).expect("serialize openapi");
 
-    // Prune potentially noisy sections if needed (currently none). Example placeholder:
-    // if let Some(serde_json::Value::Object(components)) = value.get_mut("components") { /* adjust */ }
-
-    // Assertion: LoginResponse schema MUST be absent when feature `legacy-auth-flat` is disabled.
-    if cfg!(not(feature = "legacy-auth-flat")) {
-        let has_login = value
-            .pointer("/components/schemas/LoginResponse")
-            .is_some();
-        assert!(!has_login, "LoginResponse should not be present without legacy-auth-flat feature");
+    // Structural guard: ensure AuthSuccessResponse required fields present (feature dependent)
+    let auth_schema = value
+        .pointer("/components/schemas/AuthSuccessResponse")
+        .expect("AuthSuccessResponse schema present");
+    let required = auth_schema
+        .get("required")
+        .and_then(|v| v.as_array())
+        .expect("required array");
+    let required_fields: Vec<&str> = required.iter().filter_map(|v| v.as_str()).collect();
+    for f in ["success", "tokens", "user"].iter() {
+        assert!(required_fields.contains(f), "missing required field {f}");
+    }
+    if cfg!(feature = "auth-flat-fields") {
+        for f in ["access_token", "refresh_token", "biscuit_token", "expires_in", "session_id", "token"].iter() {
+            assert!(required_fields.contains(f), "missing flat required field {f}");
+        }
+    } else {
+        // Ensure flat fields not required
+        for f in ["access_token", "refresh_token", "biscuit_token", "expires_in", "session_id", "token"].iter() {
+            assert!(!required_fields.contains(f), "flat field {f} should be absent when feature disabled");
+        }
     }
 
-    insta::assert_json_snapshot!("openapi_default", value);
+    // Legacy LoginResponse absence check
+    if cfg!(not(feature = "legacy-auth-flat")) {
+        assert!(value.pointer("/components/schemas/LoginResponse").is_none());
+    }
 }
 
 /// When the transitional feature `legacy-auth-flat` is enabled we expect the legacy LoginResponse

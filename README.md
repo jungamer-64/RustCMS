@@ -159,6 +159,90 @@ cargo insta accept
 `legacy-admin-token` feature を有効化すると、旧 admin token ベースの認証ロジック (`check_admin_token`, `get_admin_token`) が利用可能です。
 デフォルトでは無効化されており、Biscuit 権限認証への移行を推奨します。
 
+### Runtime Deprecation Warnings
+
+以下の runtime 一度きり警告が出力されます (target:"deprecation"):
+
+- フラット認証トークンフィールド利用 (feature `auth-flat-fields` 有効時)
+- 旧 ADMIN_TOKEN 認証利用 (feature `legacy-admin-token` 有効時)
+
+本番運用で警告抑止したい場合は該当 feature を無効化、またはログフィルタで target="deprecation" を除外してください。
+
+### 収集メトリクス (Auth 統一関連)
+
+`monitoring` フィーチャ有効時、以下の統一進捗カウンタが公開 (Prometheus exporter 経由) されます。
+
+| Metric | 意味 | 減少完了条件 |
+|--------|------|--------------|
+| `auth_flat_fields_legacy_usage_total` | 旧フラットフィールドを含む `AuthSuccessResponse` が構築された回数 | 本番トラフィックで 0 維持 → `auth-flat-fields` 無効化準備完了 |
+| `legacy_login_response_conversion_total` | `LoginResponse` (互換) へ変換が行われた回数 | 0 維持 → `legacy-auth-flat` 削除準備完了 |
+
+ダッシュボード例:
+
+```promql
+increase(auth_flat_fields_legacy_usage_total[24h])
+increase(legacy_login_response_conversion_total[24h])
+```
+
+どちらも 0 が安定した期間 (例: 7–14 日) が確保できれば次期メジャー削除 PR を作成してください。
+
+補助スクリプト:
+
+```bash
+# 現在の src/ 残存を厳格判定 (ゼロ以外があれば exit 1)
+bash scripts/deprecation-strict-check.sh
+
+# 3 連続ゼロ到達トラッキング & 推奨手順表示
+bash scripts/deprecation-auto-guidance.sh
+
+# Phase 4 削除 PR ドラフト生成 (ゼロ確認後)
+bash scripts/generate_phase4_pr.sh
+```
+
+Grafana ダッシュボード例: `monitoring/grafana/auth_unification_dashboard.json` をインポート。
+
+### CI アーティファクト: Deprecated Scan
+
+`ci.yml` の `deprecated-scan` ジョブは `scripts/deprecation-scan.sh --src-only` を実行し以下をアップロードします:
+
+- `deprecation_counts.csv`
+- `deprecation_counts.json`
+
+`*.json` はダウンロード後グラフ化や履歴比較に利用できます。`--src-only` によりテスト/ドキュメント由来の許容参照を除外し、実稼働コードの残存状況のみを追跡します。
+
+将来的にゼロ到達後は `--strict` を有効化し回帰を CI 失敗に昇格させることを推奨します。
+
+### Auth Unification Verification (デュアル + 除去プレビュー)
+
+統一認証レスポンスの両構成（フラット互換あり/なし）を検証するヘルパースクリプト:
+
+```bash
+./scripts/verify-auth-unification.sh
+```
+
+内部で以下を実行します:
+
+- デフォルト (auth-flat-fields 有効) 全テスト
+- フラット互換フィールド無効構成 (--no-default-features + 必要最小 features) 全テスト
+
+CI ではさらに `no-flat` マトリクス (auth-flat-fields だけを無効化し他主要機能は維持) を常時実行し、将来 (Phase4) の削除後状態を継続的に検証します。
+
+補助スキャン (任意 CI informational ジョブ例):
+
+```bash
+./scripts/deprecation-scan.sh | tee deprecation_scan.txt
+```
+
+生成された一覧をアーティファクト化し、実際に残すべき参照 (テスト or docs) 以外が残っていないかを確認してください。
+
+Phase4 直前チェック:
+
+```bash
+./scripts/phase4-removal-plan.sh
+```
+
+出力が空 (または docs/ / CHANGELOG のみ) になれば最終削除 PR を作成可能です。
+
 ```bash
 cargo build --features legacy-auth-flat
 ```

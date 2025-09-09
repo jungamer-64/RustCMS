@@ -15,6 +15,8 @@ use crate::middleware::rate_limiting::RateLimitLayer; // unified IP rate limitin
 pub fn create_router() -> Router<AppState> {
     // Public routes (no auth layer applied)
     let mut public = Router::new()
+        // Home page - integrates cms-simple functionality
+        .route("/", get(handlers::home))
         // Root API info
         .route("/api/v1", get(handlers::api_info))
         // Metrics

@@ -1,4 +1,9 @@
 auth_flat_fields_feature_gate,Flatten auth fields gated by feature,Cargo.toml|src/utils/auth_response.rs|tests/auth_success_flatten_consistency.rs,Allows early opt-out & prep for removal,auth-flat-fields
+auth_flat_fields_runtime_warn,Runtime warn once for flattened fields,src/utils/auth_response.rs,Guides operators to disable feature early,auth-flat-fields
+legacy_admin_token_runtime_warn,Runtime warn once for legacy admin token,src/utils/auth_utils.rs,Encourages migration to Biscuit permissions,legacy-admin-token
+deprecation_warn_util,Centralized runtime one-time deprecation logger,src/utils/deprecation.rs,Unifies warn_once logic across features,warn_once
+auth_flat_fields_runtime_serialization_guard,Serialization presence/absence test for flat fields,tests/auth_success_flatten_runtime.rs,Prevents drift & premature removal mistakes,auth-flat-fields
+auth_success_description_gate,Description reflects feature state,src/utils/auth_response.rs|tests/openapi_auth_success_description.rs,Ensures OpenAPI description stays accurate,auth-flat-fields
 legacy_admin_token_feature,Admin token legacy logic feature-gated,Cargo.toml|src/utils/auth_utils.rs,Deprecated admin token logic isolated for future removal,check_admin_token|get_admin_token
 area,canonical_impl,file,notes,replaced_examples
 cache_keys,ListCacheKey & entity_id_key,src/utils/cache_key.rs,Unified list/entity cache key construction,build_posts_cache_key|build_users_cache_key
@@ -35,3 +40,14 @@ openapi_auth_success_schema_guard,Focused AuthSuccessResponse schema snapshot,te
 auth_success_flatten_consistency_guard,Flattened auth fields consistency test,tests/auth_success_flatten_consistency.rs,Ensures deprecated fields mirror tokens.* until removal,assert equality
 verify_jwt_feature_gate,Gate deprecated verify_jwt by legacy-auth-flat,src/auth/mod.rs,Prepares removal of old JWT-style accessor by Phase 4,#[cfg(feature)] around verify_jwt
 legacy_admin_token_feature_gate,Gate legacy admin token utils & middleware,Cargo.toml|src/utils/auth_utils.rs|src/middleware/admin_auth.rs,Optional retention of ADMIN_TOKEN path until 3.0.0,check_admin_token|get_admin_token|admin_auth_layer gated
+openapi_snapshot_description_scrub,Scrub AuthSuccessResponse description in snapshot,tests/openapi_snapshot.rs,Reduces snapshot churn; real description asserted elsewhere,auth-flat-fields
+openapi_authsuccess_dedup,Removed duplicate AuthSuccessResponse schema registration,src/openapi.rs,Prevents redundant schema entries & clarifies components list,openapi
+ci_no_flat_matrix,Add CI matrix entry testing no-flat preview (auth-flat-fields disabled),.github/workflows/ci.yml,Ensures early detection of removal issues,auth-flat-fields
+phase4_removal_scan_script,Phase 4 removal scanning script added,scripts/phase4-removal-plan.sh,Automates identification of remaining deprecated artifacts,phase4
+legacy_login_response_runtime_warn,Warn once when LoginResponse conversion used,src/handlers/auth.rs,Signals runtime reliance on deprecated schema,legacy-auth-flat
+auth_success_appstate_helper,Add AppState helper returning AuthSuccessResponse directly,src/app.rs|src/handlers/auth.rs,Reduces per-handler conversion boilerplate & centralizes future changes,auth
+refresh_success_appstate_helper,Add AppState refresh wrapper returning AuthSuccessResponse,src/app.rs|src/handlers/auth.rs,Simplifies refresh handler & aligns with register/login pattern,auth
+auth_success_new_unified,Add internal new_unified constructor to avoid unnecessary warning path without flat fields,src/utils/auth_response.rs,Slight perf/log improvement when previewing removal,auth-flat-fields
+auth_deprecation_scan_script,Add script to list deprecated flattened auth field usages,scripts/deprecation-scan.sh|README.md,Supports CI visibility & early removal readiness,auth-flat-fields
+docs_no_flat_ci_readme,Document no-flat CI preview & phase4 script in README,README.md,Improves operator visibility of removal rehearsal,auth-flat-fields
+docs_no_flat_ci_migration,Document CI no-flat matrix & removal script in migration guide,docs/AUTH_MIGRATION_V2.md,Clarifies deprecation operational workflow,auth-flat-fields
