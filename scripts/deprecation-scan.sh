@@ -50,7 +50,7 @@ PATTERNS=(
 
 IGNORE_DIRS=(target uploads .git .github/ISSUE_TEMPLATE)
 
-IGNORE_EXPR="$(IFS='|'; echo "${IGNORE_DIRS[*]// /|}")"
+IGNORE_EXPR="$(IFS='|'; echo "${IGNORE_DIRS[*]}")"
 
 matches_found=0
 
