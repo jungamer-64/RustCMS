@@ -1,9 +1,0 @@
-nohup: ignoring input
-{"timestamp":"2025-09-09T20:21:20.239613Z","level":"INFO","fields":{"message":"🔧 Initializing application state from provided Config"},"target":"cms_backend::app","filename":"src/app.rs","line_number":304,"threadId":"ThreadId(1)"}
-{"timestamp":"2025-09-09T20:21:20.239684Z","level":"DEBUG","fields":{"message":"✅ Configuration loaded"},"target":"cms_backend::app","filename":"src/app.rs","line_number":307,"threadId":"ThreadId(1)"}
-{"timestamp":"2025-09-09T20:21:20.239709Z","level":"INFO","fields":{"message":"🗄️ Connecting to PostgreSQL database..."},"target":"cms_backend::app","filename":"src/app.rs","line_number":326,"threadId":"ThreadId(1)"}
-{"timestamp":"2025-09-09T20:21:20.298274Z","level":"INFO","fields":{"message":"✅ Database connection established"},"target":"cms_backend::app","filename":"src/app.rs","line_number":328,"threadId":"ThreadId(1)"}
-{"timestamp":"2025-09-09T20:21:20.298353Z","level":"INFO","fields":{"message":"🔐 Setting up authentication service..."},"target":"cms_backend::app","filename":"src/app.rs","line_number":333,"threadId":"ThreadId(1)"}
-{"timestamp":"2025-09-09T20:21:20.298746Z","level":"INFO","fields":{"message":"✅ Authentication service initialized"},"target":"cms_backend::app","filename":"src/app.rs","line_number":345,"threadId":"ThreadId(1)"}
-{"timestamp":"2025-09-09T20:21:20.298780Z","level":"INFO","fields":{"message":"🚀 Setting up cache service..."},"target":"cms_backend::app","filename":"src/app.rs","line_number":350,"threadId":"ThreadId(1)"}
-Error: Redis(Connection refused (os error 111))

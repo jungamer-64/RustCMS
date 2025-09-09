@@ -22,3 +22,5 @@ uploads/*
 
 #Ignore vscode AI rules
 .github\instructions\codacy.instructions.md
+# Log files (temporary)
+*.log
