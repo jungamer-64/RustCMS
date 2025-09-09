@@ -667,9 +667,25 @@ impl AppState {
         timed_op!(self, "auth", self.auth.create_auth_response(user, remember_me))
     }
 
+    /// Convenience wrapper: directly build unified `AuthSuccessResponse` (tokens + user (+ deprecated flat fields)).
+    /// Use this in handlers instead of manually converting `AuthResponse`.
+    /// NOTE: Keeps backward compatibility because the underlying creation path is unchanged.
+    #[cfg(feature = "auth")]
+    pub async fn auth_build_success_response(&self, user: crate::models::User, remember_me: bool) -> crate::Result<crate::utils::auth_response::AuthSuccessResponse> {
+        let auth = self.auth_build_auth_response(user, remember_me).await?; // metrics already recorded in inner call
+        Ok(crate::utils::auth_response::AuthSuccessResponse::from(auth))
+    }
+
     #[cfg(feature = "auth")]
     pub async fn auth_refresh_access_token(&self, refresh_token: &str) -> crate::Result<(crate::utils::auth_response::AuthTokens, crate::utils::common_types::UserInfo)> {
     timed_op!(self, "auth", self.auth.refresh_access_token(refresh_token))
+    }
+
+    /// Convenience wrapper: refresh using a refresh token and return unified AuthSuccessResponse directly.
+    #[cfg(feature = "auth")]
+    pub async fn auth_refresh_success_response(&self, refresh_token: &str) -> crate::Result<crate::utils::auth_response::AuthSuccessResponse> {
+        let (tokens, user) = self.auth_refresh_access_token(refresh_token).await?; // metrics recorded in inner call
+        Ok(crate::utils::auth_response::AuthSuccessResponse::from_parts(&tokens, user))
     }
 
     /// Validate a token using the AuthService; returns the authenticated user on success and records an auth attempt

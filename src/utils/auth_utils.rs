@@ -6,6 +6,8 @@
 
 #[cfg(feature = "legacy-admin-token")]
 use std::env;
+#[cfg(feature = "legacy-admin-token")]
+use crate::utils::deprecation::warn_once;
 
 /// Check if the provided admin token is valid
 /// This is a simple token-based authentication for admin endpoints
@@ -16,9 +18,8 @@ use std::env;
 #[cfg(feature = "legacy-admin-token")]
 #[deprecated(note = "Use Biscuit authentication with admin permission checking instead (will be removed in 3.0.0)")]
 pub fn check_admin_token(req_token: &str) -> bool {
-    env::var("ADMIN_TOKEN")
-        .map(|t| t == req_token)
-        .unwrap_or(false)
+    runtime_admin_token_warn_once();
+    env::var("ADMIN_TOKEN").map(|t| t == req_token).unwrap_or(false)
 }
 
 /// Get the admin token from environment
@@ -29,8 +30,12 @@ pub fn check_admin_token(req_token: &str) -> bool {
 #[cfg(feature = "legacy-admin-token")]
 #[deprecated(note = "Use Biscuit authentication with admin permission checking instead (will be removed in 3.0.0)")]
 pub fn get_admin_token() -> Option<String> {
+    runtime_admin_token_warn_once();
     env::var("ADMIN_TOKEN").ok()
 }
+
+#[cfg(feature = "legacy-admin-token")]
+fn runtime_admin_token_warn_once() { warn_once("legacy_admin_token", "legacy ADMIN_TOKEN based auth is deprecated and will be removed in 3.0.0. Migrate to Biscuit permission-based admin auth."); }
 
 #[cfg(all(test, feature = "legacy-admin-token"))]
 mod tests {

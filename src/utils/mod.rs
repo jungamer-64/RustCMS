@@ -23,3 +23,4 @@ pub mod bin_utils;
 pub mod auth_response;
 pub mod search_index;
 pub mod dto;
+pub mod deprecation;

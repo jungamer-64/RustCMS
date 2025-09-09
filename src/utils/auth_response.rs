@@ -1,6 +1,8 @@
 use crate::utils::common_types::UserInfo;
 use serde::Serialize;
 use utoipa::ToSchema;
+#[cfg(feature = "auth-flat-fields")]
+use crate::utils::deprecation::warn_once;
 
 #[derive(Debug, Serialize, ToSchema, Clone)]
 pub struct AuthTokens {
@@ -30,9 +32,8 @@ impl From<crate::auth::AuthResponse> for AuthTokens {
 }
 
 
-/// 統一認証レスポンス (login/register 用)
-///
-/// tokens オブジェクトに加え、後方互換のため従来フラットなフィールド (access_token / refresh_token / biscuit_token / expires_in / session_id / token) も保持する。
+#[cfg_attr(feature = "auth-flat-fields", doc = "統一認証レスポンス (login/register 用)\n\n`tokens` オブジェクトに加え、後方互換のため従来フラットなフィールド (access_token / refresh_token / biscuit_token / expires_in / session_id / token) も保持する。\n\nNOTE: フラットフィールドは feature `auth-flat-fields` 有効時のみ含まれ 3.0.0 で削除予定。")]
+#[cfg_attr(not(feature = "auth-flat-fields"), doc = "統一認証レスポンス (login/register 用)\n\n`tokens` オブジェクトのみを公開 (フラットなトークン互換フィールドは feature `auth-flat-fields` を無効化した構成では除外済み)。 3.0.0 で完全移行予定。")]
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AuthSuccessResponse {
     pub success: bool,
@@ -64,24 +65,37 @@ impl From<crate::auth::AuthResponse> for AuthSuccessResponse {
 }
 
 impl AuthSuccessResponse {
+    /// Internal constructor used when flattened fields are already absent (auth-flat-fields disabled)
+    #[cfg(not(feature = "auth-flat-fields"))]
+    fn new_unified(tokens: &AuthTokens, user: UserInfo) -> Self {
+        Self { success: true, tokens: tokens.clone(), user }
+    }
     pub fn from_parts(tokens: &AuthTokens, user: UserInfo) -> Self {
         #[allow(deprecated)]
-        Self {
-            success: true,
-            tokens: tokens.clone(),
-            user,
+        {
             #[cfg(feature = "auth-flat-fields")]
-            access_token: tokens.access_token.clone(),
+            warn_once(
+                "auth_flat_fields",
+                "AuthSuccessResponse flattened token fields are deprecated and will be removed in 3.0.0. Disable feature 'auth-flat-fields' to preview removal.",
+            );
             #[cfg(feature = "auth-flat-fields")]
-            refresh_token: tokens.refresh_token.clone(),
-            #[cfg(feature = "auth-flat-fields")]
-            biscuit_token: tokens.biscuit_token.clone(),
-            #[cfg(feature = "auth-flat-fields")]
-            expires_in: tokens.expires_in,
-            #[cfg(feature = "auth-flat-fields")]
-            session_id: tokens.session_id.clone(),
-            #[cfg(feature = "auth-flat-fields")]
-            token: tokens.access_token.clone(),
+            {
+                return Self {
+                    success: true,
+                    tokens: tokens.clone(),
+                    user,
+                    access_token: tokens.access_token.clone(),
+                    refresh_token: tokens.refresh_token.clone(),
+                    biscuit_token: tokens.biscuit_token.clone(),
+                    expires_in: tokens.expires_in,
+                    session_id: tokens.session_id.clone(),
+                    token: tokens.access_token.clone(),
+                };
+            }
+            #[cfg(not(feature = "auth-flat-fields"))]
+            {
+                return Self::new_unified(tokens, user);
+            }
         }
     }
 }

@@ -130,7 +130,9 @@ function extractTokens(r: AuthSuccessResponse) {
 
 1. `cargo build --no-default-features --features auth,database` (最小構成) でビルド継続確認
 2. `cargo doc --features legacy-auth-flat` (2.x 系のみ) で警告数をメトリク化 (過剰増加を検知)
-3. 3.0.0 ブランチ作成時に `grep -R "legacy-auth-flat"` が空であることを CI チェック
+3. CI マトリクス: `default` / `minimal` / `no-flat` (auth-flat-fields 無効) の 3 系列
+4. 3.0.0 ブランチ作成時に `grep -R "legacy-auth-flat"` が空であることを CI チェック
+5. `scripts/phase4-removal-plan.sh` 出力が空 (docs/ と CHANGELOG のみ) であること
 
 リスク評価 & 緩和:
 

@@ -159,6 +159,46 @@ cargo insta accept
 `legacy-admin-token` feature を有効化すると、旧 admin token ベースの認証ロジック (`check_admin_token`, `get_admin_token`) が利用可能です。
 デフォルトでは無効化されており、Biscuit 権限認証への移行を推奨します。
 
+### Runtime Deprecation Warnings
+
+以下の runtime 一度きり警告が出力されます (target:"deprecation"):
+
+- フラット認証トークンフィールド利用 (feature `auth-flat-fields` 有効時)
+- 旧 ADMIN_TOKEN 認証利用 (feature `legacy-admin-token` 有効時)
+
+本番運用で警告抑止したい場合は該当 feature を無効化、またはログフィルタで target="deprecation" を除外してください。
+
+### Auth Unification Verification (デュアル + 除去プレビュー)
+
+統一認証レスポンスの両構成（フラット互換あり/なし）を検証するヘルパースクリプト:
+
+```bash
+./scripts/verify-auth-unification.sh
+```
+
+内部で以下を実行します:
+
+- デフォルト (auth-flat-fields 有効) 全テスト
+- フラット互換フィールド無効構成 (--no-default-features + 必要最小 features) 全テスト
+
+CI ではさらに `no-flat` マトリクス (auth-flat-fields だけを無効化し他主要機能は維持) を常時実行し、将来 (Phase4) の削除後状態を継続的に検証します。
+
+補助スキャン (任意 CI informational ジョブ例):
+
+```bash
+./scripts/deprecation-scan.sh | tee deprecation_scan.txt
+```
+
+生成された一覧をアーティファクト化し、実際に残すべき参照 (テスト or docs) 以外が残っていないかを確認してください。
+
+Phase4 直前チェック:
+
+```bash
+./scripts/phase4-removal-plan.sh
+```
+
+出力が空 (または docs/ / CHANGELOG のみ) になれば最終削除 PR を作成可能です。
+
 ```bash
 cargo build --features legacy-auth-flat
 ```

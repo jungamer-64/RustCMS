@@ -98,7 +98,6 @@ impl Modify for SecurityAddon {
             // Auth
             crate::handlers::auth::RegisterRequest,
             crate::auth::LoginRequest,
-            crate::utils::auth_response::AuthSuccessResponse,
             crate::handlers::auth::RefreshRequest,
             crate::utils::auth_response::AuthSuccessResponse,
             // Posts

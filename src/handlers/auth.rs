@@ -16,7 +16,6 @@ use serde_json::json;
 #[cfg(feature = "legacy-auth-flat")]
 use crate::utils::common_types::UserInfo;
 use crate::utils::response_ext::ApiOk;
-use crate::utils::auth_response::AuthSuccessResponse;
 use crate::{auth::LoginRequest, models::CreateUserRequest, AppState, Result};
 
 /// Registration request
@@ -47,6 +46,15 @@ pub struct LoginResponse {
 #[cfg(feature = "legacy-auth-flat")]
 impl From<AuthSuccessResponse> for LoginResponse {
     fn from(a: AuthSuccessResponse) -> Self {
+        // Emit one-time runtime warning when legacy LoginResponse mapping is exercised.
+        #[cfg(feature = "legacy-auth-flat")]
+        {
+            use crate::utils::deprecation::warn_once;
+            warn_once(
+                "legacy_login_response",
+                "LoginResponse conversion invoked; migrate consumers to AuthSuccessResponse (flattened fields removed in 3.0.0).",
+            );
+        }
         LoginResponse { success: a.success, access_token: a.access_token, refresh_token: a.refresh_token, biscuit_token: a.biscuit_token, user: a.user, expires_in: a.expires_in, session_id: a.session_id, token: a.token }
     }
 }
@@ -110,9 +118,8 @@ pub async fn register(
         eprintln!("Failed to index user for search: {}", e);
     }
 
-    // Build full auth response (access/refresh/biscuit + session) via AppState
-    let auth = state.auth_build_auth_response(user, false).await?;
-    let unified = AuthSuccessResponse::from(auth);
+    // Build full unified auth success response via new convenience wrapper
+    let unified = state.auth_build_success_response(user, false).await?;
     Ok((StatusCode::CREATED, ApiOk(unified)))
 }
 
@@ -161,9 +168,8 @@ pub async fn login(
     let user = state.auth_authenticate(request).await?;
 
     // remember_me を先に取り出してムーブを防止
-    // Build full auth response
-    let auth = state.auth_build_auth_response(user, remember).await?;
-    let unified = AuthSuccessResponse::from(auth);
+    // Build full unified auth success response via convenience wrapper
+    let unified = state.auth_build_success_response(user, remember).await?;
     Ok(ApiOk(unified))
 }
 
@@ -258,7 +264,6 @@ pub struct RefreshRequest { pub refresh_token: String }
     )
 )]
 pub async fn refresh_token(State(state): State<AppState>, Json(body): Json<RefreshRequest>) -> Result<impl IntoResponse> {
-    let (tokens, user) = state.auth_refresh_access_token(&body.refresh_token).await?;
-    let auth_response = crate::utils::auth_response::AuthSuccessResponse::from_parts(&tokens, user);
-    Ok(ApiOk(auth_response))
+    let unified = state.auth_refresh_success_response(&body.refresh_token).await?;
+    Ok(ApiOk(unified))
 }

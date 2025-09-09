@@ -83,12 +83,15 @@ jobs:
       fail-fast: false
       matrix:
         toolchain: ["1.89.0", "stable"]
-        feature-set: ["default", "minimal"]
+        feature-set: ["default", "minimal", "no-flat"]
         include:
           - feature-set: default
             cargo-features: "--all-features"
           - feature-set: minimal
             cargo-features: "--no-default-features"
+          - feature-set: no-flat
+            # Preview removal of deprecated flattened auth fields (disable auth-flat-fields only)
+            cargo-features: "--no-default-features --features auth,cache,compression,database,search"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -111,8 +114,8 @@ jobs:
       - name: Build (${{ matrix.feature-set }})
         run: cargo build --workspace --all-targets ${{ matrix.cargo-features }}
 
-      - name: Run migrations (default feature-set only)
-        if: matrix.feature-set == 'default'
+      - name: Run migrations (default & no-flat feature-sets)
+        if: matrix.feature-set == 'default' || matrix.feature-set == 'no-flat'
         env:
           DATABASE_URL: ${{ env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/cms_test' }}
         run: |
@@ -138,7 +141,7 @@ jobs:
           cargo test --workspace --no-fail-fast ${{ matrix.cargo-features }} 2>&1 | tee test-output.log
           echo "Test exit code: ${PIPESTATUS[0]}" || true
       - name: Contract snapshot check (insta)
-        if: matrix.feature-set == 'default'
+        if: matrix.feature-set == 'default' || matrix.feature-set == 'no-flat'
         env:
           FAST_KEY_TESTS: 1
         run: |
