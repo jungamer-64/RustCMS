@@ -1,21 +1,38 @@
-# Ignore build artifacts and VCS
+## Build artifacts & VCS
 target
 **/target
+.target
 .git
 .github
 .gitignore
 
-# Editor/temp files
+## Editor / temp
 *.swp
 *.swo
 *.DS_Store
+.idea
+.vscode
 
-# Local env / secrets
+## Local env / secrets
 .env
 .env.*
-
-# Uploads and other large runtime data
-uploads
-
 keys
 repo-mirror
+
+## Runtime generated / large data
+uploads
+logs
+*.log
+
+## Coverage / reports
+coverage*
+*.lcov
+
+## Front-end (placeholder if added later)
+node_modules
+
+## Misc
+Thumbs.db
+*.rs.bk
+
+# Keep migrations, config, templates (do NOT ignore)
