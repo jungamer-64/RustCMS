@@ -13,7 +13,7 @@ ARG RUST_VERSION=1.89.0-bookworm
 FROM rust:${RUST_VERSION} AS planner
 ARG CHEF_VERSION="0.1.71"
 WORKDIR /app
-RUN cargo install cargo-chef --locked --version ${CHEF_VERSION}
+RUN cargo install cargo-chef --locked --version "${CHEF_VERSION}"
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 # Copy feature-dependent build scripts or additional manifests if any (adjust as needed)
@@ -97,10 +97,11 @@ RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry,sharin
         feature_flags=""; \
         if [ "$NO_DEFAULT_FEATURES" = "true" ]; then feature_flags="--no-default-features"; fi; \
         if [ -n "$FEATURES" ]; then feature_flags="$feature_flags --features $FEATURES"; fi; \
-        echo "[build] Primary bin: $BINARY  Extra bins: ${BUILD_EXTRA_BINS}"; \
+    echo "[build] Primary bin: ${BINARY}  Extra bins: ${BUILD_EXTRA_BINS}"; \
         sh -c "$BUILD_CMD_BASE --bin $BINARY $feature_flags --locked" || \
             sh -c "$BUILD_CMD_BASE --bin $BINARY $feature_flags"; \
             if [ -n "$BUILD_EXTRA_BINS" ]; then \
+                # iterate space-separated extra binaries safely
                 for extra in $BUILD_EXTRA_BINS; do \
                     echo "[build] Extra bin: $extra"; \
                     sh -c "$BUILD_CMD_BASE --bin $extra $feature_flags --locked" || \
@@ -117,8 +118,9 @@ RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry,sharin
                     CAND_DIR="$TARGET_DIR_BASE/release"; \
                 fi; \
                 echo "[strip] Stripping binaries in $CAND_DIR"; \
-                for bin in ${BINARY} $BUILD_EXTRA_BINS; do \
-                    if [ -f "$CAND_DIR/$bin" ]; then \
+                # iterate over primary and extra bins (space-separated) and strip if present
+                for bin in $BINARY $BUILD_EXTRA_BINS; do \
+                    if [ -n "$bin" ] && [ -f "$CAND_DIR/$bin" ]; then \
                         strip --strip-all "$CAND_DIR/$bin" || true; \
                     fi; \
                 done; \
@@ -157,11 +159,12 @@ WORKDIR /app
 
 # Create non-root user/group early so COPY --chown can set ownership directly
 RUN set -eux; \
-        groupadd --system -g ${APP_GID} cms || true; \
-        useradd  --system -g ${APP_GID} -u ${APP_UID} --home /app --shell /usr/sbin/nologin cms || true
+    groupadd --system -g "${APP_GID}" cms || true; \
+    # -l prevents creating an excessively long home directory entry in /etc/passwd in some base images
+    useradd --system -l -g "${APP_GID}" -u "${APP_UID}" --home /app --shell /usr/sbin/nologin cms || true
 
 # Determine target triple (optional informational file)
-RUN set -eux; if [ -n "$TARGET" ]; then echo $TARGET > /tmp/target-triple; else echo "" > /tmp/target-triple; fi
+RUN set -eux; if [ -n "$TARGET" ]; then echo "$TARGET" > /tmp/target-triple; else echo "" > /tmp/target-triple; fi
 ENV TARGET_TRIPLE_FILE=/tmp/target-triple
 
 # Copy primary binary & assets with ownership set directly

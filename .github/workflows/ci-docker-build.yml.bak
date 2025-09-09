@@ -1,0 +1,145 @@
+name: Docker Build
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*.*.*' ]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+  pull_request:
+    branches: [ main ]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write   # push が発生するケースで必要
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BASE: ghcr.io/${{ github.repository_owner }}/rustcms
+
+jobs:
+  build:
+    name: Build & (conditional) Push
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: cms
+            binary: cms-server
+            features: production
+            no_default: false
+            variant: prod
+          - id: admin
+            binary: admin_server
+            features: dev-tools,auth,database
+            no_default: false
+            variant: admin
+          - id: minimal
+            binary: cms-server
+            features: ""
+            no_default: true
+            variant: minimal
+
+    steps:
+      - name: Checkout
+        # TODO: pin this action to a full commit SHA for immutability
+        uses: actions/checkout@v4
+        with:
+            fetch-depth: 0
+
+      - name: Derive meta (tags/labels)
+        id: meta
+        # TODO: pin this action to a full commit SHA for immutability
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_BASE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha
+            type=semver,pattern={{version}}
+            type=raw,value=${{ matrix.variant }}-latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ matrix.variant }}-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.title=Rust CMS (${{ matrix.variant }})
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.vendor=RustCMS
+
+      - name: Set up QEMU
+        # TODO: pin this action to a full commit SHA for immutability
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        # TODO: pin this action to a full commit SHA for immutability
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: github.event_name == 'push'
+        # TODO: pin this action to a full commit SHA for immutability
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build (and maybe push)
+        id: build
+        # TODO: pin this action to a full commit SHA for immutability
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: ${{ github.event_name == 'push' }}
+          provenance: false
+          sbom: false
+          platforms: linux/amd64
+          build-args: |
+            FEATURES=${{ matrix.features }}
+            NO_DEFAULT_FEATURES=${{ matrix.no_default }}
+            BINARY=${{ matrix.binary }}
+            BUILD_VARIANT=${{ matrix.variant }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.id }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.id }}
+
+      - name: Export image tar (PR only)
+        if: github.event_name == 'pull_request'
+        run: |
+          mkdir -p dist
+          docker save ${{ fromJSON(steps.meta.outputs.json).tags[0] }} > dist/${{ matrix.variant }}.tar
+
+      - name: Upload image artifact (PR)
+        if: github.event_name == 'pull_request'
+        # TODO: pin this action to a full commit SHA for immutability
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.variant }}
+          path: dist/${{ matrix.variant }}.tar
+          retention-days: 3
+
+      - name: Trivy scan (advisory)
+        if: github.event_name == 'pull_request'
+        # TODO: pin this action to a full commit SHA for immutability
+        uses: aquasecurity/trivy-action@0.24.0
+        continue-on-error: true
+        with:
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          format: 'table'
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Digest output
+        run: echo "digest=${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT

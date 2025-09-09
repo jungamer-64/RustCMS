@@ -28,9 +28,15 @@ echo $STREAK > "$STATE_FILE"
 echo "[auto-guidance] Zero streak: $STREAK" >&2
 
 if [ $STREAK -ge 3 ]; then
-  cat <<EOF
-All deprecated auth flat field references have been zero for $STREAK consecutive runs.\n
-Recommended next steps:\n  1. Add a CI step after tests: \n     bash scripts/deprecation-strict-check.sh\n  2. Remove 'auth-flat-fields' from default features (and eventually delete code).\n  3. Remove 'legacy-auth-flat' feature & LoginResponse schema.\n  4. Regenerate OpenAPI clients and announce in CHANGELOG (Phase 4).\nEOF
-fi
+  cat <<'EOF'
+All deprecated auth flat field references have been zero for the current consecutive runs.
+
+Recommended next steps:
+  1. Add a CI step after tests:
+     bash scripts/deprecation-strict-check.sh
+  2. Remove 'auth-flat-fields' from default features (and eventually delete code).
+  3. Remove 'legacy-auth-flat' feature & LoginResponse schema.
+  4. Regenerate OpenAPI clients and announce in CHANGELOG (Phase 4).
+EOF
 
 exit 0

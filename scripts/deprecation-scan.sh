@@ -50,7 +50,8 @@ PATTERNS=(
 
 IGNORE_DIRS=(target uploads .git .github/ISSUE_TEMPLATE)
 
-IGNORE_EXPR="$(IFS='|'; echo "${IGNORE_DIRS[*]}")"
+# Safely join IGNORE_DIRS with '|' without changing the global IFS
+IGNORE_EXPR=$(printf '%s|' "${IGNORE_DIRS[@]}" | sed 's/|$//')
 
 matches_found=0
 
@@ -60,8 +61,9 @@ for pat in "${PATTERNS[@]}"; do
     # Use ripgrep, ignore directories, skip binary, no colors.
     OUT=$(rg -n --color=never -e "$pat" \
       --glob '!target' --glob '!uploads' --glob '!.git' --glob '!.github/ISSUE_TEMPLATE' || true)
-  else
+    else
     # Grep fallback: -I to ignore binary, prune ignored dirs.
+    # Quote the pattern and ignore expression to avoid word-splitting / IFS issues.
     OUT=$(grep -R -n -I -E "$pat" . \
       | grep -vE "$IGNORE_EXPR" || true)
   fi
