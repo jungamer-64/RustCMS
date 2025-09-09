@@ -24,3 +24,4 @@ pub mod auth_response;
 pub mod search_index;
 pub mod dto;
 pub mod deprecation;
+pub mod security_validation; // Security validation utilities
