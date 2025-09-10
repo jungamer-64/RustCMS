@@ -690,3 +690,85 @@ impl Database {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    #[test]
+    fn test_paged_params_defaults_and_limits() {
+        // page 0 -> treated as 1, limit 0 -> default 10
+        let (p, l, o) = Database::paged_params(0, 0);
+        assert_eq!(p, 1);
+        assert_eq!(l, 10);
+        assert_eq!(o, 0);
+
+        // large limit clipped to 100
+        let (_p2, l2, _o2) = Database::paged_params(2, 1000);
+        assert_eq!(l2, 100);
+    }
+
+    #[test]
+    fn test_merge_opt_and_option() {
+        let current = "current".to_string();
+        let candidate_some = Some("cand".to_string());
+        let candidate_none: Option<String> = None;
+        assert_eq!(merge_opt(&candidate_some, &current), "cand".to_string());
+        assert_eq!(merge_opt(&candidate_none, &current), current);
+
+        let cur_opt: Option<String> = Some("cur".to_string());
+        let cand_opt_some = Some("new".to_string());
+        let cand_opt_none: Option<String> = None;
+        assert_eq!(merge_opt_option(&cand_opt_some, &cur_opt), Some("new".to_string()));
+        assert_eq!(merge_opt_option(&cand_opt_none, &cur_opt), Some("cur".to_string()));
+    }
+
+    #[test]
+    fn test_compute_post_update_and_build_changes() {
+        let author = Uuid::new_v4();
+        let existing = Post {
+            id: Uuid::new_v4(),
+            title: "Old".to_string(),
+            slug: "old".to_string(),
+            content: "old content".to_string(),
+            excerpt: None,
+            author_id: author,
+            status: "draft".to_string(),
+            featured_image_id: None,
+            tags: vec!["rust".to_string()],
+            categories: vec!["tech".to_string()],
+            meta_title: None,
+            meta_description: None,
+            published_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let req = crate::models::post::UpdatePostRequest {
+            title: Some("New".to_string()),
+            content: None,
+            excerpt: Some("ex".to_string()),
+            slug: None,
+            published: Some(true),
+            tags: Some(vec!["rust".to_string(), "programming".to_string()]),
+            category: Some("Programming".to_string()),
+            featured_image: None,
+            meta_title: None,
+            meta_description: None,
+            published_at: None,
+            status: None,
+        };
+
+        let data = compute_post_update_data(&existing, &req);
+        // ensure title was updated and tags merged
+        assert_eq!(data.title, "New".to_string());
+        assert!(data.tags.contains(&"programming".to_string()));
+
+        // build_post_changes will set published_at when status published and existing none
+        let changed = Database::build_post_changes(existing, data);
+        assert_eq!(changed.status, "published".to_string());
+        assert!(changed.published_at.is_some());
+    }
+}

@@ -828,3 +828,41 @@ pub fn require_admin_permission(auth_context: &AuthContext) -> crate::Result<()>
         Err(AuthError::InsufficientPermissions.into())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+    use chrono::Utc;
+
+    #[test]
+    fn require_admin_permission_allows_admin() {
+        let ctx = AuthContext {
+            user_id: Uuid::new_v4(),
+            username: "admin_user".to_string(),
+            role: UserRole::Admin,
+            session_id: "s1".to_string(),
+            permissions: vec!["read".to_string(), "admin".to_string()],
+        };
+        assert!(require_admin_permission(&ctx).is_ok());
+    }
+
+    #[test]
+    fn require_admin_permission_denies_non_admin() {
+        let ctx = AuthContext {
+            user_id: Uuid::new_v4(),
+            username: "normal_user".to_string(),
+            role: UserRole::Subscriber,
+            session_id: "s2".to_string(),
+            permissions: vec!["read".to_string()],
+        };
+        let res = require_admin_permission(&ctx);
+        assert!(res.is_err());
+        // Ensure the error maps to AppError::Authorization when converted
+        let app_err: crate::AppError = res.unwrap_err();
+        match app_err {
+            crate::AppError::Authorization(_) => {}
+            other => panic!("expected Authorization error, got {:?}", other),
+        }
+    }
+}
