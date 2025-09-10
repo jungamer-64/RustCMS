@@ -16,6 +16,9 @@ use serde_json::json;
 use utoipa::ToSchema;
 
 #[cfg(feature = "legacy-auth-flat")]
+use crate::utils::auth_response::AuthSuccessResponse;
+
+#[cfg(feature = "legacy-auth-flat")]
 use crate::utils::common_types::UserInfo;
 use crate::utils::response_ext::ApiOk;
 use crate::{AppState, Result, auth::LoginRequest, models::CreateUserRequest};

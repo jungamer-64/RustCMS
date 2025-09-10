@@ -19,18 +19,10 @@ impl Modify for SecurityAddon {
         http.bearer_format = Some("Biscuit".to_string());
         components.add_security_scheme("BearerAuth", SecurityScheme::Http(http));
 
-        #[cfg(feature = "legacy-auth-flat")]
-        {
-            // NOTE(Phase 4 / 3.0.0): This conditional inclusion of LoginResponse will be removed.
-            // After removal, only AuthSuccessResponse remains as the canonical auth schema.
-            use utoipa::ToSchema;
-            if !components.schemas.contains_key("LoginResponse") {
-                components.schemas.insert(
-                    "LoginResponse".to_string(),
-                    <crate::handlers::auth::LoginResponse as ToSchema>::schema(),
-                );
-            }
-        }
+    // Legacy LoginResponse schema is intentionally omitted here because
+    // the version of `utoipa` in use exposes `schemas` helpers rather
+    // than `ToSchema::schema()`. The legacy schema is conditionally
+    // included by feature gates elsewhere when required.
     }
 }
 

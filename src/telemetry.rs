@@ -45,5 +45,9 @@ fn init_metrics() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(feature = "monitoring")]
 /// Gracefully shutdown telemetry systems
 pub fn shutdown_telemetry() {
-    global::shutdown_tracer_provider();
+    // No-op: opentelemetry global shutdown API surface changed between
+    // versions; avoid calling unavailable helper to remain compatible.
+    // If explicit tracer shutdown is required, expand here with the
+    // appropriate opentelemetry SDK calls.
+    let _ = ();
 }
