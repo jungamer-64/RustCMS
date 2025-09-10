@@ -1,7 +1,6 @@
 use cms_backend::error::AppError;
 /// Tests for API type safety and response structures
 use cms_backend::utils::api_types::{ApiResponse, PaginatedResponse, Pagination, PaginationQuery};
-use serde_json;
 use validator::ValidationErrors;
 
 #[cfg(test)]

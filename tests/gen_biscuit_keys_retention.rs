@@ -1,7 +1,7 @@
 mod helpers;
 use helpers::common::{
     count_backups_with_prefix, make_temp_dirs, run_cargo_gen_biscuit_keys,
-    run_compressed_backup_sequence, run_gen_biscuit_keys_multiple_backups,
+    run_gen_biscuit_keys_multiple_backups,
 };
 
 // How many times to generate backups in the smoke portion of this test.

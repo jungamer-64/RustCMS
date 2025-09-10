@@ -14,12 +14,11 @@ fn main() {
 
     // Determine output path from env or first non-flag arg.
     let mut out: Option<String> = env::var("OPENAPI_OUT").ok();
-    if out.is_none() {
-        if let Some(arg1) = env::args().nth(1) {
-            if !arg1.starts_with('-') {
-                out = Some(arg1);
-            }
-        }
+    if out.is_none()
+        && let Some(arg1) = env::args().nth(1)
+        && !arg1.starts_with('-')
+    {
+        out = Some(arg1);
     }
 
     if let Some(path) = out {

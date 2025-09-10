@@ -127,7 +127,7 @@ impl<T> Paginated<T> {
     }
     pub fn map<U, F: FnMut(&T) -> U>(&self, mut f: F) -> Paginated<U> {
         Paginated::new(
-            self.items.iter().map(|t| f(t)).collect(),
+            self.items.iter().map(&mut f).collect(),
             self.total,
             self.page,
             self.limit,

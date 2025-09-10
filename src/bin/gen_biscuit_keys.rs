@@ -27,17 +27,11 @@ fn parse_version(name: &str) -> Option<u32> {
 
 fn next_version(dir: &Path) -> Option<u32> {
     let mut max_v: u32 = 0;
-    if dir.exists() {
-        if let Ok(read) = fs::read_dir(dir) {
-            for entry in read.flatten() {
-                let name = entry.file_name();
-                if let Some(s) = name.to_str() {
-                    if let Some(v) = parse_version(s) {
-                        if v > max_v {
-                            max_v = v;
-                        }
-                    }
-                }
+    if dir.exists() && let Ok(read) = fs::read_dir(dir) {
+        for entry in read.flatten() {
+            let name = entry.file_name();
+            if let Some(s) = name.to_str() && let Some(v) = parse_version(s) && v > max_v {
+                max_v = v;
             }
         }
     }
@@ -82,12 +76,11 @@ fn prune_versions(dir: &Path, keep: usize) {
     let mut versions: Vec<u32> = Vec::new();
     if let Ok(read) = fs::read_dir(dir) {
         for entry in read.flatten() {
-            if let Some(name) = entry.file_name().to_str() {
-                if name.starts_with("biscuit_private_v") && name.ends_with(".b64") {
-                    if let Some(v) = parse_version(name) {
-                        versions.push(v);
-                    }
-                }
+            if let Some(name) = entry.file_name().to_str()
+                && name.starts_with("biscuit_private_v") && name.ends_with(".b64")
+                && let Some(v) = parse_version(name)
+            {
+                versions.push(v);
             }
         }
     }
@@ -164,13 +157,13 @@ fn append_env_file(path: &Path, priv_b64: &str, pub_b64: &str, force: bool) -> s
         }
         writeln!(f, "BISCUIT_PRIVATE_KEY_B64={}", priv_b64)?;
         writeln!(f, "BISCUIT_PUBLIC_KEY_B64={}", pub_b64)?;
-        return Ok(());
+        Ok(())
     } else {
         let mut f = fs::OpenOptions::new().append(true).open(path)?;
         writeln!(f, "\n# Generated biscuit keys")?;
         writeln!(f, "BISCUIT_PRIVATE_KEY_B64={}", priv_b64)?;
         writeln!(f, "BISCUIT_PUBLIC_KEY_B64={}", pub_b64)?;
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -208,6 +201,7 @@ fn report_env_result(envfile: &str, res: std::io::Result<()>, force: bool) {
 }
 
 // --- DRY helpers for output flows ---
+#[allow(clippy::too_many_arguments)]
 fn handle_files_output(
     dir: &str,
     versioned: bool,
@@ -310,6 +304,7 @@ fn handle_files_output(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn handle_env_output(
     envfile: &str,
     backup: bool,
@@ -345,12 +340,10 @@ fn maybe_backup_file(
     _max_backups: Option<usize>,
     _compress: Option<bool>,
 ) -> std::io::Result<()> {
-    if !backup {
+    if !backup || !path.exists() {
         return Ok(());
     }
-    if !path.exists() {
-        return Ok(());
-    }
+
     let ts = timestamp();
     let file_name = path
         .file_name()
@@ -362,56 +355,39 @@ fn maybe_backup_file(
     } else {
         path.with_file_name(bak_name)
     };
-    // Ensure backup dir exists
-    if let Some(parent) = bak.parent() {
-        if let Err(e) = fs::create_dir_all(parent) {
-            eprintln!("Failed to create backup dir {}: {}", parent.display(), e);
-        }
+
+    if let Some(parent) = bak.parent()
+        && let Err(e) = fs::create_dir_all(parent)
+    {
+        eprintln!("Failed to create backup dir {}: {}", parent.display(), e);
     }
-    // Prefer rename (move). If that fails (cross-device), fall back to copy.
+
+    let post_backup = |bak_path: &Path| {
+        if let Some(n) = _max_backups
+            && n > 0
+            && let Some(parent) = bak_path.parent()
+            && let Err(e) = enforce_backup_retention(parent, &file_name, n)
+        {
+            eprintln!("Failed to enforce backup retention for {}: {}", file_name, e);
+        }
+        if let Some(true) = _compress
+            && let Err(e) = compress_file(bak_path)
+        {
+            eprintln!("Failed to compress backup {}: {}", bak_path.display(), e);
+        }
+    };
+
     match fs::rename(path, &bak) {
-        Ok(_) => {
+        Ok(()) => {
             println!("Backed up {} -> {}", path.display(), bak.display());
-            if let Some(n) = _max_backups {
-                if n > 0 {
-                    if let Some(parent) = bak.parent() {
-                        if let Err(e) = enforce_backup_retention(parent, &file_name, n) {
-                            eprintln!(
-                                "Failed to enforce backup retention for {}: {}",
-                                file_name, e
-                            );
-                        }
-                    }
-                }
-            }
-            if let Some(true) = _compress {
-                if let Err(e) = compress_file(&bak) {
-                    eprintln!("Failed to compress backup {}: {}", bak.display(), e);
-                }
-            }
-            return Ok(());
+            post_backup(&bak);
+            Ok(())
         }
         Err(_) => {
             fs::copy(path, &bak)?;
             println!("Backed up (copied) {} -> {}", path.display(), bak.display());
-            if let Some(n) = _max_backups {
-                if n > 0 {
-                    if let Some(parent) = bak.parent() {
-                        if let Err(e) = enforce_backup_retention(parent, &file_name, n) {
-                            eprintln!(
-                                "Failed to enforce backup retention for {}: {}",
-                                file_name, e
-                            );
-                        }
-                    }
-                }
-            }
-            if let Some(true) = _compress {
-                if let Err(e) = compress_file(&bak) {
-                    eprintln!("Failed to compress backup {}: {}", bak.display(), e);
-                }
-            }
-            return Ok(());
+            post_backup(&bak);
+            Ok(())
         }
     }
 }

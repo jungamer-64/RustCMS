@@ -87,13 +87,11 @@ fn is_already_encoded(input: &str) -> bool {
     // %xx形式のパターンが含まれているかチェック
     let mut chars = input.chars();
     while let Some(ch) = chars.next() {
-        if ch == '%' {
-            // 次の2文字が16進数かチェック
-            if let (Some(c1), Some(c2)) = (chars.next(), chars.next()) {
-                if c1.is_ascii_hexdigit() && c2.is_ascii_hexdigit() {
-                    return true;
-                }
-            }
+        if ch == '%'
+            && let (Some(c1), Some(c2)) = (chars.next(), chars.next())
+            && c1.is_ascii_hexdigit() && c2.is_ascii_hexdigit()
+        {
+            return true;
         }
     }
     false

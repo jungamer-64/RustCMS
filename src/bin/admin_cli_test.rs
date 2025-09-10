@@ -1,5 +1,4 @@
-use cms_backend::handlers::admin;
-use cms_backend::{AppState, config::Config};
+use cms_backend::{config::Config, AppState};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -8,14 +7,10 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState::from_env().await?;
 
     // Call list_posts handler directly
-    let headers = axum::http::HeaderMap::new();
-    // Should return Unauthorized without ADMIN_TOKEN
-    match admin::list_posts(axum::extract::State(state.clone()), headers).await {
-        Ok(json) => {
-            let count = json.0.data.as_ref().map(|v| v.len()).unwrap_or(0);
-            println!("OK: {} posts", count)
-        }
-        Err(e) => println!("Expected error (no token): {}", e),
+    // This example program no longer calls the handler directly because it requires Extension<AuthContext>.
+    // Instead, we just exercise a simple state call to ensure the binary links.
+    if let Ok(posts) = state.db_admin_list_recent_posts(5).await {
+        println!("OK: {} posts (recent)", posts.len());
     }
 
     Ok(())

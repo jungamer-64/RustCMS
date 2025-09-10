@@ -52,6 +52,7 @@ where
 /// - build a cache key outside
 /// - wrap filters into an Arc to clone into closures
 /// - call fetch_paginated_cached with the provided closures that use those filters
+#[allow(clippy::too_many_arguments)]
 pub async fn fetch_paginated_cached_with_filters<T, FI, FC, FutI, FutC, Filt>(
     state: crate::AppState,
     cache_key: String,
@@ -80,14 +81,15 @@ where
         ttl_seconds,
         page,
         limit,
-        move || fitems(),
-        move || fcount(),
+        fitems,
+        fcount,
     )
     .await
 }
 
 /// Variant where the item fetch returns raw models `M` and a separate mapper converts them to `T`.
 /// This removes repetitive `iter().map(...).collect()` boilerplate in handlers.
+#[allow(clippy::too_many_arguments)]
 pub async fn fetch_paginated_cached_mapped<T, M, FI, FC, FutI, FutC, Map>(
     state: crate::AppState,
     cache_key: String,
@@ -114,7 +116,7 @@ where
         move || async move {
             let models = fetch_models().await?;
             let total = count_total().await?;
-            let items: Vec<T> = models.iter().map(|m| map(m)).collect();
+            let items: Vec<T> = models.iter().map(&map).collect();
             Ok(Paginated::new(items, total, page, limit))
         },
     )

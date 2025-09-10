@@ -888,10 +888,10 @@ impl AppState {
 
     #[cfg(feature = "database")]
     pub async fn db_delete_user(&self, id: uuid::Uuid) -> crate::Result<()> {
-        let res = timed_op!(self, "db", self.database.delete_user(id))?;
+    timed_op!(self, "db", self.database.delete_user(id))?;
         #[cfg(feature = "cache")]
         self.invalidate_user_caches(id).await;
-        Ok(res)
+    Ok(())
     }
 
     #[cfg(feature = "database")]

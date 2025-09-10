@@ -183,18 +183,18 @@ async fn main() -> Result<()> {
                 }
             }
 
-            if let Some(components) = v.get("components") {
-                if let Some(schemas) = components.get("schemas") {
-                    println!(
-                        "\nFound {} schemas",
-                        schemas.as_object().map(|o| o.len()).unwrap_or(0)
-                    );
-                    println!("ApiResponse: {}", schemas.get("ApiResponse").is_some());
-                    println!(
-                        "PaginatedResponse: {}",
-                        schemas.get("PaginatedResponse").is_some()
-                    );
-                }
+            if let Some(components) = v.get("components")
+                && let Some(schemas) = components.get("schemas")
+            {
+                println!(
+                    "\nFound {} schemas",
+                    schemas.as_object().map(|o| o.len()).unwrap_or(0)
+                );
+                println!("ApiResponse: {}", schemas.get("ApiResponse").is_some());
+                println!(
+                    "PaginatedResponse: {}",
+                    schemas.get("PaginatedResponse").is_some()
+                );
             }
         }
 

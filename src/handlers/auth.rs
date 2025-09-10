@@ -36,13 +36,8 @@ pub struct RegisterRequest {
 #[cfg(feature = "legacy-auth-flat")]
 /// 旧 LoginResponse 型 (feature = legacy-auth-flat 有効時のみ公開) - 新規コードは AuthSuccessResponse を使用してください
 #[allow(dead_code)]
+#[allow(deprecated)]
 #[derive(Debug, Serialize, ToSchema)]
-#[cfg_attr(
-    feature = "legacy-auth-flat",
-    deprecated(
-        note = "Use AuthSuccessResponse (feature legacy-auth-flat will be removed in 3.0.0)"
-    )
-)]
 pub struct LoginResponse {
     pub success: bool,
     pub access_token: String,
@@ -55,6 +50,7 @@ pub struct LoginResponse {
 }
 
 #[cfg(feature = "legacy-auth-flat")]
+#[allow(deprecated)]
 impl From<AuthSuccessResponse> for LoginResponse {
     fn from(a: AuthSuccessResponse) -> Self {
         // Emit one-time runtime warning when legacy LoginResponse mapping is exercised.

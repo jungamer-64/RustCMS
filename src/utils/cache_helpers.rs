@@ -24,10 +24,10 @@ where
             .cache
             .set(key.to_string(), &v, Some(Duration::from_secs(ttl_secs)))
             .await;
-        return Ok(v);
+    Ok(v)
     }
     #[cfg(not(feature = "cache"))]
     {
-        return compute().await;
+    compute().await
     }
 }

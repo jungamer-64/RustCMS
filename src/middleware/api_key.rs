@@ -11,7 +11,7 @@ use tracing::{debug, warn};
 // 統一トレイト対応アダプタ (失敗回数レートリミット) ※AUTH feature 時のみ
 #[cfg(feature = "auth")]
 static API_KEY_FAILURE_LIMITER: Lazy<ApiKeyFailureLimiterAdapter> =
-    Lazy::new(|| ApiKeyFailureLimiterAdapter::from_env());
+    Lazy::new(ApiKeyFailureLimiterAdapter::from_env);
 
 /// 抽出結果を request extensions に格納するキー
 #[derive(Clone, Debug)]

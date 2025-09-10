@@ -515,10 +515,10 @@ impl AuthService {
         Ok(parsed)
     }
 
-    fn validate_and_bump_refresh_session<'a>(
+    fn validate_and_bump_refresh_session(
         &self,
         parsed: &ParsedBiscuit,
-        sessions: &'a mut std::collections::HashMap<String, SessionData>,
+        sessions: &mut std::collections::HashMap<String, SessionData>,
     ) -> Result<u32> {
         let session = sessions
             .get_mut(&parsed.session_id)
@@ -685,10 +685,10 @@ impl AuthService {
 
     #[inline]
     fn ensure_token_type(&self, expect_type: Option<&str>, actual: &str) -> Result<()> {
-        if let Some(t) = expect_type {
-            if actual != t {
-                return Err(AuthError::InvalidToken.into());
-            }
+        if let Some(t) = expect_type
+            && actual != t
+        {
+            return Err(AuthError::InvalidToken.into());
         }
         Ok(())
     }

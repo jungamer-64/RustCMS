@@ -26,6 +26,12 @@ impl RateLimitLayer {
     }
 }
 
+impl Default for RateLimitLayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<S> Layer<S> for RateLimitLayer {
     type Service = RateLimitService<S>;
 
@@ -99,21 +105,18 @@ where
 }
 
 fn extract_ip_from_request<B>(request: &Request<B>) -> Option<IpAddr> {
-    if let Some(forwarded) = request.headers().get("X-Forwarded-For") {
-        if let Ok(forwarded_str) = forwarded.to_str() {
-            if let Some(ip_str) = forwarded_str.split(',').next() {
-                if let Ok(ip) = ip_str.trim().parse() {
-                    return Some(ip);
-                }
-            }
-        }
+    if let Some(forwarded) = request.headers().get("X-Forwarded-For")
+        && let Ok(forwarded_str) = forwarded.to_str()
+        && let Some(ip_str) = forwarded_str.split(',').next()
+        && let Ok(ip) = ip_str.trim().parse()
+    {
+        return Some(ip);
     }
-    if let Some(real_ip) = request.headers().get("X-Real-IP") {
-        if let Ok(ip_str) = real_ip.to_str() {
-            if let Ok(ip) = ip_str.parse() {
-                return Some(ip);
-            }
-        }
+    if let Some(real_ip) = request.headers().get("X-Real-IP")
+        && let Ok(ip_str) = real_ip.to_str()
+        && let Ok(ip) = ip_str.parse()
+    {
+        return Some(ip);
     }
     None
 }

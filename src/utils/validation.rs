@@ -31,12 +31,12 @@ pub fn validate_user_input(email: &str, password: Option<&str>) -> Result<(), Ap
         return Err(AppError::BadRequest("Invalid email format".to_string()));
     }
 
-    if let Some(pwd) = password {
-        if pwd.len() < 6 {
-            return Err(AppError::BadRequest(
-                "Password must be at least 6 characters".to_string(),
-            ));
-        }
+    if let Some(pwd) = password
+        && pwd.len() < 6
+    {
+        return Err(AppError::BadRequest(
+            "Password must be at least 6 characters".to_string(),
+        ));
     }
 
     Ok(())

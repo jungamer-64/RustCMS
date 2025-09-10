@@ -45,10 +45,12 @@ async fn build_auth(db: &Database) -> AuthService {
     use biscuit_auth::KeyPair;
     let kp = KeyPair::new();
     let priv_b64 = base64::engine::general_purpose::STANDARD.encode(kp.private().to_bytes());
-    let mut cfg = AuthConfig::default();
-    cfg.biscuit_root_key = priv_b64;
-    cfg.access_token_ttl_secs = 60;
-    cfg.refresh_token_ttl_secs = 300;
+    let cfg = AuthConfig {
+        biscuit_root_key: priv_b64,
+        access_token_ttl_secs: 60,
+        refresh_token_ttl_secs: 300,
+        ..Default::default()
+    };
     AuthService::new(&cfg, db).await.expect("auth init")
 }
 

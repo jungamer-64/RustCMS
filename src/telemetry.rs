@@ -1,6 +1,4 @@
 // telemetry temporarily minimized; re-expand later
-#[cfg(feature = "monitoring")]
-use opentelemetry::global;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Initialize comprehensive telemetry for enterprise monitoring

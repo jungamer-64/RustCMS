@@ -103,7 +103,7 @@ impl AuthSuccessResponse {
                 // Metrics: count each construction that still emits deprecated flattened fields
                 #[cfg(feature = "monitoring")]
                 counter!("auth_flat_fields_legacy_usage_total").increment(1);
-                return Self {
+                Self {
                     success: true,
                     tokens: tokens.clone(),
                     user,
@@ -113,11 +113,11 @@ impl AuthSuccessResponse {
                     expires_in: tokens.expires_in,
                     session_id: tokens.session_id.clone(),
                     token: tokens.access_token.clone(),
-                };
+                }
             }
             #[cfg(not(feature = "auth-flat-fields"))]
             {
-                return Self::new_unified(tokens, user);
+                Self::new_unified(tokens, user)
             }
         }
     }

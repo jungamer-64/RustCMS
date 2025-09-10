@@ -368,27 +368,23 @@ impl Config {
         }
 
         // 追加: LOG_LEVEL / LOG_FORMAT 環境変数があれば上書き
-        if let Ok(lvl) = env::var("LOG_LEVEL") {
-            if !lvl.is_empty() {
-                cfg.logging.level = lvl;
-            }
+        if let Ok(lvl) = env::var("LOG_LEVEL") && !lvl.is_empty() {
+            cfg.logging.level = lvl;
         }
-        if let Ok(fmt) = env::var("LOG_FORMAT") {
-            if !fmt.is_empty() {
-                cfg.logging.format = fmt;
-            }
+        if let Ok(fmt) = env::var("LOG_FORMAT") && !fmt.is_empty() {
+            cfg.logging.format = fmt;
         }
 
         // 旧 production_config.rs / simple_config.rs 由来の変数を一部マッピング (後方互換)
-        if let Ok(v) = env::var("ACCESS_TOKEN_TTL_SECS") {
-            if let Ok(n) = v.parse() {
-                cfg.auth.access_token_ttl_secs = n;
-            }
+        if let Ok(v) = env::var("ACCESS_TOKEN_TTL_SECS")
+            && let Ok(n) = v.parse()
+        {
+            cfg.auth.access_token_ttl_secs = n;
         }
-        if let Ok(v) = env::var("REFRESH_TOKEN_TTL_SECS") {
-            if let Ok(n) = v.parse() {
-                cfg.auth.refresh_token_ttl_secs = n;
-            }
+        if let Ok(v) = env::var("REFRESH_TOKEN_TTL_SECS")
+            && let Ok(n) = v.parse()
+        {
+            cfg.auth.refresh_token_ttl_secs = n;
         }
 
         // sanitize cors origins (toml で文字列カンマ列だった場合をケア) ※ production.toml 古い形式互換

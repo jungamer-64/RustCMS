@@ -39,5 +39,5 @@ async fn validation_error_converted() {
     let v: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     assert_eq!(v["success"], false);
     assert!(v["error"].as_str().unwrap().contains("Invalid input"));
-    assert!(v["validation_errors"].as_array().unwrap().len() >= 1);
+    assert!(!v["validation_errors"].as_array().unwrap().is_empty());
 }

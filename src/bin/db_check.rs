@@ -33,9 +33,9 @@ async fn main() -> Result<()> {
                 state.db_admin_delete_post(uuid).await?;
 
                 if args.json {
-                    println!("{}", json!({"deleted": deleted}));
+                    println!("{}", json!({"deleted": true, "post_id": uuid }));
                 } else {
-                    println!("Deleted {} rows for post id {}", deleted, uuid);
+                    println!("Deleted post id {}", uuid);
                 }
                 return Ok(());
             }

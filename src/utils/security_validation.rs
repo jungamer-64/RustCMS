@@ -3,8 +3,8 @@
 //! Provides validation functions to prevent injection attacks and ensure
 //! data integrity across all handlers and API endpoints.
 
-use crate::middleware::security::{encode_url_component, escape_html, sanitize_input};
-use validator::{Validate, ValidationError};
+use crate::middleware::security::{encode_url_component, escape_html};
+use validator::ValidationError;
 
 /// Validate and sanitize user content (posts, comments, etc.)
 /// Prevents XSS while preserving safe formatting
@@ -22,7 +22,7 @@ pub fn validate_and_sanitize_content(content: &str) -> Result<String, Validation
     // Basic content sanitization while preserving some formatting
     let sanitized = content
         .lines()
-        .map(|line| sanitize_safe_content(line))
+        .map(sanitize_safe_content)
         .collect::<Vec<_>>()
         .join("\n");
 

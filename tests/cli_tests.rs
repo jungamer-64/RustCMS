@@ -37,7 +37,7 @@ fn help_shows_commands() {
 #[test]
 fn migrate_allows_no_seed_flag() {
     let mut cmd = Command::cargo_bin("cms-migrate").unwrap();
-    cmd.args(&["migrate", "--no-seed"]);
+    cmd.args(["migrate", "--no-seed"]);
     let output = cmd.output().expect("failed to run cms-migrate");
 
     let stderr = String::from_utf8_lossy(&output.stderr);

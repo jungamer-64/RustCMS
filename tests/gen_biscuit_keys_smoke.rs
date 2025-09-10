@@ -1,6 +1,4 @@
 mod helpers;
-use helpers::common::run_cargo_gen_biscuit_keys;
-use predicates::str::contains;
 
 #[test]
 fn smoke_prints_private_key() {

@@ -405,10 +405,10 @@ impl PostFilter {
         self.limit = l as usize;
 
         // Sanitize search query
-        if let Some(search) = &self.search {
-            if search.trim().is_empty() || search.len() > 200 {
-                self.search = None;
-            }
+        if let Some(search) = &self.search
+            && (search.trim().is_empty() || search.len() > 200)
+        {
+            self.search = None;
         }
     }
 

@@ -239,7 +239,6 @@ async fn seed_database(state: &AppState) -> Result<()> {
 
 /// Fetch applied migration versions from either `schema_migrations` or
 /// `__diesel_schema_migrations` (fallback). Returns versions ordered asc.
-
 async fn check_migration_status(state: &AppState) -> Result<()> {
     // Use helper to fetch applied migration versions (handles both table names)
     let applied = state.db_fetch_applied_migrations().await?;

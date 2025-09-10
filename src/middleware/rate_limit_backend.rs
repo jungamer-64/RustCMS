@@ -147,7 +147,7 @@ impl ApiKeyRateLimiter for InMemoryRateLimiter {
 }
 
 pub static GLOBAL_RATE_LIMITER: Lazy<InMemoryRateLimiter> =
-    Lazy::new(|| InMemoryRateLimiter::from_env());
+    Lazy::new(InMemoryRateLimiter::from_env);
 
 #[cfg(feature = "cache")]
 static REDIS_RATE_LIMITER: OnceCell<RedisRateLimiter> = OnceCell::new();
@@ -161,7 +161,7 @@ pub fn get_rate_limiter() -> &'static dyn ApiKeyRateLimiter {
         #[cfg(feature = "cache")]
         {
             return REDIS_RATE_LIMITER
-                .get_or_init(|| RedisRateLimiter::from_env())
+                .get_or_init(RedisRateLimiter::from_env)
                 .as_dyn();
         }
         // If redis requested but not compiled with cache, fall back to memory
@@ -251,7 +251,7 @@ impl ApiKeyRateLimiter for RedisRateLimiter {
         // Using block_on not acceptable; function is sync. We use a dedicated runtime handle via tokio::runtime context.
         // SAFETY: This function called within async context (middleware) but trait signature is sync; we use block_in_place.
         let threshold = self.threshold;
-        let result = tokio::task::block_in_place(|| {
+        tokio::task::block_in_place(|| {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
                 if let Ok(mut conn) = self.client.get_multiplexed_async_connection().await {
@@ -266,19 +266,18 @@ impl ApiKeyRateLimiter for RedisRateLimiter {
                 }
                 false
             })
-        });
-        result
+        })
     }
     fn clear(&self, key: &str) {
         let k = self.key(key);
-        let _ = tokio::task::block_in_place(|| {
+    tokio::task::block_in_place(|| {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
                 if let Ok(mut conn) = self.client.get_multiplexed_async_connection().await {
                     let _: Result<(), _> = conn.del(&k).await;
                 }
             })
-        });
+    });
     }
     fn tracked_len(&self) -> usize {
         let mut guard = self.tracked_cache.lock();

@@ -13,7 +13,7 @@ use tower::{Layer, Service};
 #[derive(Clone)]
 pub struct CsrfService {
     /// Secret key for HMAC token generation
-    secret_key: Arc<[u8; 32]>,
+    _secret_key: Arc<[u8; 32]>,
     /// Active CSRF tokens (in production, use Redis or database)
     active_tokens: Arc<RwLock<std::collections::HashSet<String>>>,
 }
@@ -26,7 +26,7 @@ impl CsrfService {
         rand::rng().fill(&mut key);
 
         Self {
-            secret_key: Arc::new(key),
+            _secret_key: Arc::new(key),
             active_tokens: Arc::new(RwLock::new(std::collections::HashSet::new())),
         }
     }
@@ -40,7 +40,7 @@ impl CsrfService {
         // Convert to base64 for safe transmission
         let token = base64::Engine::encode(
             &base64::engine::general_purpose::URL_SAFE_NO_PAD,
-            &token_bytes,
+            token_bytes,
         );
 
         // Store token for validation (防止 token 重复利用攻击)
@@ -68,6 +68,12 @@ impl CsrfService {
         if tokens.len() > 10000 {
             tokens.clear(); // Reset when too many tokens accumulate
         }
+    }
+}
+
+impl Default for CsrfService {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -124,7 +130,6 @@ where
 
         Box::pin(async move {
             let mut response = service.call(request).await?;
-
             let headers = response.headers_mut();
 
             // Security headers for enterprise compliance
@@ -165,19 +170,10 @@ where
             );
 
             // Content Security Policy (CSP)
-            // Use a stricter CSP by default. Allow inline only for docs UI endpoints.
-            let is_docs = path.starts_with("/api/docs");
-            let csp = if is_docs {
-                // Swagger UI requires some inline styles/scripts; relax only for docs routes
-                "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'"
-            } else {
-                // No 'unsafe-inline' for app endpoints; add extra directives
-                "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'"
-            };
             add_security_header(
                 headers,
                 HeaderName::from_static("content-security-policy"),
-                csp,
+                &build_csp_for_path(&path),
             );
 
             // Server identification
@@ -185,6 +181,14 @@ where
 
             Ok(response)
         })
+    }
+}
+
+fn build_csp_for_path(path: &str) -> String {
+    if path.starts_with("/api/docs") {
+        "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'".to_string()
+    } else {
+        "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'".to_string()
     }
 }
 

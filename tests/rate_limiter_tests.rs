@@ -6,11 +6,11 @@ use std::time::Duration;
 #[test]
 fn fixed_window_allows_within_limit() {
     let limiter = FixedWindowLimiter::new(3, 60); // 3 per 60s
-    assert_eq!(limiter.allow("ip1"), true);
-    assert_eq!(limiter.allow("ip1"), true);
-    assert_eq!(limiter.allow("ip1"), true);
+    assert!(limiter.allow("ip1"));
+    assert!(limiter.allow("ip1"));
+    assert!(limiter.allow("ip1"));
     // 4th should fail
-    assert_eq!(limiter.allow("ip1"), false);
+    assert!(!limiter.allow("ip1"));
 }
 
 #[test]
@@ -38,7 +38,6 @@ fn fixed_window_tracks_multiple_keys() {
 mod api_key_adapter_tests {
     use super::*;
     use cms_backend::limiter::adapters::ApiKeyFailureLimiterAdapter;
-    use std::env;
 
     #[tokio::test]
     async fn adapter_blocks_after_threshold() {

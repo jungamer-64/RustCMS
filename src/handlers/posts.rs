@@ -69,6 +69,7 @@ dto_from_model!(PostDto, Post, |p| PostDto {
 // Posts list now directly returns Paginated<PostDto> instead of wrapper
 
 // Shared helper to fetch paginated posts with caching and filters
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn paginate_posts(
     state: AppState,
     page: u32,
@@ -106,7 +107,7 @@ pub(crate) async fn paginate_posts(
                 state.db_count_posts_filtered(status, author, tag).await
             }
         },
-        |p| PostDto::from(p),
+    |p| PostDto::from(p),
     )
     .await?;
     Ok(response)
