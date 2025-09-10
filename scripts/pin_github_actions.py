@@ -10,12 +10,25 @@ import json
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
+#!/usr/bin/env python3
+"""Resolve GitHub Action refs to full commit SHAs and pin workflows.
+
+Usage: export GITHUB_TOKEN=...; python3 scripts/pin_github_actions.py
+"""
+import os
+import re
+import sys
+import json
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError
+
 TOKEN = os.environ.get('GITHUB_TOKEN')
 if not TOKEN:
     print('Set GITHUB_TOKEN in env first', file=sys.stderr)
     sys.exit(1)
 
 WORKFLOW_GLOB = '.github/workflows'
+
 
 def gh_api_get(url):
     req = Request(url)
@@ -33,22 +46,24 @@ def gh_api_get(url):
     except Exception as e:
         return str(e), None
 
+
 def resolve_sha(owner, repo, ref):
-    # try commits endpoint
+    """Try common GitHub API endpoints to resolve a ref to a commit SHA."""
+    # try commits endpoint (works for branches, tags, and SHAs)
     body, code = gh_api_get(f'https://api.github.com/repos/{owner}/{repo}/commits/{ref}')
     if code == 200:
         try:
             return json.loads(body).get('sha')
         except Exception:
             pass
-    # try git ref tags
+    # try git ref tags (handles lightweight and annotated tags)
     body, code = gh_api_get(f'https://api.github.com/repos/{owner}/{repo}/git/ref/tags/{ref}')
     if code == 200:
         try:
             obj = json.loads(body).get('object', {})
             obj_sha = obj.get('sha')
             if obj_sha:
-                # if annotated tag, fetch tag object
+                # if annotated tag, fetch tag object to resolve to commit
                 body2, code2 = gh_api_get(f'https://api.github.com/repos/{owner}/{repo}/git/tags/{obj_sha}')
                 if code2 == 200:
                     try:
@@ -59,7 +74,7 @@ def resolve_sha(owner, repo, ref):
                 return obj_sha
         except Exception:
             pass
-    # try releases/tags
+    # try releases by tag name
     body, code = gh_api_get(f'https://api.github.com/repos/{owner}/{repo}/releases/tags/{ref}')
     if code == 200:
         try:
@@ -76,12 +91,17 @@ def resolve_sha(owner, repo, ref):
             pass
     return None
 
+
 def process_file(path):
     changed = False
     with open(path, 'r', encoding='utf-8') as f:
         lines = f.readlines()
 
-    pattern = re.compile(r'^(?P<indent>\s*)-\s*uses:\s*(?P<action>[^@\s]+)@(?P<ref>\S+)')
+    # match lines like:
+    #   - uses: owner/repo@ref
+    #   uses: owner/repo@ref
+    #   <indent>- uses: owner/repo@ref
+    pattern = re.compile(r'^(?P<indent>\s*)(?P<prefix>-?\s*uses:\s*)(?P<action>[^@\s]+)@(?P<ref>\S+)', re.IGNORECASE)
     out = []
     for ln in lines:
         m = pattern.match(ln)
@@ -91,37 +111,42 @@ def process_file(path):
         action = m.group('action')
         ref = m.group('ref')
         indent = m.group('indent')
+        prefix = m.group('prefix')
+        # local actions like ./ or . should be skipped
         if action.startswith('.') or action.startswith('./'):
             out.append(ln)
             continue
-        if re.fullmatch(r'[0-9a-f]{40}', ref):
+        # already pinned to full sha
+        if re.fullmatch(r'[0-9a-f]{40}', ref, re.IGNORECASE):
             out.append(ln)
             continue
-        owner_repo = action
-        if '/' not in owner_repo:
+        # not a typical owner/repo action (skip)
+        if '/' not in action:
             out.append(ln)
             continue
-        owner, repo = owner_repo.split('/', 1)
-        print(f'Resolving {owner_repo}@{ref} ... ', end='', flush=True)
+        owner, repo = action.split('/', 1)
+        print(f'Resolving {action}@{ref} ... ', end='', flush=True)
         sha = resolve_sha(owner, repo, ref)
         if not sha:
             print('FAILED')
             out.append(ln)
             continue
         print(sha)
-        # insert comment and replacement
-        out.append(f"{indent}# original uses: {owner_repo}@{ref}\n")
-        newline = re.sub(r'@\S+', f'@{sha}', ln, count=1)
-        out.append(newline)
+        # insert comment with original and replace the ref with the sha
+        out.append(f"{indent}# original uses: {action}@{ref}\n")
+        # replace only the first @ref occurrence on the line
+        replaced = re.sub(r'@(\S+)', f'@{sha}', ln, count=1)
+        out.append(replaced)
         changed = True
 
     if changed:
-        # backup
+        # backup original
         with open(path + '.bak', 'w', encoding='utf-8') as b:
             b.writelines(lines)
         with open(path, 'w', encoding='utf-8') as f:
             f.writelines(out)
     return changed
+
 
 def main():
     import glob
@@ -138,6 +163,7 @@ def main():
             print('Modified', p)
     if not any_changed:
         print('No changes')
+
 
 if __name__ == '__main__':
     main()

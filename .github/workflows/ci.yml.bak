@@ -54,15 +54,13 @@ jobs:
 
       - name: Setup toolchain (stable)
         # TODO: pin this action to a full commit SHA for immutability
-        # original uses: dtolnay/rust-toolchain@stable
-        uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
       - name: Cache (Swatinem/rust-cache)
         # TODO: pin this action to a full commit SHA for immutability
-        # original uses: Swatinem/rust-cache@v2
-        uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0
+        uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> target
 
@@ -116,8 +114,7 @@ jobs:
 
       - name: Setup toolchain ${{ matrix.toolchain }}
         # TODO: pin this action to a full commit SHA for immutability
-        # original uses: dtolnay/rust-toolchain@stable
-        uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.toolchain }}
           components: clippy
@@ -127,8 +124,7 @@ jobs:
 
       - name: Cache (Swatinem/rust-cache)
         # TODO: pin this action to a full commit SHA for immutability
-        # original uses: Swatinem/rust-cache@v2
-        uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0
+        uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> target
 
@@ -188,8 +184,7 @@ jobs:
           cargo insta test
       - name: Upload test log
         if: always()
-        # original uses: actions/upload-artifact@v4
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@v4
         with:
           name: test-log-${{ matrix.toolchain }}-${{ matrix.feature-set }}
           path: test-output.log
@@ -217,8 +212,7 @@ jobs:
           bash scripts/deprecation-scan.sh --src-only --json > deprecation_counts.json
           echo "--- JSON counts ---"; cat deprecation_counts.json
       - name: Upload deprecation scan artifacts
-        # original uses: actions/upload-artifact@v4
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@v4
         with:
           name: deprecation-scan-${{ github.sha }}
           path: |
@@ -230,8 +224,7 @@ jobs:
           bash scripts/deprecation-auto-guidance.sh | tee guidance.txt
       - name: Upload guidance
         if: always()
-        # original uses: actions/upload-artifact@v4
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@v4
         with:
           name: deprecation-guidance-${{ github.sha }}
           path: guidance.txt
@@ -258,8 +251,7 @@ jobs:
           fetch-depth: 1
       - name: Cache cargo registry & index
         # TODO: pin this action to a full commit SHA for immutability
-        # original uses: actions/cache@v4
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -284,8 +276,7 @@ jobs:
           fetch-depth: 1
       - name: Cache cargo registry & index
         # TODO: pin this action to a full commit SHA for immutability
-        # original uses: actions/cache@v4
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -309,16 +300,13 @@ jobs:
     steps:
       - name: Checkout repository
         # TODO: pin this action to a full commit SHA for immutability
-        # original uses: actions/checkout@v4
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        uses: actions/checkout@v4
       - name: Set up Rust toolchain
-        # original uses: dtolnay/rust-toolchain@stable
-        uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - name: Cache cargo & target
-        # original uses: actions/cache@v4
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -328,8 +316,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-coverage-
       - name: Cache cargo-tarpaulin binary
-        # original uses: actions/cache@v4
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+        uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/cargo-tarpaulin
           key: ${{ runner.os }}-cargo-tarpaulin-v0.27.3
@@ -342,15 +329,13 @@ jobs:
         run: cargo tarpaulin --verbose --workspace --out Lcov --timeout 240
       - name: Upload coverage to Codacy
         if: env.CODACY_PROJECT_TOKEN != ''
-        # original uses: codacy/codacy-coverage-reporter-action@v1
-        uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699
+        uses: codacy/codacy-coverage-reporter-action@v1
         with:
           project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
           coverage-reports: lcov.info
       - name: Upload LCOV artifact
         if: always()
-        # original uses: actions/upload-artifact@v4
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@v4
         with:
           name: lcov-report
           path: lcov.info
