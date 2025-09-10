@@ -1,7 +1,7 @@
-use axum::response::IntoResponse;
 use axum::http::StatusCode;
-use cms_backend::utils::response_ext::ApiOk;
+use axum::response::IntoResponse;
 use cms_backend::utils::api_types::ApiResponse;
+use cms_backend::utils::response_ext::ApiOk;
 use serde_json::Value;
 
 #[test]
@@ -9,7 +9,9 @@ fn api_ok_wraps_value() {
     let resp = ApiOk(serde_json::json!({"foo":"bar"})).into_response();
     // Body is boxed; collect bytes
     let body_bytes = futures::executor::block_on(async {
-        axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap()
+        axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap()
     });
     let v: Value = serde_json::from_slice(&body_bytes).unwrap();
     assert_eq!(v["success"], true);
@@ -19,11 +21,13 @@ fn api_ok_wraps_value() {
 
 #[test]
 fn api_ok_created_status_tuple() {
-    let tuple = (StatusCode::CREATED, ApiOk(serde_json::json!({"id": 123}))); 
+    let tuple = (StatusCode::CREATED, ApiOk(serde_json::json!({"id": 123})));
     let resp = tuple.into_response();
     assert_eq!(resp.status(), StatusCode::CREATED);
     let body_bytes = futures::executor::block_on(async {
-        axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap()
+        axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap()
     });
     let v: Value = serde_json::from_slice(&body_bytes).unwrap();
     assert_eq!(v["success"], true);

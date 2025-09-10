@@ -10,12 +10,12 @@ use tracing::info;
 use cms_backend::routes::create_router;
 
 /// Unified CMS server entrypoint
-/// 
+///
 /// Integrates functionality from:
 /// - cms-lightweight: Initialization and config loading
 /// - cms-simple: In-memory development mode and web interface  
 /// - cms-unified: Consolidated API endpoints
-/// 
+///
 /// This replaces the need for separate CMS binaries by providing a single,
 /// unified entry point that can operate in different modes.
 #[tokio::main]
@@ -32,28 +32,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Build router and attach state (state is moved into router)
     let router: AxumRouter = create_router().with_state(state);
-    
+
     // Actually start the HTTP server (this was missing in the original implementation)
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    
+
     info!("🌐 CMS Server listening on http://{}", addr);
     info!("📚 API Documentation: http://{}/api/docs", addr);
     info!("🔍 Health Check: http://{}/api/v1/health", addr);
     info!("📈 Metrics: http://{}/api/v1/metrics", addr);
-    
+
     // Log available endpoints based on enabled features
     #[cfg(feature = "auth")]
     info!("🔐 Authentication endpoints available at /api/v1/auth/*");
-    
+
     #[cfg(feature = "database")]
     info!("💾 Database-backed endpoints available");
-    
+
     #[cfg(not(feature = "database"))]
     {
         use tracing::warn;
         warn!("⚠️  Running in lightweight mode - no database features available");
     }
-    
+
     #[cfg(feature = "search")]
     info!("🔍 Search endpoints available at /api/v1/search/*");
 

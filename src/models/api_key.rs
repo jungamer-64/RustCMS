@@ -1,15 +1,15 @@
+use base64::Engine;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
+use ring::rand::SecureRandom;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 use validator::{ValidationError, ValidationErrors};
-use ring::rand::SecureRandom;
-use base64::Engine;
 
-use crate::database::schema::api_keys;
 use crate::AppError;
+use crate::database::schema::api_keys;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Queryable, Insertable)]
 #[diesel(table_name = api_keys)]
@@ -78,16 +78,20 @@ impl ApiKey {
     }
 
     /// バリデーション付きコンストラクタ
-    pub fn new_validated(name: String, user_id: Uuid, permissions: Vec<String>) -> Result<(Self, String), crate::AppError> {
+    pub fn new_validated(
+        name: String,
+        user_id: Uuid,
+        permissions: Vec<String>,
+    ) -> Result<(Self, String), crate::AppError> {
         Self::validate_permissions(&permissions)?;
         Ok(Self::new(name, user_id, permissions))
     }
 
     pub fn new(name: String, user_id: Uuid, permissions: Vec<String>) -> (Self, String) {
         let now = Utc::now();
-    let raw_key = Self::generate_key();
-    let key_hash = Self::hash_key(&raw_key);
-    let api_key_lookup_hash = Self::lookup_hash(&raw_key);
+        let raw_key = Self::generate_key();
+        let key_hash = Self::hash_key(&raw_key);
+        let api_key_lookup_hash = Self::lookup_hash(&raw_key);
 
         let api_key = Self {
             id: Uuid::new_v4(),
@@ -193,10 +197,7 @@ impl ApiKey {
         const PREFIX: &str = "ak_"; // api key
         // 42 bytes -> base64url(no pad) 56 chars
         let mut bytes = [0u8; 42];
-        if ring::rand::SystemRandom::new()
-            .fill(&mut bytes)
-            .is_err()
-        {
+        if ring::rand::SystemRandom::new().fill(&mut bytes).is_err() {
             // フォールバック: UUID v4 16bytes を繰り返し
             let mut idx = 0;
             while idx < bytes.len() {
@@ -212,7 +213,7 @@ impl ApiKey {
     }
 
     pub(crate) fn hash_key(key: &str) -> String {
-        use argon2::password_hash::{rand_core::OsRng, SaltString};
+        use argon2::password_hash::{SaltString, rand_core::OsRng};
         use argon2::{Argon2, PasswordHasher};
 
         let salt = SaltString::generate(&mut OsRng);
@@ -229,7 +230,7 @@ impl ApiKey {
     /// ルックアップ用の決定的ハッシュ (衝突耐性と高速性重視 / 再計算可能)。
     /// 生キーが漏れてもハッシュ逆算は困難だが、オフライン総当りは可能なので rate-limit 前提。
     pub fn lookup_hash(key: &str) -> String {
-    crate::utils::hash::sha256_b64url(key.as_bytes())
+        crate::utils::hash::sha256_b64url(key.as_bytes())
     }
 
     pub fn verify_key(&self, key: &str) -> Result<bool, AppError> {
@@ -275,7 +276,9 @@ impl ApiKey {
 
     /// ログ出力や監査向けにキー本体を暴露しない短縮表示
     pub fn mask_raw(raw: &str) -> String {
-        if raw.len() <= 10 { return "***".into(); }
-        format!("{}…{}", &raw[..6], &raw[raw.len()-4..])
+        if raw.len() <= 10 {
+            return "***".into();
+        }
+        format!("{}…{}", &raw[..6], &raw[raw.len() - 4..])
     }
 }

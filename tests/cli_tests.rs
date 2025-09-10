@@ -15,14 +15,22 @@ fn help_shows_commands() {
         let ok = (stdout.contains("migrate") && stdout.contains("status"))
             || stdout.to_lowercase().contains("usage")
             || stdout.to_lowercase().contains("commands");
-        assert!(ok, "Unexpected help output:\nSTDOUT: {}\nSTDERR: {}", stdout, stderr);
+        assert!(
+            ok,
+            "Unexpected help output:\nSTDOUT: {}\nSTDERR: {}",
+            stdout, stderr
+        );
     } else {
         // In CI the command may fail due to missing config; accept that or any non-empty output
         let ok = stderr.contains("missing field `environment`")
             || stderr.contains("Config(")
             || !stdout.trim().is_empty()
             || !stderr.trim().is_empty();
-        assert!(ok, "Unexpected help failure:\nSTDOUT: {}\nSTDERR: {}", stdout, stderr);
+        assert!(
+            ok,
+            "Unexpected help failure:\nSTDOUT: {}\nSTDERR: {}",
+            stdout, stderr
+        );
     }
 }
 
@@ -42,5 +50,9 @@ fn migrate_allows_no_seed_flag() {
         || !stdout.trim().is_empty()
         || !stderr.trim().is_empty();
 
-    assert!(ok, "Unexpected migrate output:\nSTDOUT: {}\nSTDERR: {}", stdout, stderr);
+    assert!(
+        ok,
+        "Unexpected migrate output:\nSTDOUT: {}\nSTDERR: {}",
+        stdout, stderr
+    );
 }

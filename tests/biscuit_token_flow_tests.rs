@@ -1,16 +1,18 @@
 //! Biscuit token rotation & invalidation test (requires database + auth features).
 #![cfg(all(feature = "auth", feature = "database"))]
 
+use chrono::Utc;
 use cms_backend::auth::AuthService;
 use cms_backend::config::{AuthConfig, DatabaseConfig};
 use cms_backend::database::Database;
 use cms_backend::models::{User, UserRole};
-use chrono::Utc;
 use uuid::Uuid;
 
 async fn build_db() -> Option<Database> {
     let url = std::env::var("DATABASE_URL").ok()?;
-    if url.is_empty() { return None; }
+    if url.is_empty() {
+        return None;
+    }
     let cfg = DatabaseConfig {
         url,
         max_connections: 2,
@@ -24,8 +26,8 @@ async fn build_db() -> Option<Database> {
 }
 
 async fn build_auth(db: &Database) -> AuthService {
-    use biscuit_auth::KeyPair;
     use base64::Engine;
+    use biscuit_auth::KeyPair;
     let kp = KeyPair::new();
     let priv_b64 = base64::engine::general_purpose::STANDARD.encode(kp.private().to_bytes());
     let mut cfg = AuthConfig::default();
@@ -57,26 +59,39 @@ fn dummy_user() -> User {
 async fn biscuit_refresh_rotation_invalidate_old() {
     let db = match build_db().await {
         Some(d) => d,
-        None => { eprintln!("SKIP biscuit_refresh_rotation_invalidate_old: DATABASE_URL not set"); return; }
+        None => {
+            eprintln!("SKIP biscuit_refresh_rotation_invalidate_old: DATABASE_URL not set");
+            return;
+        }
     };
     let auth = build_auth(&db).await;
     let user = dummy_user();
 
-    let issued = auth.create_auth_response(user.clone(), false).await.expect("issue");
+    let issued = auth
+        .create_auth_response(user.clone(), false)
+        .await
+        .expect("issue");
     assert!(!issued.tokens.access_token.is_empty());
     assert!(!issued.tokens.refresh_token.is_empty());
 
-        // Basic sanity: access token not empty already checked.
+    // Basic sanity: access token not empty already checked.
 
-    let (rotated_tokens, _rot_user) = auth.refresh_access_token(&issued.tokens.refresh_token).await.expect("refresh");
+    let (rotated_tokens, _rot_user) = auth
+        .refresh_access_token(&issued.tokens.refresh_token)
+        .await
+        .expect("refresh");
     assert_ne!(rotated_tokens.access_token, issued.tokens.access_token);
     assert_ne!(rotated_tokens.refresh_token, issued.tokens.refresh_token);
     // biscuit_token populated with access token for backward compatibility
     assert_eq!(rotated_tokens.biscuit_token, rotated_tokens.access_token);
 
     // Old refresh must now fail
-    assert!(auth.refresh_access_token(&issued.tokens.refresh_token).await.is_err());
+    assert!(
+        auth.refresh_access_token(&issued.tokens.refresh_token)
+            .await
+            .is_err()
+    );
 
     // Using a refresh token as if it were an access token should fail verification
-        // Can't validate refresh token as access token; just ensure they differ & refresh rotation worked.
+    // Can't validate refresh token as access token; just ensure they differ & refresh rotation worked.
 }

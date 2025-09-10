@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use cms_backend::Result;
 
 #[derive(Parser)]
-#[command(name = "dev-tools", about = "Development helper tools for CMS")] 
+#[command(name = "dev-tools", about = "Development helper tools for CMS")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -26,7 +26,7 @@ enum Commands {
     /// Add a sample post to the database
     AddSamplePost {
         /// Title for the sample
-        #[arg(long, default_value = "Sample Post")] 
+        #[arg(long, default_value = "Sample Post")]
         title: String,
     },
     /// Print environment helpful values
@@ -48,7 +48,11 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::DbCheck { json, limit, delete_post } => {
+        Commands::DbCheck {
+            json,
+            limit,
+            delete_post,
+        } => {
             // Delegate to existing db_check implementation where possible
             // We'll reuse logic from src/bin/db_check.rs but inline minimal code here
             let state = cms_backend::utils::init::init_app_state().await?;
@@ -83,13 +87,18 @@ async fn main() -> Result<()> {
 
             if json {
                 let admin = admin_user.map(|u| json!({"username": u.username, "email": u.email}));
-                let posts_json: Vec<_> = recent.into_iter().map(|p| json!({
-                    "id": p.id,
-                    "title": p.title,
-                    "author_id": p.author_id,
-                    "status": p.status,
-                    "created_at": p.created_at,
-                })).collect();
+                let posts_json: Vec<_> = recent
+                    .into_iter()
+                    .map(|p| {
+                        json!({
+                            "id": p.id,
+                            "title": p.title,
+                            "author_id": p.author_id,
+                            "status": p.status,
+                            "created_at": p.created_at,
+                        })
+                    })
+                    .collect();
 
                 println!(
                     "{}",
@@ -107,7 +116,12 @@ async fn main() -> Result<()> {
                     println!("No posts found.");
                 } else {
                     println!("Recent posts:");
-                    for p in recent { println!("- {} | {} | author={} | {} | {}", p.id, p.title, p.author_id, p.status, p.created_at); }
+                    for p in recent {
+                        println!(
+                            "- {} | {} | author={} | {} | {}",
+                            p.id, p.title, p.author_id, p.status, p.created_at
+                        );
+                    }
                 }
             }
         }

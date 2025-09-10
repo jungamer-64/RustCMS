@@ -1,6 +1,6 @@
 use cms_backend::utils::api_types::{ApiResponse, ValidationError};
-use serde_json::json;
 use insta::assert_json_snapshot;
+use serde_json::json;
 
 // 初期スナップショット: 統一レスポンス構造 (成功)
 #[test]
@@ -32,9 +32,15 @@ fn snapshot_api_error_with_validation() {
     let resp = ApiResponse::error_with_validation(
         "validation failed".to_string(),
         vec![
-            ValidationError { field: "email".into(), message: "invalid format".into() },
-            ValidationError { field: "password".into(), message: "too short".into() },
-        ]
+            ValidationError {
+                field: "email".into(),
+                message: "invalid format".into(),
+            },
+            ValidationError {
+                field: "password".into(),
+                message: "too short".into(),
+            },
+        ],
     );
     assert_json_snapshot!("api_error_with_validation", resp);
     assert!(!resp.success);

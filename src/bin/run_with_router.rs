@@ -6,6 +6,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // constructing a full `AppState` requires environment-specific config
     // (DB, secrets, etc.). Instead, we print a short message and exit so
     // the binary remains in the repo but does not block building.
-    eprintln!("run_with_router is disabled by default - AppState must be constructed manually to run this binary.");
+    eprintln!(
+        "run_with_router is disabled by default - AppState must be constructed manually to run this binary."
+    );
     Ok(())
 }

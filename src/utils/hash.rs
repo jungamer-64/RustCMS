@@ -1,7 +1,7 @@
 //! Hash utilities (SHA-256 helpers)
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sha2::{Digest, Sha256};
 
 /// Compute SHA-256 digest and return as lowercase hex string

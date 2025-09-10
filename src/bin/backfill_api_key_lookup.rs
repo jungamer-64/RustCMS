@@ -59,18 +59,19 @@ async fn main() -> anyhow::Result<()> {
     init_env();
     let args = Args::parse();
 
-    #[cfg(not(all(feature = "database", feature="auth")))]
+    #[cfg(not(all(feature = "database", feature = "auth")))]
     {
         eprintln!("Requires --features database,auth");
         return Ok(());
     }
 
-    #[cfg(all(feature = "database", feature="auth"))]
+    #[cfg(all(feature = "database", feature = "auth"))]
     {
-    let state = cms_backend::utils::init::init_app_state().await?;
+        let state = cms_backend::utils::init::init_app_state().await?;
 
         // 取得: 空 lookup_hash の行（AppState ラッパー）
-        let rows: Vec<cms_backend::models::ApiKey> = state.db_list_api_keys_missing_lookup().await?;
+        let rows: Vec<cms_backend::models::ApiKey> =
+            state.db_list_api_keys_missing_lookup().await?;
         let scanned_count = rows.len();
         let mut expired_marked = 0usize;
         if args.expire && !args.dry_run {
@@ -82,7 +83,15 @@ async fn main() -> anyhow::Result<()> {
             scanned: scanned_count,
             legacy_missing_lookup: scanned_count,
             expired_marked,
-            rows: rows.into_iter().map(|r| RowReport { id: r.id, name: r.name, user_id: r.user_id, created_at: r.created_at }).collect(),
+            rows: rows
+                .into_iter()
+                .map(|r| RowReport {
+                    id: r.id,
+                    name: r.name,
+                    user_id: r.user_id,
+                    created_at: r.created_at,
+                })
+                .collect(),
             expire_mode: args.expire,
             dry_run: args.dry_run,
         };

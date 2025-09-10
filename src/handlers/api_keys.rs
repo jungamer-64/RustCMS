@@ -1,10 +1,13 @@
-use axum::{extract::{State, Path}, Json, Extension};
-use serde::{Serialize, Deserialize};
+use axum::{
+    Extension, Json,
+    extract::{Path, State},
+};
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::{AppState, Result};
 use crate::utils::response_ext::{ApiOk, delete_with};
+use crate::{AppState, Result};
 
 #[derive(Serialize, Deserialize, ToSchema)]
 pub struct CreateApiKeyPayload {
@@ -28,10 +31,22 @@ pub struct CreatedApiKeyResponse {
         })
     )
 )))))]
-pub async fn create_api_key(State(state): State<AppState>, Extension(auth): Extension<crate::auth::AuthContext>, Json(payload): Json<CreateApiKeyPayload>) -> Result<(axum::http::StatusCode, ApiOk<CreatedApiKeyResponse>)> {
-    let (api_key, raw) = state.db_create_api_key(payload.name, auth.user_id, payload.permissions).await?;
+pub async fn create_api_key(
+    State(state): State<AppState>,
+    Extension(auth): Extension<crate::auth::AuthContext>,
+    Json(payload): Json<CreateApiKeyPayload>,
+) -> Result<(axum::http::StatusCode, ApiOk<CreatedApiKeyResponse>)> {
+    let (api_key, raw) = state
+        .db_create_api_key(payload.name, auth.user_id, payload.permissions)
+        .await?;
     tracing::info!(api_key_id=%api_key.id, user_id=%auth.user_id, masked_raw=%crate::models::api_key::ApiKey::mask_raw(&raw), "api key created");
-    Ok((axum::http::StatusCode::CREATED, ApiOk(CreatedApiKeyResponse { api_key, raw_key: raw })))
+    Ok((
+        axum::http::StatusCode::CREATED,
+        ApiOk(CreatedApiKeyResponse {
+            api_key,
+            raw_key: raw,
+        }),
+    ))
 }
 
 #[utoipa::path(get, path="/api/v1/api-keys", security(("BearerAuth" = [])), responses((status=200, body=[crate::models::ApiKeyResponse], examples((
@@ -40,7 +55,10 @@ pub async fn create_api_key(State(state): State<AppState>, Extension(auth): Exte
         value = json!([{ "id": "550e8400-e29b-41d4-a716-446655440000", "name": "integration", "permissions": ["read:posts"], "revoked": false }])
     )
 )))))]
-pub async fn list_api_keys(State(state): State<AppState>, Extension(auth): Extension<crate::auth::AuthContext>) -> Result<ApiOk<Vec<crate::models::ApiKeyResponse>>> {
+pub async fn list_api_keys(
+    State(state): State<AppState>,
+    Extension(auth): Extension<crate::auth::AuthContext>,
+) -> Result<ApiOk<Vec<crate::models::ApiKeyResponse>>> {
     let keys = state.db_list_api_keys(auth.user_id, false).await?;
     Ok(ApiOk(keys))
 }
@@ -62,7 +80,16 @@ pub struct ApiKeyStatus {
         })
     )
 )))))]
-pub async fn revoke_api_key(State(state): State<AppState>, Extension(auth): Extension<crate::auth::AuthContext>, Path(id): Path<Uuid>) -> Result<impl axum::response::IntoResponse> {
-    let fut = async move { state.db_revoke_api_key_owned(id, auth.user_id).await.map(|_| ()) };
+pub async fn revoke_api_key(
+    State(state): State<AppState>,
+    Extension(auth): Extension<crate::auth::AuthContext>,
+    Path(id): Path<Uuid>,
+) -> Result<impl axum::response::IntoResponse> {
+    let fut = async move {
+        state
+            .db_revoke_api_key_owned(id, auth.user_id)
+            .await
+            .map(|_| ())
+    };
     delete_with(fut, "API key revoked").await
 }

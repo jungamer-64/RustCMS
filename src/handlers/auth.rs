@@ -7,18 +7,18 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
+#[cfg(all(feature = "legacy-auth-flat", feature = "monitoring"))]
+use metrics::counter;
 use serde::Deserialize;
 #[cfg(feature = "legacy-auth-flat")]
 use serde::Serialize;
-use utoipa::ToSchema;
 use serde_json::json;
-#[cfg(all(feature = "legacy-auth-flat", feature = "monitoring"))]
-use metrics::counter;
+use utoipa::ToSchema;
 
 #[cfg(feature = "legacy-auth-flat")]
 use crate::utils::common_types::UserInfo;
 use crate::utils::response_ext::ApiOk;
-use crate::{auth::LoginRequest, models::CreateUserRequest, AppState, Result};
+use crate::{AppState, Result, auth::LoginRequest, models::CreateUserRequest};
 
 /// Registration request
 #[derive(Debug, Deserialize, ToSchema)]
@@ -34,7 +34,12 @@ pub struct RegisterRequest {
 /// 旧 LoginResponse 型 (feature = legacy-auth-flat 有効時のみ公開) - 新規コードは AuthSuccessResponse を使用してください
 #[allow(dead_code)]
 #[derive(Debug, Serialize, ToSchema)]
-#[cfg_attr(feature = "legacy-auth-flat", deprecated(note = "Use AuthSuccessResponse (feature legacy-auth-flat will be removed in 3.0.0)") )]
+#[cfg_attr(
+    feature = "legacy-auth-flat",
+    deprecated(
+        note = "Use AuthSuccessResponse (feature legacy-auth-flat will be removed in 3.0.0)"
+    )
+)]
 pub struct LoginResponse {
     pub success: bool,
     pub access_token: String,
@@ -62,7 +67,12 @@ impl From<AuthSuccessResponse> for LoginResponse {
             counter!("legacy_login_response_conversion_total").increment(1);
         }
         // Avoid referencing deprecated flattened fields directly; derive from unified tokens.
-        let AuthSuccessResponse { success, tokens, user, .. } = a;
+        let AuthSuccessResponse {
+            success,
+            tokens,
+            user,
+            ..
+        } = a;
         LoginResponse {
             success,
             access_token: tokens.access_token.clone(),
@@ -239,7 +249,9 @@ pub async fn profile(
 
 /// Refresh token
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct RefreshRequest { pub refresh_token: String }
+pub struct RefreshRequest {
+    pub refresh_token: String,
+}
 
 // Legacy RefreshResponse removed: handler now always returns AuthSuccessResponse
 
@@ -271,7 +283,12 @@ pub struct RefreshRequest { pub refresh_token: String }
         (status = 500, description = "Server error")
     )
 )]
-pub async fn refresh_token(State(state): State<AppState>, Json(body): Json<RefreshRequest>) -> Result<impl IntoResponse> {
-    let unified = state.auth_refresh_success_response(&body.refresh_token).await?;
+pub async fn refresh_token(
+    State(state): State<AppState>,
+    Json(body): Json<RefreshRequest>,
+) -> Result<impl IntoResponse> {
+    let unified = state
+        .auth_refresh_success_response(&body.refresh_token)
+        .await?;
     Ok(ApiOk(unified))
 }

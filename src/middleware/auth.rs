@@ -1,7 +1,7 @@
 use crate::app::AppState;
 use axum::{
     extract::Request,
-    http::{header::AUTHORIZATION, StatusCode},
+    http::{StatusCode, header::AUTHORIZATION},
     middleware::Next,
     response::Response,
 };
@@ -48,4 +48,3 @@ pub async fn auth_middleware(
         Err(_) => Err(StatusCode::UNAUTHORIZED),
     }
 }
-

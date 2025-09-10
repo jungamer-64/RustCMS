@@ -4,14 +4,14 @@ pub mod schema;
 pub use pool::{DatabasePool, Pool, PooledConnection};
 
 use crate::{
+    Result,
     config::DatabaseConfig,
     models::{
         CreatePostRequest, CreateUserRequest, Post, UpdatePostRequest, UpdateUserRequest, User,
     },
-    Result,
 };
 #[cfg(all(feature = "database", not(test)))]
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use uuid::Uuid;
 
 // Macros to DRY optional filter application for Diesel boxed queries
@@ -38,14 +38,22 @@ macro_rules! apply_tag_contains {
 macro_rules! apply_user_filters {
     ($query:ident, $role:expr, $active:expr) => {{
         apply_eq_filter!($query, $role, crate::database::schema::users::dsl::role);
-        apply_eq_filter!($query, $active, crate::database::schema::users::dsl::is_active);
+        apply_eq_filter!(
+            $query,
+            $active,
+            crate::database::schema::users::dsl::is_active
+        );
     }};
 }
 
 macro_rules! apply_post_filters {
     ($query:ident, $status:expr, $author:expr, $tag:expr) => {{
         apply_eq_filter!($query, $status, crate::database::schema::posts::dsl::status);
-        apply_eq_filter!($query, $author, crate::database::schema::posts::dsl::author_id);
+        apply_eq_filter!(
+            $query,
+            $author,
+            crate::database::schema::posts::dsl::author_id
+        );
         apply_tag_contains!($query, $tag, crate::database::schema::posts::dsl::tags);
     }};
 }
@@ -110,11 +118,17 @@ macro_rules! apply_post_sort {
 }
 
 // Small helpers to reduce repeated error mapping patterns across DB helpers.
-fn map_diesel_result<T>(res: std::result::Result<T, diesel::result::Error>, not_found_msg: &str, ctx: &str) -> Result<T> {
+fn map_diesel_result<T>(
+    res: std::result::Result<T, diesel::result::Error>,
+    not_found_msg: &str,
+    ctx: &str,
+) -> Result<T> {
     match res {
         Ok(v) => Ok(v),
         Err(e) => match e {
-            diesel::result::Error::NotFound => Err(crate::AppError::NotFound(not_found_msg.to_string())),
+            diesel::result::Error::NotFound => {
+                Err(crate::AppError::NotFound(not_found_msg.to_string()))
+            }
             other => Err(crate::AppError::Internal(format!("{}: {}", ctx, other))),
         },
     }
@@ -129,7 +143,10 @@ fn ensure_affected_nonzero(affected: usize, not_found_msg: &str) -> Result<()> {
 }
 
 // Helper to map arbitrary DB errors into AppError::Internal with a context message.
-fn map_internal_err<T, E: std::fmt::Display>(res: std::result::Result<T, E>, ctx: &str) -> Result<T> {
+fn map_internal_err<T, E: std::fmt::Display>(
+    res: std::result::Result<T, E>,
+    ctx: &str,
+) -> Result<T> {
     res.map_err(|e| crate::AppError::Internal(format!("{}: {}", ctx, e)))
 }
 
@@ -167,10 +184,10 @@ fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpd
         .unwrap_or_else(|| existing.content.clone());
     let excerpt = merge_opt_option(&req.excerpt, &existing.excerpt);
     let tags = merge_opt(&req.tags, &existing.tags);
-        let categories = match &req.category {
-            Some(cat) => vec![cat.trim().to_lowercase()],
-            None => existing.categories.clone(),
-        };
+    let categories = match &req.category {
+        Some(cat) => vec![cat.trim().to_lowercase()],
+        None => existing.categories.clone(),
+    };
     let meta_title = merge_opt_option(&req.meta_title, &existing.meta_title);
     let meta_description = merge_opt_option(&req.meta_description, &existing.meta_description);
 
@@ -300,19 +317,22 @@ impl Database {
 
     /// Get user by username helper used by admin CLI (stub)
     pub async fn get_user_by_username(&self, username_str: &str) -> Result<User> {
-    // Propagate model-level AppError (preserves NotFound vs other AppError variants)
-    self.with_conn(|conn| User::find_by_username(conn, username_str))
+        // Propagate model-level AppError (preserves NotFound vs other AppError variants)
+        self.with_conn(|conn| User::find_by_username(conn, username_str))
     }
 
     pub async fn get_user_by_id(&self, _id: Uuid) -> Result<User> {
-    // Propagate model-level AppError so NotFound is preserved
-    self.with_conn(|conn| User::find_by_id(conn, _id))
+        // Propagate model-level AppError so NotFound is preserved
+        self.with_conn(|conn| User::find_by_id(conn, _id))
     }
 
     /// Find a user by email
     pub async fn get_user_by_email(&self, email: &str) -> Result<User> {
         self.with_conn(|conn| {
-            let user = self.run_query(|| crate::models::User::find_by_email(conn, email), "DB error finding user by email")?;
+            let user = self.run_query(
+                || crate::models::User::find_by_email(conn, email),
+                "DB error finding user by email",
+            )?;
             Ok(user)
         })
     }
@@ -320,7 +340,10 @@ impl Database {
     /// Update user's last login timestamp
     pub async fn update_last_login(&self, id: Uuid) -> Result<()> {
         self.with_conn(|conn| {
-            self.run_query(|| crate::models::User::update_last_login(conn, id), "DB error updating last_login")
+            self.run_query(
+                || crate::models::User::update_last_login(conn, id),
+                "DB error updating last_login",
+            )
         })
     }
 
@@ -332,8 +355,8 @@ impl Database {
         _active: Option<bool>,
         _sort: Option<String>,
     ) -> Result<Vec<User>> {
-        use diesel::prelude::*;
         use crate::database::schema::users::dsl as users_dsl;
+        use diesel::prelude::*;
 
         let (_page_n, limit, offset) = Self::paged_params(_page, _limit);
 
@@ -343,7 +366,10 @@ impl Database {
             apply_user_filters!(query, _role, _active);
             apply_user_sort!(query, _sort);
 
-            let results = self.run_query(|| query.offset(offset).limit(limit).load::<User>(conn), "Failed to list users")?;
+            let results = self.run_query(
+                || query.offset(offset).limit(limit).load::<User>(conn),
+                "Failed to list users",
+            )?;
             Ok(results)
         })
     }
@@ -356,18 +382,25 @@ impl Database {
     }
 
     pub async fn count_users(&self) -> Result<usize> {
-    // Reuse the filtered counter to avoid duplicated query logic
-    self.count_users_filtered(None, None).await
+        // Reuse the filtered counter to avoid duplicated query logic
+        self.count_users_filtered(None, None).await
     }
 
     /// Count users with optional filters (for accurate pagination totals)
-    pub async fn count_users_filtered(&self, _role: Option<String>, _active: Option<bool>) -> Result<usize> {
-        use diesel::prelude::*;
+    pub async fn count_users_filtered(
+        &self,
+        _role: Option<String>,
+        _active: Option<bool>,
+    ) -> Result<usize> {
         use crate::database::schema::users::dsl as users_dsl;
+        use diesel::prelude::*;
         self.with_conn(|conn| {
             let mut query = users_dsl::users.into_boxed();
             apply_user_filters!(query, _role, _active);
-            let total: i64 = self.count_query(|| query.count().get_result(conn), "Failed to count users (filtered)")?;
+            let total: i64 = self.count_query(
+                || query.count().get_result(conn),
+                "Failed to count users (filtered)",
+            )?;
             Ok(total as usize)
         })
     }
@@ -376,27 +409,41 @@ impl Database {
     pub async fn create_post(&self, request: CreatePostRequest) -> Result<Post> {
         use diesel::prelude::*;
         // Try to choose an author: prefer a user with role = 'admin', otherwise use the first user
-        use crate::database::schema::users::dsl as users_dsl;
         use crate::database::schema::posts::dsl as posts_dsl;
+        use crate::database::schema::users::dsl as users_dsl;
         self.with_conn(|conn| {
-            let author = self.run_query(|| {
-                users_dsl::users
-                    .filter(users_dsl::role.eq("admin"))
-                    .first::<crate::models::user::User>(conn)
-                    .or_else(|_| users_dsl::users.first::<crate::models::user::User>(conn))
-            }, "Failed to find author user")?;
+            let author = self.run_query(
+                || {
+                    users_dsl::users
+                        .filter(users_dsl::role.eq("admin"))
+                        .first::<crate::models::user::User>(conn)
+                        .or_else(|_| users_dsl::users.first::<crate::models::user::User>(conn))
+                },
+                "Failed to find author user",
+            )?;
             let author_id = author.id;
             let new_post = request.into_new_post(author_id);
-            let inserted: Post = self.run_query(|| diesel::insert_into(posts_dsl::posts).values(&new_post).get_result(conn), "Failed to create post")?;
+            let inserted: Post = self.run_query(
+                || {
+                    diesel::insert_into(posts_dsl::posts)
+                        .values(&new_post)
+                        .get_result(conn)
+                },
+                "Failed to create post",
+            )?;
             Ok(inserted)
         })
     }
 
     pub async fn get_post_by_id(&self, _id: Uuid) -> Result<Post> {
-        use diesel::prelude::*;
         use crate::database::schema::posts::dsl as posts_dsl;
+        use diesel::prelude::*;
         self.with_conn(|conn| {
-            let post = self.get_one_query(|| posts_dsl::posts.find(_id).first::<Post>(conn), "Post not found", "Failed to fetch post")?;
+            let post = self.get_one_query(
+                || posts_dsl::posts.find(_id).first::<Post>(conn),
+                "Post not found",
+                "Failed to fetch post",
+            )?;
             Ok(post)
         })
     }
@@ -411,7 +458,7 @@ impl Database {
         _sort: Option<String>,
     ) -> Result<Vec<Post>> {
         use diesel::prelude::*;
-    // no raw SQL needed
+        // no raw SQL needed
         use crate::database::schema::posts::dsl as posts_dsl;
 
         // Pagination guards
@@ -421,9 +468,12 @@ impl Database {
             let mut query = posts_dsl::posts.into_boxed();
             apply_post_filters!(query, _status, _author, _tag);
 
-    apply_post_sort!(query, _sort);
+            apply_post_sort!(query, _sort);
 
-            let results = self.run_query(|| query.offset(offset).limit(limit).load::<Post>(conn), "Failed to list posts")?;
+            let results = self.run_query(
+                || query.offset(offset).limit(limit).load::<Post>(conn),
+                "Failed to list posts",
+            )?;
             Ok(results)
         })
     }
@@ -438,12 +488,20 @@ impl Database {
         Ok(updated)
     }
 
-    async fn prepare_post_update(&self, id: Uuid, req: &UpdatePostRequest) -> Result<(PostUpdateData, chrono::NaiveDateTime)> {
-        use diesel::prelude::*;
+    async fn prepare_post_update(
+        &self,
+        id: Uuid,
+        req: &UpdatePostRequest,
+    ) -> Result<(PostUpdateData, chrono::NaiveDateTime)> {
         use crate::database::schema::posts::dsl as posts_dsl;
+        use diesel::prelude::*;
         // fetch existing inside connection scope
         self.with_conn(|conn| {
-            let existing = self.get_one_query(|| posts_dsl::posts.find(id).first::<Post>(conn), "Post not found", "Failed to fetch post")?;
+            let existing = self.get_one_query(
+                || posts_dsl::posts.find(id).first::<Post>(conn),
+                "Post not found",
+                "Failed to fetch post",
+            )?;
             let mut data = compute_post_update_data(&existing, req);
             data = Self::build_post_changes(existing, data);
             let ts = chrono::Utc::now().naive_utc();
@@ -452,33 +510,42 @@ impl Database {
     }
 
     async fn persist_post_update(&self, id: Uuid, changes: &PostUpdateData) -> Result<Post> {
-        use diesel::prelude::*;
         use crate::database::schema::posts::dsl as posts_dsl;
+        use diesel::prelude::*;
         self.with_conn(|conn| {
-            let updated = self.run_query(|| diesel::update(posts_dsl::posts.find(id))
-                .set((
-                    posts_dsl::title.eq(&changes.title),
-                    posts_dsl::slug.eq(&changes.slug),
-                    posts_dsl::content.eq(&changes.content),
-                    posts_dsl::excerpt.eq(&changes.excerpt),
-                    posts_dsl::tags.eq(&changes.tags),
-                    posts_dsl::categories.eq(&changes.categories),
-                    posts_dsl::meta_title.eq(&changes.meta_title),
-                    posts_dsl::meta_description.eq(&changes.meta_description),
-                    posts_dsl::status.eq(&changes.status),
-                    posts_dsl::published_at.eq(&changes.published_at),
-                    posts_dsl::updated_at.eq(&changes.updated_at),
-                ))
-                .get_result::<Post>(conn), "Failed to update post")?;
+            let updated = self.run_query(
+                || {
+                    diesel::update(posts_dsl::posts.find(id))
+                        .set((
+                            posts_dsl::title.eq(&changes.title),
+                            posts_dsl::slug.eq(&changes.slug),
+                            posts_dsl::content.eq(&changes.content),
+                            posts_dsl::excerpt.eq(&changes.excerpt),
+                            posts_dsl::tags.eq(&changes.tags),
+                            posts_dsl::categories.eq(&changes.categories),
+                            posts_dsl::meta_title.eq(&changes.meta_title),
+                            posts_dsl::meta_description.eq(&changes.meta_description),
+                            posts_dsl::status.eq(&changes.status),
+                            posts_dsl::published_at.eq(&changes.published_at),
+                            posts_dsl::updated_at.eq(&changes.updated_at),
+                        ))
+                        .get_result::<Post>(conn)
+                },
+                "Failed to update post",
+            )?;
             Ok(updated)
         })
     }
 
     fn build_post_changes(existing: Post, mut data: PostUpdateData) -> PostUpdateData {
         // status/publish_at normalization kept here to shrink complexity in caller
-        if data.status == "published" && existing.published_at.is_none() && data.published_at.is_none() {
+        if data.status == "published"
+            && existing.published_at.is_none()
+            && data.published_at.is_none()
+        {
             data.published_at = Some(chrono::Utc::now());
-        } else if data.status == "draft" { // ensure draft clears published_at
+        } else if data.status == "draft" {
+            // ensure draft clears published_at
             data.published_at = None;
         }
         data
@@ -487,17 +554,22 @@ impl Database {
     // (helper removed; original in-function sorting logic retained to avoid type privacy complications)
 
     pub async fn delete_post(&self, _id: Uuid) -> Result<()> {
-        use diesel::prelude::*;
         use crate::database::schema::posts::dsl as posts_dsl;
+        use diesel::prelude::*;
         // Use helper to execute and ensure at least one row affected
         self.with_conn(|conn| {
-            self.execute_and_ensure(|| diesel::delete(posts_dsl::posts.find(_id)).execute(conn), "Failed to delete post", "Post not found")
+            self.execute_and_ensure(
+                || diesel::delete(posts_dsl::posts.find(_id)).execute(conn),
+                "Failed to delete post",
+                "Post not found",
+            )
         })
     }
 
     pub async fn count_posts(&self, _tag: Option<&str>) -> Result<usize> {
-    // Delegate to the filtered counter to avoid duplication
-    self.count_posts_filtered(None, None, _tag.map(|t| t.to_string())).await
+        // Delegate to the filtered counter to avoid duplication
+        self.count_posts_filtered(None, None, _tag.map(|t| t.to_string()))
+            .await
     }
 
     /// Count posts with optional filters to match listing totals
@@ -507,19 +579,22 @@ impl Database {
         _author: Option<Uuid>,
         _tag: Option<String>,
     ) -> Result<usize> {
-        use diesel::prelude::*;
         use crate::database::schema::posts::dsl as posts_dsl;
+        use diesel::prelude::*;
         self.with_conn(|conn| {
             let mut query = posts_dsl::posts.into_boxed();
             apply_post_filters!(query, _status, _author, _tag);
-            let total: i64 = self.count_query(|| query.count().get_result(conn), "Failed to count posts (filtered)")?;
+            let total: i64 = self.count_query(
+                || query.count().get_result(conn),
+                "Failed to count posts (filtered)",
+            )?;
             Ok(total as usize)
         })
     }
 
     pub async fn count_posts_by_author(&self, author: Uuid) -> Result<usize> {
-    // Delegate to the filtered counter to avoid duplication
-    self.count_posts_filtered(None, Some(author), None).await
+        // Delegate to the filtered counter to avoid duplication
+        self.count_posts_filtered(None, Some(author), None).await
     }
 
     // Helper to run a diesel execute call and ensure affected > 0, mapping errors consistently.
@@ -565,37 +640,52 @@ impl Database {
     // Helper to compute page, limit, offset from user-provided values.
     fn paged_params(page_in: u32, limit_in: u32) -> (i64, i64, i64) {
         let page = if page_in == 0 { 1 } else { page_in } as i64;
-        let limit = match limit_in { 0 => 10, n if n > 100 => 100, n => n } as i64;
+        let limit = match limit_in {
+            0 => 10,
+            n if n > 100 => 100,
+            n => n,
+        } as i64;
         let offset = (page - 1) * limit;
         (page, limit, offset)
     }
 
-    
-
     /// Delete a user by ID
     pub async fn delete_user(&self, id: Uuid) -> Result<()> {
         self.with_conn(|conn| {
-            self.execute_and_ensure(|| User::delete(conn, id), "Failed to delete user", "User not found")
+            self.execute_and_ensure(
+                || User::delete(conn, id),
+                "Failed to delete user",
+                "User not found",
+            )
         })
     }
 
     /// Reset user password helper used by admin CLI
     pub async fn reset_user_password(&self, id: Uuid, new_password: &str) -> Result<()> {
-        use diesel::prelude::*;
         use crate::database::schema::users::dsl as users_dsl;
+        use diesel::prelude::*;
         let hash = crate::utils::password::hash_password(new_password)?;
         self.with_conn(|conn| {
-            self.execute_and_ensure(|| diesel::update(users_dsl::users.find(id))
-                .set((users_dsl::password_hash.eq(Some(hash.clone())), users_dsl::updated_at.eq(chrono::Utc::now())))
-                .execute(conn), "Failed to reset password", "User not found")
+            self.execute_and_ensure(
+                || {
+                    diesel::update(users_dsl::users.find(id))
+                        .set((
+                            users_dsl::password_hash.eq(Some(hash.clone())),
+                            users_dsl::updated_at.eq(chrono::Utc::now()),
+                        ))
+                        .execute(conn)
+                },
+                "Failed to reset password",
+                "User not found",
+            )
         })
     }
 
     #[cfg(all(feature = "database", not(test)))]
     fn run_migrations(pool: &DatabasePool) -> Result<()> {
         let mut conn = pool.get()?;
-    // Map migration errors through the common internal error mapper for consistency.
-    map_internal_err(conn.run_pending_migrations(MIGRATIONS), "Migration error")?;
+        // Map migration errors through the common internal error mapper for consistency.
+        map_internal_err(conn.run_pending_migrations(MIGRATIONS), "Migration error")?;
 
         Ok(())
     }

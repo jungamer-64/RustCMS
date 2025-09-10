@@ -1,11 +1,11 @@
+use axum::body::to_bytes;
 use axum::{Router, routing::get};
 use cms_backend::app::{HealthStatus, ServiceHealth};
 use cms_backend::utils::response_ext::ApiOk;
-use insta::assert_json_snapshot;
-use tower::ServiceExt; // for oneshot
 use hyper::{Request, StatusCode};
-use axum::body::to_bytes;
+use insta::assert_json_snapshot;
 use serde_json::json;
+use tower::ServiceExt; // for oneshot
 
 // 簡易統合: /health エンドポイントの JSON 形状をスナップショット固定
 #[tokio::test]
@@ -13,20 +13,47 @@ async fn snapshot_health_endpoint() {
     // 実サービス初期化を避けるためダミーの HealthStatus を組み立て
     let dummy = HealthStatus {
         status: "healthy".into(),
-        database: ServiceHealth { status: "up".into(), response_time_ms: 1.0, error: None, details: json!({}) },
-        cache: ServiceHealth { status: "not_configured".into(), response_time_ms: 0.0, error: None, details: json!({}) },
-        search: ServiceHealth { status: "not_configured".into(), response_time_ms: 0.0, error: None, details: json!({}) },
-        auth: ServiceHealth { status: "not_configured".into(), response_time_ms: 0.0, error: None, details: json!({}) },
+        database: ServiceHealth {
+            status: "up".into(),
+            response_time_ms: 1.0,
+            error: None,
+            details: json!({}),
+        },
+        cache: ServiceHealth {
+            status: "not_configured".into(),
+            response_time_ms: 0.0,
+            error: None,
+            details: json!({}),
+        },
+        search: ServiceHealth {
+            status: "not_configured".into(),
+            response_time_ms: 0.0,
+            error: None,
+            details: json!({}),
+        },
+        auth: ServiceHealth {
+            status: "not_configured".into(),
+            response_time_ms: 0.0,
+            error: None,
+            details: json!({}),
+        },
         timestamp: chrono::Utc::now(),
     };
 
-    let router = Router::new().route("/health", get(move || {
-        let snapshot = dummy.clone();
-        async move { ApiOk(snapshot) }
-    }));
+    let router = Router::new().route(
+        "/health",
+        get(move || {
+            let snapshot = dummy.clone();
+            async move { ApiOk(snapshot) }
+        }),
+    );
 
     let response = router
-        .oneshot(Request::get("/health").body(axum::body::Body::empty()).unwrap())
+        .oneshot(
+            Request::get("/health")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 

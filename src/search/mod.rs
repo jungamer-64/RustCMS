@@ -10,15 +10,15 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tantivy::{
-    schema::{Field, Schema, STORED, STRING},
     Index, IndexReader, IndexWriter, TantivyError,
+    schema::{Field, STORED, STRING, Schema},
 };
 use tokio::sync::RwLock;
 
 use crate::{
+    Result,
     config::SearchConfig,
     models::{Post, User},
-    Result,
 };
 
 #[derive(Debug, thiserror::Error)]

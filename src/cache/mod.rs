@@ -8,7 +8,7 @@
 //! - Cache statistics and monitoring
 
 use redis::{AsyncCommands, Client};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use serde_json;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 use tokio::sync::RwLock;
 
-use crate::{config::RedisConfig, Result};
+use crate::{Result, config::RedisConfig};
 
 #[derive(Debug, Error)]
 pub enum CacheError {
@@ -109,8 +109,8 @@ impl CacheService {
             let _: () = conn.set(&full_key, &serialized).await?;
         }
 
-    // Set in memory cache
-    self.memory_insert(full_key, serialized, ttl).await;
+        // Set in memory cache
+        self.memory_insert(full_key, serialized, ttl).await;
 
         // Update stats
         let mut stats = self.stats.write().await;
@@ -360,7 +360,10 @@ impl CacheService {
     }
 
     #[inline]
-    async fn decode_and_record_memory_hit<T: DeserializeOwned>(&self, entry: &mut CacheEntry<Vec<u8>>) -> Result<T> {
+    async fn decode_and_record_memory_hit<T: DeserializeOwned>(
+        &self,
+        entry: &mut CacheEntry<Vec<u8>>,
+    ) -> Result<T> {
         entry.hits += 1;
         let value: T = serde_json::from_slice(&entry.value)?;
         let mut stats = self.stats.write().await;

@@ -2,7 +2,10 @@
 //!
 //! Creates an initial admin user and a sample post if the database is empty.
 
-use cms_backend::{models::{CreatePostRequest, CreateUserRequest, PostStatus, UserRole}, Result};
+use cms_backend::{
+    Result,
+    models::{CreatePostRequest, CreateUserRequest, PostStatus, UserRole},
+};
 use tracing::{info, warn};
 
 #[tokio::main]

@@ -9,7 +9,10 @@ static TRIGGERED: OnceLock<Mutex<HashSet<&'static str>>> = OnceLock::new();
 /// `tag` should be a short stable identifier; `msg` the full warning text.
 pub fn warn_once(tag: &'static str, msg: &'static str) {
     let set = TRIGGERED.get_or_init(|| Mutex::new(HashSet::new()));
-    let mut guard = match set.lock() { Ok(g) => g, Err(poison) => poison.into_inner() };
+    let mut guard = match set.lock() {
+        Ok(g) => g,
+        Err(poison) => poison.into_inner(),
+    };
     if guard.insert(tag) {
         warn!(target: "deprecation", "{}", msg);
     }

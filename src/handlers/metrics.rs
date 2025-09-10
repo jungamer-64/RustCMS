@@ -1,6 +1,6 @@
 //! Metrics handler (Prometheus exposition format)
-use axum::{extract::State, http::StatusCode, response::IntoResponse};
 use crate::{AppState, Result};
+use axum::{extract::State, http::StatusCode, response::IntoResponse};
 
 /// Expose application metrics in Prometheus text format.
 /// NOTE: 軽量用途のため現時点ではカウンタ/ゲージのみ。ヒストグラム等が必要になれば `prometheus` crate 統合を検討。
@@ -22,7 +22,10 @@ pub async fn metrics(State(state): State<AppState>) -> Result<impl IntoResponse>
 
     out.push_str("# HELP cms_active_connections Active connections (gauge).\n");
     out.push_str("# TYPE cms_active_connections gauge\n");
-    out.push_str(&format!("cms_active_connections {}\n", m.active_connections));
+    out.push_str(&format!(
+        "cms_active_connections {}\n",
+        m.active_connections
+    ));
 
     out.push_str("# HELP cms_cache_hits Total cache hits (combined layers).\n");
     out.push_str("# TYPE cms_cache_hits counter\n");
@@ -36,9 +39,14 @@ pub async fn metrics(State(state): State<AppState>) -> Result<impl IntoResponse>
     out.push_str("# TYPE cms_search_queries counter\n");
     out.push_str(&format!("cms_search_queries {}\n", m.search_queries));
 
-    out.push_str("# HELP cms_search_avg_response_time_ms Rolling average search response time (ms).\n");
+    out.push_str(
+        "# HELP cms_search_avg_response_time_ms Rolling average search response time (ms).\n",
+    );
     out.push_str("# TYPE cms_search_avg_response_time_ms gauge\n");
-    out.push_str(&format!("cms_search_avg_response_time_ms {}\n", m.search_avg_response_time_ms));
+    out.push_str(&format!(
+        "cms_search_avg_response_time_ms {}\n",
+        m.search_avg_response_time_ms
+    ));
 
     out.push_str("# HELP cms_auth_attempts Authentication attempts.\n");
     out.push_str("# TYPE cms_auth_attempts counter\n");
@@ -58,7 +66,10 @@ pub async fn metrics(State(state): State<AppState>) -> Result<impl IntoResponse>
 
     out.push_str("# HELP cms_db_avg_response_time_ms Rolling average DB query time (ms).\n");
     out.push_str("# TYPE cms_db_avg_response_time_ms gauge\n");
-    out.push_str(&format!("cms_db_avg_response_time_ms {}\n", m.db_avg_response_time_ms));
+    out.push_str(&format!(
+        "cms_db_avg_response_time_ms {}\n",
+        m.db_avg_response_time_ms
+    ));
 
     out.push_str("# HELP cms_errors_total Total errors encountered.\n");
     out.push_str("# TYPE cms_errors_total counter\n");
@@ -84,5 +95,9 @@ pub async fn metrics(State(state): State<AppState>) -> Result<impl IntoResponse>
     out.push_str("# TYPE cms_active_sessions gauge\n");
     out.push_str(&format!("cms_active_sessions {}\n", m.active_sessions));
 
-    Ok((StatusCode::OK, [("Content-Type", "text/plain; version=0.0.4")], out))
+    Ok((
+        StatusCode::OK,
+        [("Content-Type", "text/plain; version=0.0.4")],
+        out,
+    ))
 }

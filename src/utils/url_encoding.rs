@@ -1,5 +1,5 @@
 use crate::error::AppError;
-use percent_encoding::{percent_decode_str, utf8_percent_encode, AsciiSet, CONTROLS};
+use percent_encoding::{AsciiSet, CONTROLS, percent_decode_str, utf8_percent_encode};
 use urlencoding::{decode, encode};
 
 /// URL-safe文字セット定義（RFC 3986準拠）
@@ -100,7 +100,11 @@ fn is_already_encoded(input: &str) -> bool {
 }
 
 /// パラメーター長さのバリデーション
-pub fn validate_param_length(param: &str, max_length: usize, param_name: &str) -> crate::Result<()> {
+pub fn validate_param_length(
+    param: &str,
+    max_length: usize,
+    param_name: &str,
+) -> crate::Result<()> {
     if param.len() > max_length {
         return Err(AppError::BadRequest(format!(
             "{} is too long: {} characters (max: {})",

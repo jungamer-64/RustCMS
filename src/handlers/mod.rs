@@ -7,11 +7,12 @@ use axum::{
     http::StatusCode,
     response::{Html, IntoResponse, Json},
 };
-use serde_json::json;
 use serde_json::Value as JsonValue;
+use serde_json::json;
 use utoipa::OpenApi;
 
 pub mod admin;
+pub mod api_keys;
 #[cfg(feature = "auth")]
 pub mod auth;
 pub mod health;
@@ -19,7 +20,6 @@ pub mod metrics;
 pub mod posts;
 pub mod search;
 pub mod users;
-pub mod api_keys;
 
 // (previously had redundant re-exports here; modules are public via `pub mod` already)
 
@@ -160,12 +160,15 @@ pub async fn openapi_json() -> impl IntoResponse {
     // bring trait into scope to call `openapi()`
     let doc = ApiDoc::openapi();
     // serialize to serde_json::Value so axum::Json can return it
-    let mut v: JsonValue = serde_json::to_value(&doc).expect("failed to convert openapi to json value");
+    let mut v: JsonValue =
+        serde_json::to_value(&doc).expect("failed to convert openapi to json value");
 
     // 手動で securitySchemes を追加 (macro が security_schemes を未サポートなため暫定措置)
     if let Some(components) = v.get_mut("components").and_then(|c| c.as_object_mut()) {
         use serde_json::json;
-        let security_schemes = components.entry("securitySchemes").or_insert_with(|| json!({}));
+        let security_schemes = components
+            .entry("securitySchemes")
+            .or_insert_with(|| json!({}));
         if let Some(map) = security_schemes.as_object_mut() {
             map.entry("BearerAuth").or_insert(json!({
                 "type": "http",
@@ -210,17 +213,20 @@ pub async fn openapi_json() -> impl IntoResponse {
         ("/api/v1/search/suggest", "get"),
         ("/api/v1/search/stats", "get"),
         ("/api/v1/search/health", "get"),
-    ].into_iter().collect();
+    ]
+    .into_iter()
+    .collect();
 
     // 認証必須 (Bearer または Biscuit 任意) とする操作: public 以外の /api/v1/* で、logout/profile/reindex/users/posts など。
     if let Some(paths) = v.get_mut("paths").and_then(|p| p.as_object_mut()) {
         // Biscuit のみ許可したいエンドポイント (method, path)
-        let biscuit_only: std::collections::HashSet<(&'static str, &'static str)> = [
-            ("post", "/api/v1/search/reindex"),
-        ].into_iter().collect();
+        let biscuit_only: std::collections::HashSet<(&'static str, &'static str)> =
+            [("post", "/api/v1/search/reindex")].into_iter().collect();
         for (path, item) in paths.iter_mut() {
-            let Some(item_obj) = item.as_object_mut() else { continue }; // path item object
-            for method in ["get","post","put","delete","patch"] {
+            let Some(item_obj) = item.as_object_mut() else {
+                continue;
+            }; // path item object
+            for method in ["get", "post", "put", "delete", "patch"] {
                 if let Some(op) = item_obj.get_mut(method).and_then(|o| o.as_object_mut()) {
                     let key = (path.as_str(), method);
                     if public.contains(&key) {
@@ -229,18 +235,26 @@ pub async fn openapi_json() -> impl IntoResponse {
                         continue;
                     }
                     // /api/v1/ で始まるもののみ対象 (他はスキップ)
-                    if !path.starts_with("/api/v1/") { continue; }
+                    if !path.starts_with("/api/v1/") {
+                        continue;
+                    }
                     if biscuit_only.contains(&(method, path.as_str())) {
                         // Biscuit のみ
-                        op.insert("security".to_string(), serde_json::json!([
-                            {"BiscuitAuth": []}
-                        ]));
+                        op.insert(
+                            "security".to_string(),
+                            serde_json::json!([
+                                {"BiscuitAuth": []}
+                            ]),
+                        );
                     } else {
                         // OR 条件 (Bearer または Biscuit)
-                        op.insert("security".to_string(), serde_json::json!([
-                            {"BearerAuth": []},
-                            {"BiscuitAuth": []}
-                        ]));
+                        op.insert(
+                            "security".to_string(),
+                            serde_json::json!([
+                                {"BearerAuth": []},
+                                {"BiscuitAuth": []}
+                            ]),
+                        );
                     }
                 }
             }

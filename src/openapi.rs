@@ -3,8 +3,8 @@
 //! Temporary simplified OpenAPI configuration to resolve compilation issues
 //! Full API documentation will be restored after fixing dependencies
 
-use utoipa::OpenApi;
 use utoipa::Modify;
+use utoipa::OpenApi;
 use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
 
 use crate::app::{AppMetrics, HealthStatus, ServiceHealth};
@@ -35,7 +35,6 @@ impl Modify for SecurityAddon {
 }
 
 // (Schemas temporarily minimized during refactor; extend later as needed)
-
 
 #[derive(OpenApi)]
 #[openapi(

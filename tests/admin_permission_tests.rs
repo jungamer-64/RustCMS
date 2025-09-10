@@ -9,7 +9,12 @@ fn test_admin_permission_super_admin() {
         username: "superadmin".to_string(),
         role: UserRole::SuperAdmin,
         session_id: "test_session".to_string(),
-        permissions: vec!["admin".to_string(), "read".to_string(), "write".to_string(), "delete".to_string()],
+        permissions: vec![
+            "admin".to_string(),
+            "read".to_string(),
+            "write".to_string(),
+            "delete".to_string(),
+        ],
     };
 
     let result = require_admin_permission(&auth_context);
@@ -23,11 +28,18 @@ fn test_admin_permission_admin() {
         username: "admin".to_string(),
         role: UserRole::Admin,
         session_id: "test_session".to_string(),
-        permissions: vec!["read".to_string(), "write".to_string(), "delete".to_string()],
+        permissions: vec![
+            "read".to_string(),
+            "write".to_string(),
+            "delete".to_string(),
+        ],
     };
 
     let result = require_admin_permission(&auth_context);
-    assert!(result.is_err(), "Regular Admin (without admin permission) should be rejected");
+    assert!(
+        result.is_err(),
+        "Regular Admin (without admin permission) should be rejected"
+    );
 }
 
 #[test]
@@ -38,7 +50,12 @@ fn test_admin_permission_admin_with_permission() {
         username: "admin".to_string(),
         role: UserRole::Admin,
         session_id: "test_session".to_string(),
-        permissions: vec!["admin".to_string(), "read".to_string(), "write".to_string(), "delete".to_string()],
+        permissions: vec![
+            "admin".to_string(),
+            "read".to_string(),
+            "write".to_string(),
+            "delete".to_string(),
+        ],
     };
 
     let result = require_admin_permission(&auth_context);

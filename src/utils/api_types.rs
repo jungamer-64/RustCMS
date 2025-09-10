@@ -21,7 +21,7 @@ pub struct ApiResponse<T> {
     pub message: Option<String>,
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub validation_errors: Option<Vec<ValidationError>>,    
+    pub validation_errors: Option<Vec<ValidationError>>,
 }
 
 impl<T> ApiResponse<T> {
@@ -44,7 +44,6 @@ impl<T> ApiResponse<T> {
             validation_errors: None,
         }
     }
-
 }
 
 impl ApiResponse<()> {

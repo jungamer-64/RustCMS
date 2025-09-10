@@ -1,8 +1,8 @@
 use chrono::Utc;
 use cms_backend::{
+    Config,
     database::Database,
     models::post::{CreatePostRequest, PostStatus},
-    Config,
 };
 
 #[tokio::main]

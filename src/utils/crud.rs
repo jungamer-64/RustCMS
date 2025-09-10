@@ -1,7 +1,7 @@
+use crate::utils::response_ext::ApiOk;
 use crate::{AppState, Result};
 use axum::http::StatusCode;
 use serde::Serialize;
-use crate::utils::response_ext::ApiOk;
 
 /// Generic create helper returning (201, ApiOk(dto)) with optional post-create hook.
 pub async fn create_entity<Req, Model, Dto, F, Fut, Map, Hook, HookFut>(
@@ -20,7 +20,9 @@ where
     HookFut: std::future::Future<Output = ()>,
 {
     let model = db_create(state.clone(), req).await?;
-    if let Some(h) = hook { h(&model, state.clone()).await; }
+    if let Some(h) = hook {
+        h(&model, state.clone()).await;
+    }
     Ok((StatusCode::CREATED, ApiOk(map(&model))))
 }
 
@@ -43,7 +45,9 @@ where
     HookFut: std::future::Future<Output = ()>,
 {
     let model = db_update(state.clone(), id, req).await?;
-    if let Some(h) = hook { h(model.clone(), state.clone()).await; }
+    if let Some(h) = hook {
+        h(model.clone(), state.clone()).await;
+    }
     Ok(ApiOk(map(&model)))
 }
 
@@ -59,11 +63,10 @@ where
     Loader: FnOnce() -> Fut + Send + 'static,
     Fut: std::future::Future<Output = Result<Dto>> + Send + 'static,
 {
-    let dto = crate::utils::cache_helpers::cache_or_compute(
-        state,
-        &cache_key,
-        ttl,
-        move || async move { loader().await },
-    ).await?;
+    let dto =
+        crate::utils::cache_helpers::cache_or_compute(state, &cache_key, ttl, move || async move {
+            loader().await
+        })
+        .await?;
     Ok(ApiOk(dto))
 }

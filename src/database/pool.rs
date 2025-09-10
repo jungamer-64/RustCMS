@@ -1,5 +1,5 @@
-use diesel::r2d2::{self, ConnectionManager};
 use diesel::PgConnection;
+use diesel::r2d2::{self, ConnectionManager};
 use std::sync::Arc;
 
 pub type Pool = r2d2::Pool<ConnectionManager<PgConnection>>;

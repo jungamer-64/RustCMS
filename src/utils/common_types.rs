@@ -6,8 +6,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::models::{User, UserRole};
-use crate::dto_from_model; // macro
+use crate::dto_from_model;
+use crate::models::{User, UserRole}; // macro
 
 /// Unified user information for API responses
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

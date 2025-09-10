@@ -21,11 +21,15 @@ macro_rules! dto_from_model {
     ($dto:ty, $model:ty, |$m:ident| $body:expr) => {
         impl From<&$model> for $dto {
             #[inline]
-            fn from($m: &$model) -> Self { $body }
+            fn from($m: &$model) -> Self {
+                $body
+            }
         }
         impl From<$model> for $dto {
             #[inline]
-            fn from($m: $model) -> Self { Self::from(&$m) }
+            fn from($m: $model) -> Self {
+                Self::from(&$m)
+            }
         }
     };
 }

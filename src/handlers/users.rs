@@ -11,12 +11,15 @@ use serde::Deserialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::utils::{common_types::UserInfo, cache_key::{entity_id_key, ListCacheKey}};
-use std::sync::Arc;
-use crate::utils::response_ext::ApiOk;
+use crate::models::pagination::{Paginated, normalize_page_limit};
 use crate::utils::crud;
-use crate::{models::UpdateUserRequest, AppState, Result};
-use crate::models::pagination::{normalize_page_limit, Paginated};
+use crate::utils::response_ext::ApiOk;
+use crate::utils::{
+    cache_key::{ListCacheKey, entity_id_key},
+    common_types::UserInfo,
+};
+use crate::{AppState, Result, models::UpdateUserRequest};
+use std::sync::Arc;
 
 /// User query parameters
 #[derive(Debug, Deserialize, ToSchema, utoipa::IntoParams)]
@@ -64,7 +67,8 @@ pub(crate) async fn paginate_users(
             }
         },
         |u| UserInfo::from(u),
-    ).await?;
+    )
+    .await?;
     Ok(response)
 }
 
@@ -108,7 +112,14 @@ pub async fn get_users(
 ) -> Result<impl IntoResponse> {
     let (page, limit) = normalize_page_limit(query.page, query.limit);
     // Build cache key (use helper to keep parity with posts)
-    let cache_key = ListCacheKey::Users { page, limit, role: &query.role, active: query.active, sort: &query.sort }.to_cache_key();
+    let cache_key = ListCacheKey::Users {
+        page,
+        limit,
+        role: &query.role,
+        active: query.active,
+        sort: &query.sort,
+    }
+    .to_cache_key();
 
     let resp = paginate_users(
         state.clone(),
@@ -122,7 +133,6 @@ pub async fn get_users(
     .await?;
     Ok(ApiOk(resp))
 }
-
 
 /// Get user by ID
 #[utoipa::path(
@@ -166,7 +176,8 @@ pub async fn get_user(
             let user = state.db_get_user_by_id(id).await?;
             Ok(UserInfo::from(&user))
         },
-    ).await?;
+    )
+    .await?;
     Ok(ApiOk(info))
 }
 
@@ -212,9 +223,11 @@ pub async fn update_user(
         |u: &crate::models::user::User| UserInfo::from(u),
         Some(|u: crate::models::user::User, st: AppState| async move {
             #[cfg(feature = "search")]
-            st.search_index_entity_safe(crate::utils::search_index::SearchEntity::User(&u)).await;
-        })
-    ).await?;
+            st.search_index_entity_safe(crate::utils::search_index::SearchEntity::User(&u))
+                .await;
+        }),
+    )
+    .await?;
     Ok(api_ok)
 }
 
@@ -306,7 +319,12 @@ pub async fn get_user_posts(
         "user_posts:user",
         page,
         limit,
-        &[("status", query.status.clone()), ("author", Some(id.to_string())), ("tag", tag_opt.clone()), ("sort", query.sort.clone())]
+        &[
+            ("status", query.status.clone()),
+            ("author", Some(id.to_string())),
+            ("tag", tag_opt.clone()),
+            ("sort", query.sort.clone()),
+        ],
     );
     let resp = crate::handlers::posts::paginate_posts(
         state.clone(),
@@ -317,7 +335,8 @@ pub async fn get_user_posts(
         tag_opt,
         query.sort.clone(),
         cache_key,
-    ).await?;
+    )
+    .await?;
     Ok(ApiOk(resp))
 }
 

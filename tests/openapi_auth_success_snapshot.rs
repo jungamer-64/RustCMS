@@ -20,7 +20,10 @@ fn openapi_auth_success_schema_snapshot() {
             "session_id",
             "token",
         ] {
-            assert!(schema.get("properties").and_then(|p| p.get(key)).is_some(), "expected deprecated field `{key}` to remain until 3.0.0 phase removal");
+            assert!(
+                schema.get("properties").and_then(|p| p.get(key)).is_some(),
+                "expected deprecated field `{key}` to remain until 3.0.0 phase removal"
+            );
         }
         // Snapshot removed to avoid dependency on external approval tooling; structural assertions suffice.
     }
@@ -34,7 +37,10 @@ fn openapi_auth_success_schema_snapshot() {
             "session_id",
             "token",
         ] {
-            assert!(schema.get("properties").and_then(|p| p.get(key)).is_none(), "field `{key}` should be absent when auth-flat-fields feature is disabled");
+            assert!(
+                schema.get("properties").and_then(|p| p.get(key)).is_none(),
+                "field `{key}` should be absent when auth-flat-fields feature is disabled"
+            );
         }
     }
 }

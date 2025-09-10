@@ -1,10 +1,10 @@
 use crate::utils::common_types::UserInfo;
-use serde::Serialize;
-use utoipa::ToSchema;
 #[cfg(feature = "auth-flat-fields")]
 use crate::utils::deprecation::warn_once;
 #[cfg(all(feature = "auth-flat-fields", feature = "monitoring"))]
 use metrics::counter;
+use serde::Serialize;
+use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, ToSchema, Clone)]
 pub struct AuthTokens {
@@ -25,17 +25,29 @@ pub struct AuthSuccess<T> {
 
 impl<T> AuthSuccess<T> {
     pub fn new(tokens: AuthTokens, user: Option<UserInfo>, extra: Option<T>) -> Self {
-        Self { success: true, tokens, user, extra }
+        Self {
+            success: true,
+            tokens,
+            user,
+            extra,
+        }
     }
 }
 
 impl From<crate::auth::AuthResponse> for AuthTokens {
-    fn from(a: crate::auth::AuthResponse) -> Self { a.tokens }
+    fn from(a: crate::auth::AuthResponse) -> Self {
+        a.tokens
+    }
 }
 
-
-#[cfg_attr(feature = "auth-flat-fields", doc = "統一認証レスポンス (login/register 用)\n\n`tokens` オブジェクトに加え、後方互換のため従来フラットなフィールド (access_token / refresh_token / biscuit_token / expires_in / session_id / token) も保持する。\n\nNOTE: フラットフィールドは feature `auth-flat-fields` 有効時のみ含まれ 3.0.0 で削除予定。")]
-#[cfg_attr(not(feature = "auth-flat-fields"), doc = "統一認証レスポンス (login/register 用)\n\n`tokens` オブジェクトのみを公開 (フラットなトークン互換フィールドは feature `auth-flat-fields` を無効化した構成では除外済み)。 3.0.0 で完全移行予定。")]
+#[cfg_attr(
+    feature = "auth-flat-fields",
+    doc = "統一認証レスポンス (login/register 用)\n\n`tokens` オブジェクトに加え、後方互換のため従来フラットなフィールド (access_token / refresh_token / biscuit_token / expires_in / session_id / token) も保持する。\n\nNOTE: フラットフィールドは feature `auth-flat-fields` 有効時のみ含まれ 3.0.0 で削除予定。"
+)]
+#[cfg_attr(
+    not(feature = "auth-flat-fields"),
+    doc = "統一認証レスポンス (login/register 用)\n\n`tokens` オブジェクトのみを公開 (フラットなトークン互換フィールドは feature `auth-flat-fields` を無効化した構成では除外済み)。 3.0.0 で完全移行予定。"
+)]
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AuthSuccessResponse {
     pub success: bool,
@@ -63,14 +75,20 @@ pub struct AuthSuccessResponse {
 }
 
 impl From<crate::auth::AuthResponse> for AuthSuccessResponse {
-    fn from(a: crate::auth::AuthResponse) -> Self { AuthSuccessResponse::from_parts(&a.tokens, a.user) }
+    fn from(a: crate::auth::AuthResponse) -> Self {
+        AuthSuccessResponse::from_parts(&a.tokens, a.user)
+    }
 }
 
 impl AuthSuccessResponse {
     /// Internal constructor used when flattened fields are already absent (auth-flat-fields disabled)
     #[cfg(not(feature = "auth-flat-fields"))]
     fn new_unified(tokens: &AuthTokens, user: UserInfo) -> Self {
-        Self { success: true, tokens: tokens.clone(), user }
+        Self {
+            success: true,
+            tokens: tokens.clone(),
+            user,
+        }
     }
     pub fn from_parts(tokens: &AuthTokens, user: UserInfo) -> Self {
         #[allow(deprecated)]

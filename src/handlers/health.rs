@@ -2,14 +2,10 @@
 //!
 //! Provides system health monitoring and status endpoints
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse};
 use serde::Serialize;
-use utoipa::ToSchema;
 use serde_json::json;
+use utoipa::ToSchema;
 
 // Using ApiOk newtype for unified success responses
 use crate::utils::response_ext::ApiOk;
@@ -110,7 +106,12 @@ pub async fn health_check(State(state): State<AppState>) -> Result<impl IntoResp
             version: env!("CARGO_PKG_VERSION").to_string(),
             uptime_seconds: state.start_time.elapsed().as_secs(),
             rust_version: "stable".to_string(),
-            build_profile: if cfg!(debug_assertions) { "debug" } else { "release" }.to_string(),
+            build_profile: if cfg!(debug_assertions) {
+                "debug"
+            } else {
+                "release"
+            }
+            .to_string(),
         },
     };
 

@@ -10,7 +10,12 @@
 /// - default_col: used when input is None or not in allowed
 /// - default_desc: true for DESC, false for ASC
 /// - allowed: whitelist of acceptable column names (lowercase)
-pub fn parse_sort(input: Option<String>, default_col: &str, default_desc: bool, allowed: &[&str]) -> (String, bool) {
+pub fn parse_sort(
+    input: Option<String>,
+    default_col: &str,
+    default_desc: bool,
+    allowed: &[&str],
+) -> (String, bool) {
     let s = match input {
         Some(s) if !s.trim().is_empty() => s.trim().to_string(),
         _ => return (default_col.to_string(), default_desc),
@@ -37,9 +42,21 @@ mod tests {
     #[test]
     fn test_parse_sort_basic() {
         let allowed = ["created_at", "updated_at", "title"];
-        assert_eq!(parse_sort(None, "created_at", true, &allowed), ("created_at".into(), true));
-        assert_eq!(parse_sort(Some("title".into()), "created_at", true, &allowed), ("title".into(), false));
-        assert_eq!(parse_sort(Some("-title".into()), "created_at", true, &allowed), ("title".into(), true));
-        assert_eq!(parse_sort(Some("unknown".into()), "created_at", true, &allowed), ("created_at".into(), true));
+        assert_eq!(
+            parse_sort(None, "created_at", true, &allowed),
+            ("created_at".into(), true)
+        );
+        assert_eq!(
+            parse_sort(Some("title".into()), "created_at", true, &allowed),
+            ("title".into(), false)
+        );
+        assert_eq!(
+            parse_sort(Some("-title".into()), "created_at", true, &allowed),
+            ("title".into(), true)
+        );
+        assert_eq!(
+            parse_sort(Some("unknown".into()), "created_at", true, &allowed),
+            ("created_at".into(), true)
+        );
     }
 }

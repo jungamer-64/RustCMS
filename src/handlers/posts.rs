@@ -10,16 +10,16 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::utils::cache_key::{ListCacheKey, entity_id_key};
 use crate::dto_from_model; // macro
-use crate::utils::response_ext::delete_with;
+use crate::models::pagination::{Paginated, normalize_page_limit};
+use crate::utils::cache_key::{ListCacheKey, entity_id_key};
 use crate::utils::crud;
 use crate::utils::response_ext::ApiOk;
+use crate::utils::response_ext::delete_with;
 use crate::{
-    models::{CreatePostRequest, Post, UpdatePostRequest},
     AppState, Result,
+    models::{CreatePostRequest, Post, UpdatePostRequest},
 };
-use crate::models::pagination::{normalize_page_limit, Paginated};
 
 /// Post query parameters
 #[derive(Debug, Deserialize, ToSchema, utoipa::IntoParams)]
@@ -68,7 +68,6 @@ dto_from_model!(PostDto, Post, |p| PostDto {
 
 // Posts list now directly returns Paginated<PostDto> instead of wrapper
 
-
 // Shared helper to fetch paginated posts with caching and filters
 pub(crate) async fn paginate_posts(
     state: AppState,
@@ -79,7 +78,6 @@ pub(crate) async fn paginate_posts(
     tag: Option<String>,
     sort: Option<String>,
     // Posts list now directly returns Paginated<PostDto> instead of wrapper
-
     cache_key: String,
 ) -> Result<Paginated<PostDto>> {
     use std::sync::Arc;
@@ -95,7 +93,9 @@ pub(crate) async fn paginate_posts(
             let f = filters.clone();
             move || async move {
                 let (status, author, tag, sort) = (*f).clone();
-                state.db_get_posts(page, limit, status, author, tag, sort).await
+                state
+                    .db_get_posts(page, limit, status, author, tag, sort)
+                    .await
             }
         },
         {
@@ -107,7 +107,8 @@ pub(crate) async fn paginate_posts(
             }
         },
         |p| PostDto::from(p),
-    ).await?;
+    )
+    .await?;
     Ok(response)
 }
 
@@ -155,7 +156,10 @@ pub async fn create_post(
     #[cfg(feature = "search")]
     let hook = Some(|model: &Post, st: AppState| {
         let m = model.clone();
-        async move { st.search_index_entity_safe(crate::utils::search_index::SearchEntity::Post(&m)).await }
+        async move {
+            st.search_index_entity_safe(crate::utils::search_index::SearchEntity::Post(&m))
+                .await
+        }
     });
     #[cfg(not(feature = "search"))]
     let hook: Option<fn(&Post, AppState) -> _> = None;
@@ -166,7 +170,8 @@ pub async fn create_post(
         |st, req| async move { st.db_create_post(req).await },
         |m: &Post| PostDto::from(m),
         hook,
-    ).await?;
+    )
+    .await?;
     Ok((status, api_ok))
 }
 
@@ -217,7 +222,8 @@ pub async fn get_post(
             let post = state.db_get_post_by_id(id).await?;
             Ok(PostDto::from(&post))
         },
-    ).await?;
+    )
+    .await?;
     Ok(ApiOk(dto))
 }
 
@@ -268,7 +274,15 @@ pub async fn get_posts(
     Query(query): Query<PostQuery>,
 ) -> Result<impl IntoResponse> {
     let (page, limit) = normalize_page_limit(query.page, query.limit);
-    let cache_key = ListCacheKey::Posts { page, limit, status: &query.status, author: &query.author, tag: &query.tag, sort: &query.sort }.to_cache_key();
+    let cache_key = ListCacheKey::Posts {
+        page,
+        limit,
+        status: &query.status,
+        author: &query.author,
+        tag: &query.tag,
+        sort: &query.sort,
+    }
+    .to_cache_key();
     let resp = paginate_posts(
         state.clone(),
         page,
@@ -330,11 +344,13 @@ pub async fn update_post(
         request,
         |st, pid, req| async move { st.db_update_post(pid, req).await },
         |p: &crate::models::post::Post| PostDto::from(p),
-    Some(|p: crate::models::post::Post, st: AppState| async move {
-        #[cfg(feature = "search")]
-        st.search_index_entity_safe(crate::utils::search_index::SearchEntity::Post(&p)).await;
-    })
-    ).await?;
+        Some(|p: crate::models::post::Post, st: AppState| async move {
+            #[cfg(feature = "search")]
+            st.search_index_entity_safe(crate::utils::search_index::SearchEntity::Post(&p))
+                .await;
+        }),
+    )
+    .await?;
     Ok(api_ok)
 }
 
@@ -397,7 +413,12 @@ pub async fn get_posts_by_tag(
         "posts:tag",
         page,
         limit,
-        &[("status", query.status.clone()), ("author", query.author.map(|u| u.to_string())), ("tag", tag_opt.clone()), ("sort", query.sort.clone())]
+        &[
+            ("status", query.status.clone()),
+            ("author", query.author.map(|u| u.to_string())),
+            ("tag", tag_opt.clone()),
+            ("sort", query.sort.clone()),
+        ],
     );
     let resp = paginate_posts(
         state.clone(),
@@ -455,7 +476,3 @@ pub async fn publish_post(
     state.search_index_post_safe(&post).await;
     Ok(ApiOk(PostDto::from(&post)))
 }
- 
-
-
-

@@ -7,8 +7,8 @@ use axum::{
     response::IntoResponse,
 };
 use serde::Deserialize;
-use utoipa::ToSchema;
 use serde_json::json;
+use utoipa::ToSchema;
 // std::time::Duration not needed after cache helper adoption
 
 // Using ApiOk newtype for unified success responses
@@ -16,9 +16,7 @@ use crate::utils::response_ext::ApiOk;
 use crate::{AppState, Result};
 
 #[cfg(feature = "search")]
-use crate::search::{
-    SearchRequest, SearchFilter, FilterOperator,
-};
+use crate::search::{FilterOperator, SearchFilter, SearchRequest};
 
 #[cfg(not(feature = "search"))]
 mod _search_shim {
@@ -60,7 +58,9 @@ mod _search_shim {
 }
 
 #[cfg(not(feature = "search"))]
-use _search_shim::{FilterOperator, SearchFilter, SearchRequest, SearchResults, SearchStats, SortOrder};
+use _search_shim::{
+    FilterOperator, SearchFilter, SearchRequest, SearchResults, SearchStats, SortOrder,
+};
 
 /// Search query parameters
 #[derive(Debug, Deserialize, utoipa::IntoParams, ToSchema)]
@@ -112,7 +112,8 @@ pub async fn search(
     Query(query): Query<SearchQuery>,
 ) -> Result<impl IntoResponse> {
     // Normalize pagination controls
-    let (limit, offset) = crate::models::pagination::normalize_limit_offset_usize(query.limit, query.offset);
+    let (limit, offset) =
+        crate::models::pagination::normalize_limit_offset_usize(query.limit, query.offset);
 
     // Build search request
     let search_request = SearchRequest {
@@ -127,8 +128,8 @@ pub async fn search(
         facets: None,
         limit: Some(limit),
         offset: Some(offset),
-    sort_by: query.sort_by,
-    sort_order: query.sort_order,
+        sort_by: query.sort_by,
+        sort_order: query.sort_order,
     };
 
     // Try cache first
@@ -145,11 +146,19 @@ pub async fn search(
         crate::utils::cache_ttl::CACHE_TTL_SHORT,
         move || async move {
             #[cfg(feature = "search")]
-            { return state.search_execute(search_request).await; }
+            {
+                return state.search_execute(search_request).await;
+            }
             #[cfg(not(feature = "search"))]
-            { Ok(SearchResults { results: vec![], total: 0 }) }
+            {
+                Ok(SearchResults {
+                    results: vec![],
+                    total: 0,
+                })
+            }
         },
-    ).await?;
+    )
+    .await?;
 
     Ok(ApiOk(results))
 }
@@ -180,7 +189,8 @@ pub async fn suggest(
     State(state): State<AppState>,
     Query(query): Query<SuggestQuery>,
 ) -> Result<impl IntoResponse> {
-    let (limit, _offset) = crate::models::pagination::normalize_limit_offset_usize(query.limit, Some(0));
+    let (limit, _offset) =
+        crate::models::pagination::normalize_limit_offset_usize(query.limit, Some(0));
 
     // Try cache first
     let cache_key = crate::utils::cache_key::CacheKeyBuilder::new("suggest")
@@ -193,11 +203,16 @@ pub async fn suggest(
         crate::utils::cache_ttl::CACHE_TTL_LONG,
         move || async move {
             #[cfg(feature = "search")]
-            { state.search_suggest(&query.prefix, limit).await }
+            {
+                state.search_suggest(&query.prefix, limit).await
+            }
             #[cfg(not(feature = "search"))]
-            { Ok(Vec::new()) }
+            {
+                Ok(Vec::new())
+            }
         },
-    ).await?;
+    )
+    .await?;
 
     Ok(ApiOk(json!({ "suggestions": suggestions })))
 }
@@ -232,11 +247,16 @@ pub async fn search_stats(State(state): State<AppState>) -> Result<impl IntoResp
         crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
         move || async move {
             #[cfg(feature = "search")]
-            { state.search_get_stats().await }
+            {
+                state.search_get_stats().await
+            }
             #[cfg(not(feature = "search"))]
-            { Ok(SearchStats::default()) }
+            {
+                Ok(SearchStats::default())
+            }
         },
-    ).await?;
+    )
+    .await?;
 
     Ok(ApiOk(stats))
 }

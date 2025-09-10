@@ -1,5 +1,5 @@
 use clap::Parser;
-use cms_backend::{Result};
+use cms_backend::Result;
 use serde_json::json;
 
 #[derive(Parser, Debug)]
@@ -60,13 +60,18 @@ async fn main() -> Result<()> {
 
     if args.json {
         let admin = admin_user.map(|u| json!({"username": u.username, "email": u.email}));
-        let posts_json: Vec<_> = recent.into_iter().map(|p| json!({
-            "id": p.id,
-            "title": p.title,
-            "author_id": p.author_id,
-            "status": p.status,
-            "created_at": p.created_at,
-        })).collect();
+        let posts_json: Vec<_> = recent
+            .into_iter()
+            .map(|p| {
+                json!({
+                    "id": p.id,
+                    "title": p.title,
+                    "author_id": p.author_id,
+                    "status": p.status,
+                    "created_at": p.created_at,
+                })
+            })
+            .collect();
 
         println!(
             "{}",
@@ -84,7 +89,12 @@ async fn main() -> Result<()> {
             println!("No posts found.");
         } else {
             println!("Recent posts:");
-            for p in recent { println!("- {} | {} | author={} | {} | {}", p.id, p.title, p.author_id, p.status, p.created_at); }
+            for p in recent {
+                println!(
+                    "- {} | {} | author={} | {} | {}",
+                    p.id, p.title, p.author_id, p.status, p.created_at
+                );
+            }
         }
     }
 

@@ -5,37 +5,48 @@
 #![allow(deprecated)] // internal deprecations intentionally retained under feature gate
 
 #[cfg(feature = "legacy-admin-token")]
-use std::env;
-#[cfg(feature = "legacy-admin-token")]
 use crate::utils::deprecation::warn_once;
+#[cfg(feature = "legacy-admin-token")]
+use std::env;
 
 /// Check if the provided admin token is valid
 /// This is a simple token-based authentication for admin endpoints
-/// 
+///
 /// # Deprecated
 /// This function is deprecated in favor of Biscuit-based authentication with role permissions.
 /// Use the unified authentication system with "admin" permission checking instead.
 #[cfg(feature = "legacy-admin-token")]
-#[deprecated(note = "Use Biscuit authentication with admin permission checking instead (will be removed in 3.0.0)")]
+#[deprecated(
+    note = "Use Biscuit authentication with admin permission checking instead (will be removed in 3.0.0)"
+)]
 pub fn check_admin_token(req_token: &str) -> bool {
     runtime_admin_token_warn_once();
-    env::var("ADMIN_TOKEN").map(|t| t == req_token).unwrap_or(false)
+    env::var("ADMIN_TOKEN")
+        .map(|t| t == req_token)
+        .unwrap_or(false)
 }
 
 /// Get the admin token from environment
-/// 
+///
 /// # Deprecated
 /// This function is deprecated in favor of Biscuit-based authentication with role permissions.
 /// Use the unified authentication system with "admin" permission checking instead.
 #[cfg(feature = "legacy-admin-token")]
-#[deprecated(note = "Use Biscuit authentication with admin permission checking instead (will be removed in 3.0.0)")]
+#[deprecated(
+    note = "Use Biscuit authentication with admin permission checking instead (will be removed in 3.0.0)"
+)]
 pub fn get_admin_token() -> Option<String> {
     runtime_admin_token_warn_once();
     env::var("ADMIN_TOKEN").ok()
 }
 
 #[cfg(feature = "legacy-admin-token")]
-fn runtime_admin_token_warn_once() { warn_once("legacy_admin_token", "legacy ADMIN_TOKEN based auth is deprecated and will be removed in 3.0.0. Migrate to Biscuit permission-based admin auth."); }
+fn runtime_admin_token_warn_once() {
+    warn_once(
+        "legacy_admin_token",
+        "legacy ADMIN_TOKEN based auth is deprecated and will be removed in 3.0.0. Migrate to Biscuit permission-based admin auth.",
+    );
+}
 
 #[cfg(all(test, feature = "legacy-admin-token"))]
 mod tests {

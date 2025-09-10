@@ -1,8 +1,8 @@
 //! Ensures deprecated flattened fields in AuthSuccessResponse remain consistent with tokens.* until Phase 4 removal.
-use cms_backend::utils::auth_response::{AuthTokens, AuthSuccessResponse};
-use cms_backend::models::UserRole;
-use cms_backend::utils::common_types::UserInfo;
 use chrono::Utc;
+use cms_backend::models::UserRole;
+use cms_backend::utils::auth_response::{AuthSuccessResponse, AuthTokens};
+use cms_backend::utils::common_types::UserInfo;
 
 fn sample_user() -> UserInfo {
     UserInfo {

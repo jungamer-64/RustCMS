@@ -1,5 +1,5 @@
 use cms_backend::handlers::admin;
-use cms_backend::{config::Config, AppState};
+use cms_backend::{AppState, config::Config};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

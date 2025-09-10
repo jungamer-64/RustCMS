@@ -1,5 +1,5 @@
 #![cfg(feature = "auth")]
-use biscuit_auth::{KeyPair, Biscuit};
+use biscuit_auth::{Biscuit, KeyPair};
 
 // NOTE: biscuit-auth v6: token creation via builder pattern; authorizer().query_all() available.
 
@@ -19,9 +19,9 @@ fn biscuit_authorizer_query_roundtrip() {
     let (token, _kp) = build_token("11111111-1111-1111-1111-111111111111", "alice", "admin");
     let mut authorizer = token.authorizer().expect("authorizer");
     let q = r#"data($id,$u,$r) <- user($id,$u,$r)"#;
-    let rows: Vec<(String,String,String)> = authorizer.query_all(q).expect("query");
+    let rows: Vec<(String, String, String)> = authorizer.query_all(q).expect("query");
     assert_eq!(rows.len(), 1);
-    let (id,u,r) = &rows[0];
+    let (id, u, r) = &rows[0];
     assert_eq!(u, "alice");
     assert_eq!(r, "admin");
     assert_eq!(id, "11111111-1111-1111-1111-111111111111");
@@ -33,7 +33,7 @@ fn biscuit_authorizer_no_fact_returns_empty() {
     let token = Biscuit::builder().build(&kp).expect("empty biscuit");
     let mut authorizer = token.authorizer().expect("authorizer");
     let q = r#"data($id,$u,$r) <- user($id,$u,$r)"#;
-    let rows: Vec<(String,String,String)> = authorizer.query_all(q).expect("query");
+    let rows: Vec<(String, String, String)> = authorizer.query_all(q).expect("query");
     assert!(rows.is_empty(), "expected no rows, got {:?}", rows);
 }
 

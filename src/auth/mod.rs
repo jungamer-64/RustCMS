@@ -21,34 +21,39 @@
 //! - セッション状態はメモリ (HashMap) 管理 (分散構成向けには外部ストアへ差し替え予定)
 
 use argon2::Argon2;
-use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use biscuit_auth::{KeyPair, PrivateKey, PublicKey, builder::BiscuitBuilder, error::Format as BiscuitFormat, Algorithm as BiscuitAlgorithm};
+use base64::engine::general_purpose::STANDARD;
+use biscuit_auth::{
+    Algorithm as BiscuitAlgorithm, KeyPair, PrivateKey, PublicKey, builder::BiscuitBuilder,
+    error::Format as BiscuitFormat,
+};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::RwLock;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{
+    Result,
     config::AuthConfig,
     database::Database,
     models::{CreateUserRequest, User, UserRole},
     utils::{common_types::UserInfo, password},
-    Result,
 };
 
 // --- Key file helper funcs (extracted for reduced complexity in try_load_dir_keys) ---
 fn read_file_string(path: &std::path::Path, label: &str) -> crate::Result<String> {
-    std::fs::read_to_string(path)
-        .map_err(|e| crate::AppError::Internal(format!("Failed reading biscuit {label} key file: {e}")))
+    std::fs::read_to_string(path).map_err(|e| {
+        crate::AppError::Internal(format!("Failed reading biscuit {label} key file: {e}"))
+    })
 }
 fn decode_key_b64(data: &str, label: &str) -> crate::Result<Vec<u8>> {
-    STANDARD.decode(data)
-        .map_err(|e| crate::AppError::Internal(format!("Failed to decode biscuit {label} key b64: {e}")))
+    STANDARD.decode(data).map_err(|e| {
+        crate::AppError::Internal(format!("Failed to decode biscuit {label} key b64: {e}"))
+    })
 }
 fn read_biscuit_private_key(path: &std::path::Path) -> crate::Result<PrivateKey> {
     let b64 = read_file_string(path, "private")?;
@@ -133,7 +138,9 @@ impl Clone for AuthService {
 
 impl AuthService {
     /// Testing helper: clears all sessions (used by integration tests)
-    pub async fn clear_sessions_for_test(&self) { self.sessions.write().await.clear(); }
+    pub async fn clear_sessions_for_test(&self) {
+        self.sessions.write().await.clear();
+    }
 }
 
 /// Session data
@@ -202,17 +209,19 @@ impl AuthService {
         Some((priv_key, pub_key))
     }
 
-
     fn generate_and_persist(dir: &std::path::Path) -> crate::Result<(PrivateKey, PublicKey)> {
-        std::fs::create_dir_all(dir)
-            .map_err(|e| crate::AppError::Internal(format!("Failed to create biscuit key dir: {}", e)))?;
+        std::fs::create_dir_all(dir).map_err(|e| {
+            crate::AppError::Internal(format!("Failed to create biscuit key dir: {}", e))
+        })?;
         let kp = KeyPair::new();
         let priv_b64 = STANDARD.encode(kp.private().to_bytes());
         let pub_b64 = STANDARD.encode(kp.public().to_bytes());
-        std::fs::write(dir.join("biscuit_private.b64"), &priv_b64)
-            .map_err(|e| crate::AppError::Internal(format!("Failed to write biscuit private key file: {}", e)))?;
-        std::fs::write(dir.join("biscuit_public.b64"), &pub_b64)
-            .map_err(|e| crate::AppError::Internal(format!("Failed to write biscuit public key file: {}", e)))?;
+        std::fs::write(dir.join("biscuit_private.b64"), &priv_b64).map_err(|e| {
+            crate::AppError::Internal(format!("Failed to write biscuit private key file: {}", e))
+        })?;
+        std::fs::write(dir.join("biscuit_public.b64"), &pub_b64).map_err(|e| {
+            crate::AppError::Internal(format!("Failed to write biscuit public key file: {}", e))
+        })?;
         Ok((kp.private(), kp.public()))
     }
 
@@ -222,7 +231,9 @@ impl AuthService {
     }
     #[inline]
     fn ensure_active(&self, user: &User) -> Result<()> {
-        if !user.is_active { return Err(AuthError::InvalidCredentials.into()); }
+        if !user.is_active {
+            return Err(AuthError::InvalidCredentials.into());
+        }
         Ok(())
     }
     // ---------------- Internal helpers (duplication reduction) ----------------
@@ -240,7 +251,13 @@ impl AuthService {
         (now + access_ttl, now + refresh_ttl)
     }
 
-    async fn insert_session(&self, user: &User, session_id: &str, refresh_exp: DateTime<Utc>, refresh_version: u32) {
+    async fn insert_session(
+        &self,
+        user: &User,
+        session_id: &str,
+        refresh_exp: DateTime<Utc>,
+        refresh_version: u32,
+    ) {
         let now = Utc::now();
         let data = SessionData {
             user_id: user.id,
@@ -251,39 +268,86 @@ impl AuthService {
             last_accessed: now,
             refresh_version,
         };
-        self.sessions.write().await.insert(session_id.to_string(), data);
+        self.sessions
+            .write()
+            .await
+            .insert(session_id.to_string(), data);
     }
 
-    fn issue_access_and_refresh(&self, user: &User, session_id: &str, version: u32, access_exp: DateTime<Utc>, refresh_exp: DateTime<Utc>) -> Result<(String,String,i64)> {
-        let access_token = self.build_biscuit_token(user, session_id, version, "access", access_exp.timestamp())?;
-        let refresh_token = self.build_biscuit_token(user, session_id, version, "refresh", refresh_exp.timestamp())?;
-        Ok((access_token, refresh_token, (access_exp - Utc::now()).num_seconds()))
+    fn issue_access_and_refresh(
+        &self,
+        user: &User,
+        session_id: &str,
+        version: u32,
+        access_exp: DateTime<Utc>,
+        refresh_exp: DateTime<Utc>,
+    ) -> Result<(String, String, i64)> {
+        let access_token =
+            self.build_biscuit_token(user, session_id, version, "access", access_exp.timestamp())?;
+        let refresh_token = self.build_biscuit_token(
+            user,
+            session_id,
+            version,
+            "refresh",
+            refresh_exp.timestamp(),
+        )?;
+        Ok((
+            access_token,
+            refresh_token,
+            (access_exp - Utc::now()).num_seconds(),
+        ))
     }
 
     // ---------------- Biscuit fact query helpers ----------------
-    fn biscuit_query_triple(&self, authz: &mut biscuit_auth::Authorizer, dsl: &str, ctx: &str) -> Result<(String,String,String)> {
-        let v: Vec<(String,String,String)> = authz
+    fn biscuit_query_triple(
+        &self,
+        authz: &mut biscuit_auth::Authorizer,
+        dsl: &str,
+        ctx: &str,
+    ) -> Result<(String, String, String)> {
+        let v: Vec<(String, String, String)> = authz
             .query_all(dsl)
             .map_err(|e| AuthError::Biscuit(format!("Failed to query {}: {}", ctx, e)))?;
         v.into_iter().next().ok_or(AuthError::InvalidToken.into())
     }
 
-    fn biscuit_query_string(&self, authz: &mut biscuit_auth::Authorizer, dsl: &str, ctx: &str) -> Result<String> {
+    fn biscuit_query_string(
+        &self,
+        authz: &mut biscuit_auth::Authorizer,
+        dsl: &str,
+        ctx: &str,
+    ) -> Result<String> {
         let v: Vec<(String,)> = authz
             .query_all(dsl)
             .map_err(|e| AuthError::Biscuit(format!("Failed to query {}: {}", ctx, e)))?;
-        v.into_iter().next().map(|t| t.0).ok_or(AuthError::InvalidToken.into())
+        v.into_iter()
+            .next()
+            .map(|t| t.0)
+            .ok_or(AuthError::InvalidToken.into())
     }
 
-    fn biscuit_query_i64(&self, authz: &mut biscuit_auth::Authorizer, dsl: &str, ctx: &str) -> Result<i64> {
+    fn biscuit_query_i64(
+        &self,
+        authz: &mut biscuit_auth::Authorizer,
+        dsl: &str,
+        ctx: &str,
+    ) -> Result<i64> {
         let v: Vec<(i64,)> = authz
             .query_all(dsl)
             .map_err(|e| AuthError::Biscuit(format!("Failed to query {}: {}", ctx, e)))?;
-        v.into_iter().next().map(|t| t.0).ok_or(AuthError::InvalidToken.into())
+        v.into_iter()
+            .next()
+            .map(|t| t.0)
+            .ok_or(AuthError::InvalidToken.into())
     }
 
-    fn biscuit_query_session(&self, authz: &mut biscuit_auth::Authorizer, dsl: &str, ctx: &str) -> Result<(String,u32)> {
-        let v: Vec<(String,i64)> = authz
+    fn biscuit_query_session(
+        &self,
+        authz: &mut biscuit_auth::Authorizer,
+        dsl: &str,
+        ctx: &str,
+    ) -> Result<(String, u32)> {
+        let v: Vec<(String, i64)> = authz
             .query_all(dsl)
             .map_err(|e| AuthError::Biscuit(format!("Failed to query {}: {}", ctx, e)))?;
         let (sid, ver_i) = v.into_iter().next().ok_or(AuthError::InvalidToken)?;
@@ -296,22 +360,25 @@ impl AuthService {
         // Assumption: `PrivateKey` and `PublicKey` provide byte (de)serialization APIs.
         // If the biscuit-auth types differ, adapt loading to the concrete API (e.g. from_pem/from_slice).
         // Determine biscuit keys via env, config directory, or generation and persist when appropriate
-        let (biscuit_private_key, biscuit_public_key) = if let Some(pair) = Self::try_load_env_keys() {
-            pair
-        } else {
-            let path = std::path::Path::new(&config.biscuit_root_key);
-            if !config.biscuit_root_key.is_empty() && path.exists() && path.is_dir() {
-                if path.join("biscuit_private.b64").exists() && path.join("biscuit_public.b64").exists() {
-                    let priv_key = read_biscuit_private_key(&path.join("biscuit_private.b64"))?;
-                    let pub_key = read_biscuit_public_key(&path.join("biscuit_public.b64"))?;
-                    (priv_key, pub_key)
-                } else {
-                    Self::generate_and_persist(path)?
-                }
+        let (biscuit_private_key, biscuit_public_key) =
+            if let Some(pair) = Self::try_load_env_keys() {
+                pair
             } else {
-                Self::generate_ephemeral()
-            }
-        };
+                let path = std::path::Path::new(&config.biscuit_root_key);
+                if !config.biscuit_root_key.is_empty() && path.exists() && path.is_dir() {
+                    if path.join("biscuit_private.b64").exists()
+                        && path.join("biscuit_public.b64").exists()
+                    {
+                        let priv_key = read_biscuit_private_key(&path.join("biscuit_private.b64"))?;
+                        let pub_key = read_biscuit_public_key(&path.join("biscuit_public.b64"))?;
+                        (priv_key, pub_key)
+                    } else {
+                        Self::generate_and_persist(path)?
+                    }
+                } else {
+                    Self::generate_ephemeral()
+                }
+            };
 
         // Initialize Argon2
         let argon2 = Argon2::default();
@@ -327,11 +394,17 @@ impl AuthService {
     }
 
     /// Authenticate user with username/password using AppState for DB access
-    pub async fn authenticate_user(&self, state: &crate::AppState, request: LoginRequest) -> Result<crate::models::User> {
+    pub async fn authenticate_user(
+        &self,
+        state: &crate::AppState,
+        request: LoginRequest,
+    ) -> Result<crate::models::User> {
         // Lookup user via AppState DB wrapper
-        let user = state.db_get_user_by_email(request.email.as_str()).await
+        let user = state
+            .db_get_user_by_email(request.email.as_str())
+            .await
             .map_err(|_| AuthError::UserNotFound)?;
-    self.ensure_active(&user)?;
+        self.ensure_active(&user)?;
 
         // Verify password
         if let Some(password_hash) = &user.password_hash {
@@ -345,19 +418,33 @@ impl AuthService {
         }
 
         // Update last login via AppState wrapper
-        state.db_update_last_login(user.id).await.map_err(|e| AuthError::Database(e.to_string()))?;
+        state
+            .db_update_last_login(user.id)
+            .await
+            .map_err(|e| AuthError::Database(e.to_string()))?;
 
         // Return user (handlers will call create_session via AppState wrapper)
         Ok(user)
     }
 
     /// Create authentication response with Biscuit access & refresh tokens
-    pub async fn create_auth_response(&self, user: User, remember_me: bool) -> Result<AuthResponse> {
+    pub async fn create_auth_response(
+        &self,
+        user: User,
+        remember_me: bool,
+    ) -> Result<AuthResponse> {
         let session_id = Uuid::new_v4().to_string();
         let (access_exp, refresh_exp) = self.compute_expiries(remember_me);
         let refresh_version = 1u32;
-        self.insert_session(&user, &session_id, refresh_exp, refresh_version).await;
-        let (access_token, refresh_token, expires_in) = self.issue_access_and_refresh(&user, &session_id, refresh_version, access_exp, refresh_exp)?;
+        self.insert_session(&user, &session_id, refresh_exp, refresh_version)
+            .await;
+        let (access_token, refresh_token, expires_in) = self.issue_access_and_refresh(
+            &user,
+            &session_id,
+            refresh_version,
+            access_exp,
+            refresh_exp,
+        )?;
         let tokens = crate::utils::auth_response::AuthTokens {
             access_token: access_token.clone(),
             refresh_token: refresh_token.clone(),
@@ -365,7 +452,10 @@ impl AuthService {
             expires_in,
             session_id,
         };
-        Ok(AuthResponse { user: UserInfo::from(user), tokens })
+        Ok(AuthResponse {
+            user: UserInfo::from(user),
+            tokens,
+        })
     }
 
     /// Refresh tokens (access + rotated refresh) using current valid refresh token.
@@ -374,23 +464,43 @@ impl AuthService {
     /// - セッションに保存している refresh_version と一致した場合のみ有効
     /// - 使用成功時に refresh_version をインクリメントし新しい refresh_token を発行 (旧トークンは無効化)
     /// - アクセストークンは 1h、リフレッシュは都度 30d (スライディング) とする
-    pub async fn refresh_access_token(&self, refresh_token: &str) -> Result<(crate::utils::auth_response::AuthTokens, UserInfo)> {
+    pub async fn refresh_access_token(
+        &self,
+        refresh_token: &str,
+    ) -> Result<(crate::utils::auth_response::AuthTokens, UserInfo)> {
         let parsed = self.parse_refresh_biscuit(refresh_token)?; // token_type 検証込み
         let (new_version, user) = self.bump_and_load_user(&parsed).await?;
         let (access_exp, refresh_exp) = self.compute_expiries(false);
-    let (access_token, new_refresh_token, expires_in) = self.issue_access_and_refresh(&user, &parsed.session_id, new_version, access_exp, refresh_exp)?;
+        let (access_token, new_refresh_token, expires_in) = self.issue_access_and_refresh(
+            &user,
+            &parsed.session_id,
+            new_version,
+            access_exp,
+            refresh_exp,
+        )?;
         let user_info = UserInfo::from(&user);
-        let tokens = crate::utils::auth_response::AuthTokens { access_token: access_token.clone(), refresh_token: new_refresh_token, biscuit_token: access_token.clone(), expires_in, session_id: parsed.session_id };
+        let tokens = crate::utils::auth_response::AuthTokens {
+            access_token: access_token.clone(),
+            refresh_token: new_refresh_token,
+            biscuit_token: access_token.clone(),
+            expires_in,
+            session_id: parsed.session_id,
+        };
         Ok((tokens, user_info))
     }
 
     // セッション version をインクリメントしユーザーを取得 (有効性検査込み)
-    async fn bump_and_load_user(&self, parsed: &ParsedBiscuit) -> Result<(u32, crate::models::User)> {
+    async fn bump_and_load_user(
+        &self,
+        parsed: &ParsedBiscuit,
+    ) -> Result<(u32, crate::models::User)> {
         let new_version = {
             let mut sessions = self.sessions.write().await;
             self.validate_and_bump_refresh_session(parsed, &mut sessions)?
         };
-        let user = self.database.get_user_by_id(parsed.user_id)
+        let user = self
+            .database
+            .get_user_by_id(parsed.user_id)
             .await
             .map_err(|_| AuthError::UserNotFound)?;
         self.ensure_active(&user)?;
@@ -399,44 +509,80 @@ impl AuthService {
 
     fn parse_refresh_biscuit(&self, token: &str) -> Result<ParsedBiscuit> {
         let parsed = self.parse_biscuit(token)?;
-        if parsed.token_type != "refresh" { return Err(AuthError::InvalidToken.into()); }
+        if parsed.token_type != "refresh" {
+            return Err(AuthError::InvalidToken.into());
+        }
         Ok(parsed)
     }
 
-    fn validate_and_bump_refresh_session<'a>(&self, parsed: &ParsedBiscuit, sessions: &'a mut std::collections::HashMap<String, SessionData>) -> Result<u32> {
-        let session = sessions.get_mut(&parsed.session_id).ok_or(AuthError::InvalidToken)?;
-        if session.expires_at < Utc::now() { return Err(AuthError::TokenExpired.into()); }
-        if session.refresh_version != parsed.version { return Err(AuthError::InvalidToken.into()); }
+    fn validate_and_bump_refresh_session<'a>(
+        &self,
+        parsed: &ParsedBiscuit,
+        sessions: &'a mut std::collections::HashMap<String, SessionData>,
+    ) -> Result<u32> {
+        let session = sessions
+            .get_mut(&parsed.session_id)
+            .ok_or(AuthError::InvalidToken)?;
+        if session.expires_at < Utc::now() {
+            return Err(AuthError::TokenExpired.into());
+        }
+        if session.refresh_version != parsed.version {
+            return Err(AuthError::InvalidToken.into());
+        }
         session.refresh_version += 1;
         Ok(session.refresh_version)
     }
 
     /// Build biscuit token with required facts
-    fn build_biscuit_token(&self, user: &User, session_id: &str, version: u32, token_type: &str, exp_unix: i64) -> Result<String> {
+    fn build_biscuit_token(
+        &self,
+        user: &User,
+        session_id: &str,
+        version: u32,
+        token_type: &str,
+        exp_unix: i64,
+    ) -> Result<String> {
         let mut program = String::new();
-        program.push_str(&format!("user(\"{}\", \"{}\", \"{}\");\n", user.id, user.username, user.role));
+        program.push_str(&format!(
+            "user(\"{}\", \"{}\", \"{}\");\n",
+            user.id, user.username, user.role
+        ));
         program.push_str(&format!("token_type(\"{}\");\n", token_type));
         program.push_str(&format!("exp({});\n", exp_unix));
         program.push_str(&format!("session(\"{}\", {});\n", session_id, version));
 
         let builder: BiscuitBuilder = biscuit_auth::Biscuit::builder();
-        let builder = builder.code(&program).map_err(|e| AuthError::Biscuit(format!("Failed to build biscuit facts: {}", e)))?;
+        let builder = builder
+            .code(&program)
+            .map_err(|e| AuthError::Biscuit(format!("Failed to build biscuit facts: {}", e)))?;
         let keypair = KeyPair::from(&self.biscuit_private_key);
-        let token = builder.build(&keypair).map_err(|e| AuthError::Biscuit(format!("Failed to sign biscuit: {}", e)))?;
-        let b64 = token.to_base64().map_err(|e| AuthError::Biscuit(format!("Failed to serialize biscuit token: {}", e)))?;
+        let token = builder
+            .build(&keypair)
+            .map_err(|e| AuthError::Biscuit(format!("Failed to sign biscuit: {}", e)))?;
+        let b64 = token
+            .to_base64()
+            .map_err(|e| AuthError::Biscuit(format!("Failed to serialize biscuit token: {}", e)))?;
         Ok(b64)
     }
 
     /// (旧互換) verify_jwt -> Biscuit access 検証 (deprecated, behind legacy-auth-flat for eventual removal)
     #[cfg(feature = "legacy-auth-flat")]
-    #[deprecated(note = "Use verify_biscuit(state, token) or auth_middleware injected AuthContext (will be removed in 3.0.0)")]
-    pub async fn verify_jwt(&self, token: &str) -> Result<AuthContext> { self.verify_biscuit_generic(token, Some("access")).await }
+    #[deprecated(
+        note = "Use verify_biscuit(state, token) or auth_middleware injected AuthContext (will be removed in 3.0.0)"
+    )]
+    pub async fn verify_jwt(&self, token: &str) -> Result<AuthContext> {
+        self.verify_biscuit_generic(token, Some("access")).await
+    }
 
     /// Biscuit トークン検証 (AppState 経由でユーザー確認 & メトリクス計測用ラッパーと組み合わせて利用)
     ///
     /// 直接 DB コネクションを取得せず、`AppState` の `db_get_user_by_id` を利用することで
     /// メトリクスと一貫した DB アクセス経路を確保する。
-    pub async fn verify_biscuit(&self, state: &crate::AppState, token: &str) -> Result<AuthContext> {
+    pub async fn verify_biscuit(
+        &self,
+        state: &crate::AppState,
+        token: &str,
+    ) -> Result<AuthContext> {
         let (ctx, _user) = self.verify_biscuit_with_user(state, token).await?;
         Ok(ctx)
     }
@@ -459,22 +605,55 @@ impl AuthService {
     fn parse_biscuit(&self, token: &str) -> Result<ParsedBiscuit> {
         let unverified = biscuit_auth::UnverifiedBiscuit::from_base64(token)
             .map_err(|e| AuthError::Biscuit(format!("Failed to parse biscuit token: {}", e)))?;
-        let key_provider = |_opt_root_id: Option<u32>| -> std::result::Result<PublicKey, BiscuitFormat> { Ok(self.biscuit_public_key) };
-        let biscuit = unverified.verify(key_provider)
-            .map_err(|e| AuthError::Biscuit(format!("Biscuit signature verification failed: {}", e)))?;
-        let mut authorizer = biscuit.authorizer().map_err(|e| AuthError::Biscuit(format!("Failed to create authorizer: {}", e)))?;
-        let _ = authorizer.authorize().map_err(|e| AuthError::Biscuit(format!("Authorizer run failed: {}", e)))?;
-    let (id_s, username, role_s) = self.biscuit_query_triple(&mut authorizer, r#"data($id,$u,$r) <- user($id,$u,$r)"#, "user facts")?;
-    let user_id = Uuid::parse_str(&id_s).map_err(|_| AuthError::InvalidToken)?;
-    let role = UserRole::parse_str(&role_s).map_err(|_| AuthError::InvalidToken)?;
-    let token_type = self.biscuit_query_string(&mut authorizer, r#"data($t) <- token_type($t)"#, "token_type")?;
-    let exp = self.biscuit_query_i64(&mut authorizer, r#"data($e) <- exp($e)"#, "exp")?;
-    if exp < Utc::now().timestamp() { return Err(AuthError::TokenExpired.into()); }
-    let (session_id, version) = self.biscuit_query_session(&mut authorizer, r#"data($sid,$v) <- session($sid,$v)"#, "session")?;
-    Ok(ParsedBiscuit { user_id, username, role, token_type, session_id, version })
+        let key_provider =
+            |_opt_root_id: Option<u32>| -> std::result::Result<PublicKey, BiscuitFormat> {
+                Ok(self.biscuit_public_key)
+            };
+        let biscuit = unverified.verify(key_provider).map_err(|e| {
+            AuthError::Biscuit(format!("Biscuit signature verification failed: {}", e))
+        })?;
+        let mut authorizer = biscuit
+            .authorizer()
+            .map_err(|e| AuthError::Biscuit(format!("Failed to create authorizer: {}", e)))?;
+        let _ = authorizer
+            .authorize()
+            .map_err(|e| AuthError::Biscuit(format!("Authorizer run failed: {}", e)))?;
+        let (id_s, username, role_s) = self.biscuit_query_triple(
+            &mut authorizer,
+            r#"data($id,$u,$r) <- user($id,$u,$r)"#,
+            "user facts",
+        )?;
+        let user_id = Uuid::parse_str(&id_s).map_err(|_| AuthError::InvalidToken)?;
+        let role = UserRole::parse_str(&role_s).map_err(|_| AuthError::InvalidToken)?;
+        let token_type = self.biscuit_query_string(
+            &mut authorizer,
+            r#"data($t) <- token_type($t)"#,
+            "token_type",
+        )?;
+        let exp = self.biscuit_query_i64(&mut authorizer, r#"data($e) <- exp($e)"#, "exp")?;
+        if exp < Utc::now().timestamp() {
+            return Err(AuthError::TokenExpired.into());
+        }
+        let (session_id, version) = self.biscuit_query_session(
+            &mut authorizer,
+            r#"data($sid,$v) <- session($sid,$v)"#,
+            "session",
+        )?;
+        Ok(ParsedBiscuit {
+            user_id,
+            username,
+            role,
+            token_type,
+            session_id,
+            version,
+        })
     }
 
-    async fn verify_biscuit_generic(&self, token: &str, expect_type: Option<&str>) -> Result<AuthContext> {
+    async fn verify_biscuit_generic(
+        &self,
+        token: &str,
+        expect_type: Option<&str>,
+    ) -> Result<AuthContext> {
         let parsed = self.parse_and_check(token, expect_type)?;
         // セッション整合性チェックを専用ヘルパーへ委譲
         self.validate_session_consistency(&parsed).await?;
@@ -485,8 +664,12 @@ impl AuthService {
     async fn validate_session_consistency(&self, parsed: &ParsedBiscuit) -> Result<()> {
         let mut sessions = self.sessions.write().await;
         let now = Utc::now();
-        let sess = sessions.get_mut(&parsed.session_id).ok_or(AuthError::InvalidToken)?;
-        if sess.expires_at < now { return Err(AuthError::TokenExpired.into()); }
+        let sess = sessions
+            .get_mut(&parsed.session_id)
+            .ok_or(AuthError::InvalidToken)?;
+        if sess.expires_at < now {
+            return Err(AuthError::TokenExpired.into());
+        }
         // last_accessed 更新
         sess.last_accessed = now;
         // access の場合は version <= stored_version を許可 (新しい refresh で version が進むため)
@@ -593,30 +776,47 @@ impl AuthService {
     }
 
     /// Create user using AppState so metrics are recorded centrally
-    pub async fn create_user(&self, state: &crate::AppState, request: CreateUserRequest) -> Result<User> {
+    pub async fn create_user(
+        &self,
+        state: &crate::AppState,
+        request: CreateUserRequest,
+    ) -> Result<User> {
         state.db_create_user(request).await
     }
 
     /// Backwards-compatible wrapper kept for call sites that used the old helper
-    pub async fn create_user_with_state(&self, state: &crate::AppState, request: CreateUserRequest) -> Result<User> {
+    pub async fn create_user_with_state(
+        &self,
+        state: &crate::AppState,
+        request: CreateUserRequest,
+    ) -> Result<User> {
         self.create_user(state, request).await
     }
 
     /// Validate token (Biscuit access) and return user
-    pub async fn validate_token(&self, state: &crate::AppState, token: &str) -> Result<crate::models::User> {
+    pub async fn validate_token(
+        &self,
+        state: &crate::AppState,
+        token: &str,
+    ) -> Result<crate::models::User> {
         let (_ctx, user) = self.verify_biscuit_with_user(state, token).await?;
         Ok(user)
     }
 
     /// Create session token (Biscuit access) - retained for API 互換, returns access biscuit
     pub async fn create_session(&self, user_id: Uuid, state: &crate::AppState) -> Result<String> {
-    let user = state.db_get_user_by_id(user_id).await.map_err(|_| AuthError::UserNotFound)?;
-    self.ensure_active(&user)?;
-    let session_id = Uuid::new_v4().to_string();
-    let (access_exp, refresh_exp) = self.compute_expiries(false);
-    self.insert_session(&user, &session_id, refresh_exp, 1).await;
-    let token = self.build_biscuit_token(&user, &session_id, 1, "access", access_exp.timestamp())?;
-    Ok(token)
+        let user = state
+            .db_get_user_by_id(user_id)
+            .await
+            .map_err(|_| AuthError::UserNotFound)?;
+        self.ensure_active(&user)?;
+        let session_id = Uuid::new_v4().to_string();
+        let (access_exp, refresh_exp) = self.compute_expiries(false);
+        self.insert_session(&user, &session_id, refresh_exp, 1)
+            .await;
+        let token =
+            self.build_biscuit_token(&user, &session_id, 1, "access", access_exp.timestamp())?;
+        Ok(token)
     }
 }
 

@@ -1,3 +1,4 @@
+use crate::middleware::common::{BoxServiceFuture, forward_poll_ready};
 use axum::{
     extract::Request,
     http::{HeaderMap, HeaderName, HeaderValue, Method},
@@ -7,7 +8,6 @@ use rand::Rng;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower::{Layer, Service};
-use crate::middleware::common::{BoxServiceFuture, forward_poll_ready};
 
 /// CSRF protection service for preventing Cross-Site Request Forgery attacks
 #[derive(Clone)]
@@ -24,7 +24,7 @@ impl CsrfService {
         // Generate secure random key for CSRF token generation
         let mut key = [0u8; 32];
         rand::rng().fill(&mut key);
-        
+
         Self {
             secret_key: Arc::new(key),
             active_tokens: Arc::new(RwLock::new(std::collections::HashSet::new())),
@@ -36,13 +36,16 @@ impl CsrfService {
         // Generate random token using cryptographically secure random
         let mut token_bytes = [0u8; 32];
         rand::rng().fill(&mut token_bytes);
-        
+
         // Convert to base64 for safe transmission
-        let token = base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, &token_bytes);
-        
+        let token = base64::Engine::encode(
+            &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+            &token_bytes,
+        );
+
         // Store token for validation (防止 token 重复利用攻击)
         self.active_tokens.write().await.insert(token.clone());
-        
+
         token
     }
 
@@ -111,7 +114,7 @@ where
         &mut self,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
-    forward_poll_ready(&mut self.service, cx)
+        forward_poll_ready(&mut self.service, cx)
     }
 
     fn call(&mut self, request: Request<B>) -> Self::Future {
@@ -217,7 +220,7 @@ pub fn sanitize_input(input: &str) -> String {
         .chars()
         .filter(|c| !c.is_control() || c.is_whitespace()) // Remove control characters except whitespace
         .collect();
-    
+
     // Apply HTML escaping
     escape_html(&sanitized)
 }
@@ -232,7 +235,10 @@ pub fn encode_url_component(input: &str) -> String {
 /// API endpoints with proper authentication (Bearer tokens) are exempt from CSRF
 pub fn is_csrf_protected_endpoint(method: &Method, path: &str) -> bool {
     // Only protect state-changing operations
-    if !matches!(method, &Method::POST | &Method::PUT | &Method::DELETE | &Method::PATCH) {
+    if !matches!(
+        method,
+        &Method::POST | &Method::PUT | &Method::DELETE | &Method::PATCH
+    ) {
         return false;
     }
 
@@ -253,14 +259,14 @@ mod tests {
     #[tokio::test]
     async fn test_csrf_token_generation_and_validation() {
         let csrf_service = CsrfService::new();
-        
+
         // Generate token
         let token = csrf_service.generate_token().await;
         assert!(!token.is_empty());
-        
+
         // Validate token (should succeed)
         assert!(csrf_service.validate_and_consume_token(&token).await);
-        
+
         // Validate same token again (should fail - one-time use)
         assert!(!csrf_service.validate_and_consume_token(&token).await);
     }
@@ -269,14 +275,17 @@ mod tests {
     fn test_html_escaping() {
         let dangerous_input = "<script>alert('xss')</script>";
         let escaped = escape_html(dangerous_input);
-        assert_eq!(escaped, "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;&#x2F;script&gt;");
+        assert_eq!(
+            escaped,
+            "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;&#x2F;script&gt;"
+        );
     }
 
     #[test]
     fn test_input_sanitization() {
         let dangerous_input = "<script>alert('xss')</script><img onerror='alert(1)' src='x'>";
         let sanitized = sanitize_input(dangerous_input);
-        
+
         // Should not contain executable script tags
         assert!(!sanitized.contains("<script"));
         assert!(!sanitized.contains("javascript:"));
@@ -292,18 +301,24 @@ mod tests {
     #[test]
     fn test_csrf_protection_logic() {
         use axum::http::Method;
-        
+
         // State-changing operations on forms should be protected
         assert!(is_csrf_protected_endpoint(&Method::POST, "/admin/posts"));
         assert!(is_csrf_protected_endpoint(&Method::PUT, "/forms/contact"));
-        
+
         // API endpoints with token auth should not require CSRF
         assert!(!is_csrf_protected_endpoint(&Method::POST, "/api/v1/posts"));
-        assert!(!is_csrf_protected_endpoint(&Method::DELETE, "/api/v1/users/123"));
-        
+        assert!(!is_csrf_protected_endpoint(
+            &Method::DELETE,
+            "/api/v1/users/123"
+        ));
+
         // Auth endpoints still need CSRF for cookie-based flows
-        assert!(is_csrf_protected_endpoint(&Method::POST, "/api/v1/auth/login"));
-        
+        assert!(is_csrf_protected_endpoint(
+            &Method::POST,
+            "/api/v1/auth/login"
+        ));
+
         // GET requests don't need CSRF
         assert!(!is_csrf_protected_endpoint(&Method::GET, "/admin/posts"));
     }

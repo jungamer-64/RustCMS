@@ -12,10 +12,10 @@ pub struct CacheKeyBuilder {
 }
 
 // Common cache key base & prefixes (keep centralized for invalidation & consistency)
-pub const CACHE_PREFIX_POST_ID: &str = "post:id:";          // + {uuid}
-pub const CACHE_PREFIX_POSTS: &str = "posts:";              // list queries start with this
-pub const CACHE_PREFIX_USER_ID: &str = "user:id:";          // + {uuid}
-pub const CACHE_PREFIX_USERS: &str = "users:";              // list queries start with this
+pub const CACHE_PREFIX_POST_ID: &str = "post:id:"; // + {uuid}
+pub const CACHE_PREFIX_POSTS: &str = "posts:"; // list queries start with this
+pub const CACHE_PREFIX_USER_ID: &str = "user:id:"; // + {uuid}
+pub const CACHE_PREFIX_USERS: &str = "users:"; // list queries start with this
 pub const CACHE_PREFIX_USER_POSTS: &str = "user_posts:user:"; // + {uuid}:...
 
 /// Convenience helper to build a simple entity id based cache key.
@@ -28,32 +28,58 @@ pub fn entity_id_key(prefix: &str, id: impl std::fmt::Display) -> String {
 /// proliferation of small one-off wrapper functions like build_posts_cache_key
 /// or build_users_cache_key. Handlers can format through `to_cache_key`.
 pub enum ListCacheKey<'a> {
-    Posts { page: u32, limit: u32, status: &'a Option<String>, author: &'a Option<uuid::Uuid>, tag: &'a Option<String>, sort: &'a Option<String> },
-    Users { page: u32, limit: u32, role: &'a Option<String>, active: Option<bool>, sort: &'a Option<String> },
+    Posts {
+        page: u32,
+        limit: u32,
+        status: &'a Option<String>,
+        author: &'a Option<uuid::Uuid>,
+        tag: &'a Option<String>,
+        sort: &'a Option<String>,
+    },
+    Users {
+        page: u32,
+        limit: u32,
+        role: &'a Option<String>,
+        active: Option<bool>,
+        sort: &'a Option<String>,
+    },
 }
 
 impl<'a> ListCacheKey<'a> {
     pub fn to_cache_key(&self) -> String {
         match self {
-        ListCacheKey::Posts { page, limit, status, author, tag, sort } => build_list_cache_key(
+            ListCacheKey::Posts {
+                page,
+                limit,
+                status,
+                author,
+                tag,
+                sort,
+            } => build_list_cache_key(
                 "posts",
                 *page,
                 *limit,
                 &[
-            ("status", (*status).clone()),
+                    ("status", (*status).clone()),
                     ("author", author.map(|u| u.to_string())),
-            ("tag", (*tag).clone()),
-            ("sort", (*sort).clone()),
+                    ("tag", (*tag).clone()),
+                    ("sort", (*sort).clone()),
                 ],
             ),
-            ListCacheKey::Users { page, limit, role, active, sort } => build_list_cache_key(
+            ListCacheKey::Users {
+                page,
+                limit,
+                role,
+                active,
+                sort,
+            } => build_list_cache_key(
                 "users",
                 *page,
                 *limit,
                 &[
-            ("role", (*role).clone()),
+                    ("role", (*role).clone()),
                     ("active", active.map(|b| b.to_string())),
-            ("sort", (*sort).clone()),
+                    ("sort", (*sort).clone()),
                 ],
             ),
         }
@@ -61,7 +87,13 @@ impl<'a> ListCacheKey<'a> {
 }
 
 impl CacheKeyBuilder {
-    pub fn new(base: impl Into<String>) -> Self { Self { base: base.into(), segs: Vec::new(), used_labels: std::collections::HashSet::new() } }
+    pub fn new(base: impl Into<String>) -> Self {
+        Self {
+            base: base.into(),
+            segs: Vec::new(),
+            used_labels: std::collections::HashSet::new(),
+        }
+    }
     fn push_kv(&mut self, key: &str, val: String) {
         // Enforce uniqueness of labels to prevent accidental overwrites like .kv("page",1).kv("page",2)
         debug_assert!(
@@ -71,13 +103,23 @@ impl CacheKeyBuilder {
         self.used_labels.insert(key.to_string());
         self.segs.push(format!("{}:{}", key, val));
     }
-    pub fn kv(mut self, key: &str, value: impl std::fmt::Display) -> Self { self.push_kv(key, value.to_string()); self }
+    pub fn kv(mut self, key: &str, value: impl std::fmt::Display) -> Self {
+        self.push_kv(key, value.to_string());
+        self
+    }
     pub fn kv_opt<T: std::fmt::Display>(mut self, key: &str, opt: Option<T>) -> Self {
-        match opt { Some(v) => self.push_kv(key, v.to_string()), None => self.push_kv(key, "all".to_string()) }
+        match opt {
+            Some(v) => self.push_kv(key, v.to_string()),
+            None => self.push_kv(key, "all".to_string()),
+        }
         self
     }
     pub fn build(self) -> String {
-        if self.segs.is_empty() { self.base } else { format!("{}:{}", self.base, self.segs.join(":")) }
+        if self.segs.is_empty() {
+            self.base
+        } else {
+            format!("{}:{}", self.base, self.segs.join(":"))
+        }
     }
 }
 
@@ -87,8 +129,15 @@ impl CacheKeyBuilder {
 /// (label, Option<String>) pairs for additional labeled segments. When the
 /// Option is None the key will encode the segment as "label:all" using
 /// `kv_opt` semantics.
-pub fn build_list_cache_key(base: &str, page: u32, limit: u32, pairs: &[(&str, Option<String>)]) -> String {
-    let mut b = CacheKeyBuilder::new(base).kv("page", page).kv("limit", limit);
+pub fn build_list_cache_key(
+    base: &str,
+    page: u32,
+    limit: u32,
+    pairs: &[(&str, Option<String>)],
+) -> String {
+    let mut b = CacheKeyBuilder::new(base)
+        .kv("page", page)
+        .kv("limit", limit);
     for (k, v) in pairs {
         match v {
             Some(val) => {
@@ -107,7 +156,11 @@ mod tests {
     use super::*;
     #[test]
     fn builds_expected() {
-        let k = CacheKeyBuilder::new("posts").kv("page", 1).kv("limit", 20).kv_opt("status", Option::<String>::None).build();
+        let k = CacheKeyBuilder::new("posts")
+            .kv("page", 1)
+            .kv("limit", 20)
+            .kv_opt("status", Option::<String>::None)
+            .build();
         assert_eq!(k, "posts:page:1:limit:20:status:all");
     }
 
@@ -126,6 +179,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "duplicate cache key segment label detected")]
     fn duplicate_label_panics_in_debug() {
-        let _ = CacheKeyBuilder::new("dup").kv("page", 1).kv("page", 2).build();
+        let _ = CacheKeyBuilder::new("dup")
+            .kv("page", 1)
+            .kv("page", 2)
+            .build();
     }
 }

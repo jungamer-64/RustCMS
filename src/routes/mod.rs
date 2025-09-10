@@ -3,13 +3,13 @@
 //! Defines all HTTP routes and their corresponding handlers
 
 use axum::{
-    routing::{delete, get, post},
     Router,
+    routing::{delete, get, post},
 };
 
-use crate::{handlers, AppState};
 use crate::middleware::rate_limiting::RateLimitLayer; // unified IP rate limiting
-use crate::middleware::security::SecurityHeadersLayer; // security headers
+use crate::middleware::security::SecurityHeadersLayer;
+use crate::{AppState, handlers}; // security headers
 // logging middleware layer integration pending (currently unused)
 
 /// Create the main application router
@@ -37,8 +37,8 @@ pub fn create_router() -> Router<AppState> {
     // Add conditional routes based on features
     #[cfg(feature = "auth")]
     {
-        use axum::middleware;
         use crate::middleware::auth::auth_middleware;
+        use axum::middleware;
         // 公開authルート（register/login/refresh）は認証不要
         public = public.nest("/api/v1/auth", auth_public_routes());
         // 保護authルート（logout/profile）のみ認証レイヤを適用
@@ -50,8 +50,8 @@ pub fn create_router() -> Router<AppState> {
     {
         // Protect posts and users with auth middleware
         {
-            use axum::middleware;
             use crate::middleware::auth::auth_middleware;
+            use axum::middleware;
             let posts = post_routes().layer(middleware::from_fn(auth_middleware));
             let users = user_routes().layer(middleware::from_fn(auth_middleware));
             public = public.nest("/api/v1/posts", posts);
@@ -62,8 +62,8 @@ pub fn create_router() -> Router<AppState> {
         // API Key 管理 (要 auth feature)
         #[cfg(feature = "auth")]
         {
-            use axum::middleware;
             use crate::middleware::auth::auth_middleware;
+            use axum::middleware;
             let api_keys = api_key_routes().layer(middleware::from_fn(auth_middleware));
             public = public.nest("/api/v1/api-keys", api_keys);
         }
@@ -133,8 +133,8 @@ fn user_routes() -> Router<AppState> {
 #[cfg(feature = "database")]
 fn admin_routes() -> Router<AppState> {
     use crate::handlers::admin;
-    use axum::middleware;
     use crate::middleware::auth::auth_middleware;
+    use axum::middleware;
     Router::new()
         .route("/posts", get(admin::list_posts).post(admin::create_post))
         .route("/posts/:id", delete(admin::delete_post))

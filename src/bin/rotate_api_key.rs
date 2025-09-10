@@ -1,10 +1,14 @@
 use clap::{Parser, Subcommand};
-use cms_backend::utils::init::{init_env};
 use cms_backend::AppState;
 use cms_backend::config::Config;
+use cms_backend::utils::init::init_env;
 
 #[derive(Parser, Debug)]
-#[command(name="rotate_api_key", about="APIキーのローテーション / 削除 / 作成を支援する管理CLI", version)]
+#[command(
+    name = "rotate_api_key",
+    about = "APIキーのローテーション / 削除 / 作成を支援する管理CLI",
+    version
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -21,11 +25,14 @@ enum Commands {
         #[arg(long)]
         name: Option<String>,
         /// 新しいパーミッション (複数指定可)。省略時は既存権限を引き継ぐ
-        #[arg(long="perm")] 
+        #[arg(long = "perm")]
         permissions: Vec<String>,
     },
     /// APIキーを削除 (DB から完全除去)
-    Delete { #[arg(long)] id: String },
+    Delete {
+        #[arg(long)]
+        id: String,
+    },
 }
 
 #[tokio::main]
@@ -36,14 +43,27 @@ async fn main() -> cms_backend::Result<()> {
     let state = AppState::from_config(config).await?;
 
     match cli.command {
-        Commands::Rotate { id, name, permissions } => {
-            let uuid = uuid::Uuid::parse_str(&id).map_err(|e| cms_backend::AppError::BadRequest(format!("invalid uuid: {}", e)))?;
-            let perms_opt = if permissions.is_empty() { None } else { Some(permissions) };
+        Commands::Rotate {
+            id,
+            name,
+            permissions,
+        } => {
+            let uuid = uuid::Uuid::parse_str(&id)
+                .map_err(|e| cms_backend::AppError::BadRequest(format!("invalid uuid: {}", e)))?;
+            let perms_opt = if permissions.is_empty() {
+                None
+            } else {
+                Some(permissions)
+            };
             let (resp, raw) = state.db_rotate_api_key(uuid, name, perms_opt).await?;
-            println!("{{\n  \"old_key_id\": \"{}\",\n  \"new_key_id\": \"{}\",\n  \"new_raw_api_key\": \"{}\",\n  \"new_name\": \"{}\",\n  \"permissions\": {:?},\n  \"expires_at\": {:?}\n}}", id, resp.id, raw, resp.name, resp.permissions, resp.expires_at);
+            println!(
+                "{{\n  \"old_key_id\": \"{}\",\n  \"new_key_id\": \"{}\",\n  \"new_raw_api_key\": \"{}\",\n  \"new_name\": \"{}\",\n  \"permissions\": {:?},\n  \"expires_at\": {:?}\n}}",
+                id, resp.id, raw, resp.name, resp.permissions, resp.expires_at
+            );
         }
         Commands::Delete { id } => {
-            let uuid = uuid::Uuid::parse_str(&id).map_err(|e| cms_backend::AppError::BadRequest(format!("invalid uuid: {}", e)))?;
+            let uuid = uuid::Uuid::parse_str(&id)
+                .map_err(|e| cms_backend::AppError::BadRequest(format!("invalid uuid: {}", e)))?;
             state.db_delete_api_key(uuid).await?;
             println!("{{\n  \"deleted\": true,\n  \"id\": \"{}\"\n}}", id);
         }

@@ -1,7 +1,7 @@
 // telemetry temporarily minimized; re-expand later
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 #[cfg(feature = "monitoring")]
 use opentelemetry::global;
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Initialize comprehensive telemetry for enterprise monitoring
 pub fn init_telemetry() -> Result<(), Box<dyn std::error::Error>> {
@@ -23,7 +23,7 @@ pub fn init_telemetry() -> Result<(), Box<dyn std::error::Error>> {
                 .with_line_number(true)
                 .json(), // Structured logging for production
         )
-    // telemetry exporter layer temporarily removed
+        // telemetry exporter layer temporarily removed
         .init();
 
     // Initialize Prometheus metrics registry

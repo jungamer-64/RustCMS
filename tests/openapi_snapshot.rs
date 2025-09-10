@@ -21,13 +21,37 @@ fn openapi_snapshot_default_features() {
         assert!(required_fields.contains(f), "missing required field {f}");
     }
     if cfg!(feature = "auth-flat-fields") {
-        for f in ["access_token", "refresh_token", "biscuit_token", "expires_in", "session_id", "token"].iter() {
-            assert!(required_fields.contains(f), "missing flat required field {f}");
+        for f in [
+            "access_token",
+            "refresh_token",
+            "biscuit_token",
+            "expires_in",
+            "session_id",
+            "token",
+        ]
+        .iter()
+        {
+            assert!(
+                required_fields.contains(f),
+                "missing flat required field {f}"
+            );
         }
     } else {
         // Ensure flat fields not required
-        for f in ["access_token", "refresh_token", "biscuit_token", "expires_in", "session_id", "token"].iter() {
-            assert!(!required_fields.contains(f), "flat field {f} should be absent when feature disabled");
+        for f in [
+            "access_token",
+            "refresh_token",
+            "biscuit_token",
+            "expires_in",
+            "session_id",
+            "token",
+        ]
+        .iter()
+        {
+            assert!(
+                !required_fields.contains(f),
+                "flat field {f} should be absent when feature disabled"
+            );
         }
     }
 
@@ -45,5 +69,8 @@ fn openapi_snapshot_legacy_auth_flat_feature() {
     let doc = ApiDoc::openapi();
     let value = serde_json::to_value(&doc).expect("serialize openapi");
     let has_login = value.pointer("/components/schemas/LoginResponse").is_some();
-    assert!(has_login, "LoginResponse schema should be present when legacy-auth-flat feature is enabled");
+    assert!(
+        has_login,
+        "LoginResponse schema should be present when legacy-auth-flat feature is enabled"
+    );
 }

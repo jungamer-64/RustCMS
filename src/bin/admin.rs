@@ -5,8 +5,8 @@
 
 use clap::{Parser, Subcommand};
 use cms_backend::{
-    models::{CreateUserRequest, UpdateUserRequest, UserRole},
     AppState, Result,
+    models::{CreateUserRequest, UpdateUserRequest, UserRole},
 };
 use std::io::{self, Write};
 use tracing::{info, warn};
@@ -285,9 +285,15 @@ async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> 
                 .list_users(role.as_deref(), Some(active_only))
                 .await?;
 
-            println!("┌─────────────────────────────────────────┬──────────────┬─────────────────────────┬────────┬────────┐");
-            println!("│ ID                                      │ Username     │ Email                   │ Role   │ Active │");
-            println!("├─────────────────────────────────────────┼──────────────┼─────────────────────────┼────────┼────────┤");
+            println!(
+                "┌─────────────────────────────────────────┬──────────────┬─────────────────────────┬────────┬────────┐"
+            );
+            println!(
+                "│ ID                                      │ Username     │ Email                   │ Role   │ Active │"
+            );
+            println!(
+                "├─────────────────────────────────────────┼──────────────┼─────────────────────────┼────────┼────────┤"
+            );
 
             for user in users {
                 println!(
@@ -300,7 +306,9 @@ async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> 
                 );
             }
 
-            println!("└─────────────────────────────────────────┴──────────────┴─────────────────────────┴────────┴────────┘");
+            println!(
+                "└─────────────────────────────────────────┴──────────────┴─────────────────────────┴────────┴────────┘"
+            );
         }
 
         UserAction::Create {
@@ -424,7 +432,9 @@ async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> 
                     .unwrap_or_else(|_| generate_random_password())
             });
 
-            state.db_reset_user_password(existing_user.id, &new_password).await?;
+            state
+                .db_reset_user_password(existing_user.id, &new_password)
+                .await?;
 
             info!(
                 "✅ Password reset successfully for user: {}",
@@ -607,11 +617,14 @@ fn truncate(s: &str, max_len: usize) -> String {
 
 fn generate_random_password() -> String {
     use ring::rand::{SecureRandom, SystemRandom};
-    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+    const CHARSET: &[u8] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
     let rng = SystemRandom::new();
     let mut buf = [0u8; 16];
     rng.fill(&mut buf).ok();
-    buf.iter().map(|b| CHARSET[*b as usize % CHARSET.len()] as char).collect()
+    buf.iter()
+        .map(|b| CHARSET[*b as usize % CHARSET.len()] as char)
+        .collect()
 }
 
 fn prompt_password(prompt: &str) -> Result<String> {

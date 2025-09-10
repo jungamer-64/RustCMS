@@ -1,7 +1,7 @@
+use crate::middleware::common::{BoxServiceFuture, forward_poll_ready};
 use axum::{extract::Request, http::HeaderValue, response::Response};
 use tower::{Layer, Service};
 use uuid::Uuid;
-use crate::middleware::common::{BoxServiceFuture, forward_poll_ready};
 
 /// Request ID middleware for distributed tracing
 #[derive(Clone)]
@@ -46,7 +46,7 @@ where
         &mut self,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
-    forward_poll_ready(&mut self.service, cx)
+        forward_poll_ready(&mut self.service, cx)
     }
 
     fn call(&mut self, mut request: Request<B>) -> Self::Future {
@@ -64,9 +64,11 @@ where
             let mut response = service.call(request).await?;
 
             // Add request ID to response headers
-            response
-                .headers_mut()
-                .insert("X-Request-ID", HeaderValue::from_str(&request_id).unwrap_or_else(|_| HeaderValue::from_static("unknown")));
+            response.headers_mut().insert(
+                "X-Request-ID",
+                HeaderValue::from_str(&request_id)
+                    .unwrap_or_else(|_| HeaderValue::from_static("unknown")),
+            );
 
             Ok(response)
         })

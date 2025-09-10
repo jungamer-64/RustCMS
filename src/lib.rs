@@ -43,11 +43,11 @@ pub mod search;
 
 // API and web framework modules
 pub mod handlers;
+pub mod limiter;
 pub mod middleware;
 pub mod models;
 pub mod routes;
-pub mod utils;
-pub mod limiter; // unified rate limiting
+pub mod utils; // unified rate limiting
 
 // OpenAPI documentation system
 pub mod openapi;

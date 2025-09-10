@@ -196,11 +196,9 @@ pub async fn delete_file_async(path: &Path) -> Result<(), FileError> {
 /// ファイル情報を取得
 pub fn get_file_info(path: &Path) -> Result<FileInfo, FileError> {
     let metadata = fs::metadata(path)?;
-    Ok(build_file_info_from_parts(
-        path,
-        metadata.len(),
-        || calculate_file_hash(path),
-    )?)
+    Ok(build_file_info_from_parts(path, metadata.len(), || {
+        calculate_file_hash(path)
+    })?)
 }
 
 /// 非同期でファイル情報を取得

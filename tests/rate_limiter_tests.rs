@@ -34,7 +34,7 @@ fn fixed_window_tracks_multiple_keys() {
     assert!(limiter.tracked_len() >= 2);
 }
 
-#[cfg(feature="auth")]
+#[cfg(feature = "auth")]
 mod api_key_adapter_tests {
     use super::*;
     use cms_backend::limiter::adapters::ApiKeyFailureLimiterAdapter;
@@ -47,11 +47,14 @@ mod api_key_adapter_tests {
         env::set_var("API_KEY_FAIL_THRESHOLD", "2"); // block after >2 failures
         let adapter = ApiKeyFailureLimiterAdapter::from_env();
         // First 3 checks correspond to 3 failures (record_failure increments internally)
-    assert_eq!(adapter.check("k1"), RateLimitDecision::Allowed);
-    assert_eq!(adapter.check("k1"), RateLimitDecision::Allowed);
-    match adapter.check("k1") { RateLimitDecision::Blocked { .. } => {}, _ => panic!("expected blocked") }
+        assert_eq!(adapter.check("k1"), RateLimitDecision::Allowed);
+        assert_eq!(adapter.check("k1"), RateLimitDecision::Allowed);
+        match adapter.check("k1") {
+            RateLimitDecision::Blocked { .. } => {}
+            _ => panic!("expected blocked"),
+        }
         // Clear and ensure it allows again
-    adapter.clear("k1");
-    assert_eq!(adapter.check("k1"), RateLimitDecision::Allowed);
+        adapter.clear("k1");
+        assert_eq!(adapter.check("k1"), RateLimitDecision::Allowed);
     }
 }

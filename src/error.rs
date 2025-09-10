@@ -1,9 +1,9 @@
+use crate::utils::api_types::{ApiResponse, ValidationError};
 use axum::{
+    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
-use crate::utils::api_types::{ValidationError, ApiResponse};
 use std::fmt;
 use validator::ValidationErrors;
 
@@ -88,7 +88,6 @@ impl From<argon2::Error> for AppError {
     }
 }
 
-
 impl From<ValidationErrors> for AppError {
     fn from(err: ValidationErrors) -> Self {
         AppError::Validation(err)
@@ -116,21 +115,39 @@ impl From<tantivy::TantivyError> for AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-    let (status, error_message, validation_details): (StatusCode, &str, Option<Vec<ValidationError>>) = match &self {
+        let (status, error_message, validation_details): (
+            StatusCode,
+            &str,
+            Option<Vec<ValidationError>>,
+        ) = match &self {
             #[cfg(feature = "database")]
-            AppError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error occurred", None),
+            AppError::Database(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Database error occurred",
+                None,
+            ),
             #[cfg(feature = "cache")]
-            AppError::Redis(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Cache error occurred", None),
+            AppError::Redis(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Cache error occurred",
+                None,
+            ),
             AppError::Validation(ve) => {
                 let mut list = Vec::new();
                 for (field, errs) in ve.field_errors().iter() {
                     for e in errs.iter() {
-                        let message = e.message.clone().unwrap_or_else(|| std::borrow::Cow::from("validation error"));
-                        list.push(ValidationError { field: field.to_string(), message: message.to_string() });
+                        let message = e
+                            .message
+                            .clone()
+                            .unwrap_or_else(|| std::borrow::Cow::from("validation error"));
+                        list.push(ValidationError {
+                            field: field.to_string(),
+                            message: message.to_string(),
+                        });
                     }
                 }
                 (StatusCode::BAD_REQUEST, "Invalid input data", Some(list))
-            },
+            }
             AppError::Authentication(msg) => (StatusCode::UNAUTHORIZED, msg.as_str(), None),
             AppError::Authorization(msg) => (StatusCode::FORBIDDEN, msg.as_str(), None),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.as_str(), None),
@@ -139,7 +156,11 @@ impl IntoResponse for AppError {
             AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str(), None),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.as_str(), None),
             #[cfg(feature = "auth")]
-            AppError::Argon2(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Password hashing error", None),
+            AppError::Argon2(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Password hashing error",
+                None,
+            ),
             AppError::Biscuit(msg) => (StatusCode::UNAUTHORIZED, msg.as_str(), None),
             AppError::Search(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str(), None),
             AppError::Media(msg) => (StatusCode::BAD_REQUEST, msg.as_str(), None),
@@ -147,10 +168,17 @@ impl IntoResponse for AppError {
             AppError::IO(_) => (StatusCode::INTERNAL_SERVER_ERROR, "IO error occurred", None),
             AppError::Serde(_) => (StatusCode::BAD_REQUEST, "Serialization error", None),
             #[cfg(feature = "search")]
-            AppError::Tantivy(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Search service error", None),
+            AppError::Tantivy(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Search service error",
+                None,
+            ),
         };
         let body = if let Some(details) = validation_details {
-            Json(ApiResponse::error_with_validation(error_message.to_string(), details))
+            Json(ApiResponse::error_with_validation(
+                error_message.to_string(),
+                details,
+            ))
         } else {
             Json(ApiResponse::error(error_message.to_string()))
         };

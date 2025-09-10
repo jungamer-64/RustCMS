@@ -1,5 +1,5 @@
-use uuid::Uuid;
 use cms_backend::models::ApiKey;
+use uuid::Uuid;
 
 #[cfg(all(feature = "database", feature = "auth"))]
 #[test]

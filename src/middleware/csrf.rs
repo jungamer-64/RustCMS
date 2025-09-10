@@ -3,15 +3,15 @@
 //! Provides Cross-Site Request Forgery protection for state-changing operations.
 //! Uses synchronizer token pattern with one-time use tokens for maximum security.
 
+use crate::AppState;
+use crate::middleware::security::is_csrf_protected_endpoint;
 use axum::{
     extract::{Request, State},
     http::{HeaderMap, StatusCode},
     middleware::Next,
-    response::{IntoResponse, Response, Json},
+    response::{IntoResponse, Json, Response},
 };
 use serde_json::json;
-use crate::middleware::security::is_csrf_protected_endpoint;
-use crate::AppState;
 
 /// CSRF protection middleware
 /// 对状态更改操作强制执行 CSRF 保护
@@ -23,7 +23,7 @@ pub async fn csrf_protection_middleware(
 ) -> Result<Response, impl IntoResponse> {
     let method = request.method();
     let path = request.uri().path();
-    
+
     // Only protect endpoints that need CSRF protection
     if !is_csrf_protected_endpoint(method, path) {
         return Ok(next.run(request).await);
@@ -48,7 +48,7 @@ pub async fn csrf_protection_middleware(
                         "error": "Invalid or expired CSRF token",
                         "code": "CSRF_TOKEN_INVALID",
                         "message": "The provided CSRF token is invalid or has already been used."
-                    }))
+                    })),
                 ))
             }
         }
@@ -61,7 +61,7 @@ pub async fn csrf_protection_middleware(
                     "error": "CSRF token required",
                     "code": "CSRF_TOKEN_MISSING",
                     "message": "State-changing operations require CSRF protection. Include X-CSRF-Token header."
-                }))
+                })),
             ))
         }
     }
@@ -69,11 +69,9 @@ pub async fn csrf_protection_middleware(
 
 /// Endpoint to generate CSRF tokens for clients
 /// 为客户端生成 CSRF 令牌的端点
-pub async fn get_csrf_token(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn get_csrf_token(State(state): State<AppState>) -> impl IntoResponse {
     let token = state.csrf.generate_token().await;
-    
+
     Json(json!({
         "success": true,
         "csrf_token": token,

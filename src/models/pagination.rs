@@ -60,8 +60,14 @@ impl From<ApiPagination> for PaginationInfo {
 
 /// 共通 total_pages 計算 (ハンドラでは u32 を主に使用するため別途 helper)。
 pub fn calc_total_pages(total: usize, limit: u32) -> u32 {
-    if limit == 0 { return 1; }
-    if total == 0 { 1 } else { ((total as f64) / (limit as f64)).ceil() as u32 }
+    if limit == 0 {
+        return 1;
+    }
+    if total == 0 {
+        1
+    } else {
+        ((total as f64) / (limit as f64)).ceil() as u32
+    }
 }
 
 // ---- Added unified pagination normalization helpers (for handlers) ----
@@ -75,8 +81,12 @@ pub const DEFAULT_LIMIT_U32: u32 = 20;
 pub fn normalize_page_limit(page: Option<u32>, limit: Option<u32>) -> (u32, u32) {
     let page = page.unwrap_or(DEFAULT_PAGE_U32).max(1);
     let mut limit = limit.unwrap_or(DEFAULT_LIMIT_U32);
-    if limit == 0 { limit = DEFAULT_LIMIT_U32; }
-    if limit > 100 { limit = 100; }
+    if limit == 0 {
+        limit = DEFAULT_LIMIT_U32;
+    }
+    if limit > 100 {
+        limit = 100;
+    }
     (page, limit)
 }
 
@@ -84,8 +94,12 @@ pub fn normalize_page_limit(page: Option<u32>, limit: Option<u32>) -> (u32, u32)
 pub const DEFAULT_LIMIT_USIZE: usize = DEFAULT_LIMIT_U32 as usize;
 pub fn normalize_limit_offset_usize(limit: Option<usize>, offset: Option<usize>) -> (usize, usize) {
     let mut l = limit.unwrap_or(DEFAULT_LIMIT_USIZE);
-    if l == 0 { l = DEFAULT_LIMIT_USIZE; }
-    if l > 100 { l = 100; }
+    if l == 0 {
+        l = DEFAULT_LIMIT_USIZE;
+    }
+    if l > 100 {
+        l = 100;
+    }
     let off = offset.unwrap_or(0);
     (l, off)
 }
@@ -103,10 +117,21 @@ pub struct Paginated<T> {
 impl<T> Paginated<T> {
     pub fn new(items: Vec<T>, total: usize, page: u32, limit: u32) -> Self {
         let total_pages = calc_total_pages(total, limit);
-        Self { items, total, page, limit, total_pages }
+        Self {
+            items,
+            total,
+            page,
+            limit,
+            total_pages,
+        }
     }
     pub fn map<U, F: FnMut(&T) -> U>(&self, mut f: F) -> Paginated<U> {
-        Paginated::new(self.items.iter().map(|t| f(t)).collect(), self.total, self.page, self.limit)
+        Paginated::new(
+            self.items.iter().map(|t| f(t)).collect(),
+            self.total,
+            self.page,
+            self.limit,
+        )
     }
 }
 
@@ -133,8 +158,23 @@ pub struct PaginatedBuilder<T> {
     limit: u32,
 }
 impl<T> PaginatedBuilder<T> {
-    pub fn new(page: u32, limit: u32) -> Self { Self { items: Vec::new(), total: 0, page, limit } }
-    pub fn items(mut self, items: Vec<T>) -> Self { self.items = items; self }
-    pub fn total(mut self, total: usize) -> Self { self.total = total; self }
-    pub fn build(self) -> Paginated<T> { Paginated::new(self.items, self.total, self.page, self.limit) }
+    pub fn new(page: u32, limit: u32) -> Self {
+        Self {
+            items: Vec::new(),
+            total: 0,
+            page,
+            limit,
+        }
+    }
+    pub fn items(mut self, items: Vec<T>) -> Self {
+        self.items = items;
+        self
+    }
+    pub fn total(mut self, total: usize) -> Self {
+        self.total = total;
+        self
+    }
+    pub fn build(self) -> Paginated<T> {
+        Paginated::new(self.items, self.total, self.page, self.limit)
+    }
 }

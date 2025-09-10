@@ -1,9 +1,9 @@
-use axum::{routing::get, Router};
+use axum::body::to_bytes;
+use axum::{Router, routing::get};
 use cms_backend::{error::AppError, utils::response_ext::ApiOk};
 use hyper::{Request, StatusCode};
 use insta::assert_json_snapshot;
 use tower::ServiceExt; // for oneshot
-use axum::body::to_bytes;
 
 // /error エンドポイントのエラーレスポンス (ApiResponse 統一形状) をスナップショット固定
 #[tokio::test]
@@ -15,7 +15,11 @@ async fn snapshot_error_endpoint() {
     let router = Router::new().route("/error", get(handler));
 
     let response = router
-        .oneshot(Request::get("/error").body(axum::body::Body::empty()).unwrap())
+        .oneshot(
+            Request::get("/error")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 

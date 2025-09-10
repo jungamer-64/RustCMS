@@ -5,9 +5,9 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 
+use crate::AppError;
 use crate::database::schema::users;
 use crate::utils::password;
-use crate::AppError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Queryable, Insertable)]
 #[diesel(table_name = users)]
@@ -88,9 +88,28 @@ pub struct UpdateUserRequest {
 }
 
 impl UpdateUserRequest {
-    pub fn empty() -> Self { Self { username: None, email: None, first_name: None, last_name: None, role: None, is_active: None } }
-    pub fn deactivate() -> Self { Self { is_active: Some(false), ..Self::empty() } }
-    pub fn with_role(role: UserRole) -> Self { Self { role: Some(role), ..Self::empty() } }
+    pub fn empty() -> Self {
+        Self {
+            username: None,
+            email: None,
+            first_name: None,
+            last_name: None,
+            role: None,
+            is_active: None,
+        }
+    }
+    pub fn deactivate() -> Self {
+        Self {
+            is_active: Some(false),
+            ..Self::empty()
+        }
+    }
+    pub fn with_role(role: UserRole) -> Self {
+        Self {
+            role: Some(role),
+            ..Self::empty()
+        }
+    }
 }
 
 impl User {

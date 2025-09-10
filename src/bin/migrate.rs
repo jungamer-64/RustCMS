@@ -4,7 +4,7 @@
 
 use clap::{Parser, Subcommand};
 use cms_backend::{AppState, Result};
-use diesel_migrations::{embed_migrations, EmbeddedMigrations};
+use diesel_migrations::{EmbeddedMigrations, embed_migrations};
 use std::env;
 use tracing::{error, info, warn};
 
@@ -136,7 +136,10 @@ async fn rollback_migrations(state: &AppState, steps: usize) -> Result<()> {
     for _ in 0..steps {
         match state.db_revert_last_migration(MIGRATIONS).await {
             Ok(_) => info!("✅ Reverted migration"),
-            Err(e) => { error!("❌ Failed to revert migration: {}", e); break; }
+            Err(e) => {
+                error!("❌ Failed to revert migration: {}", e);
+                break;
+            }
         }
     }
     Ok(())
@@ -166,7 +169,12 @@ async fn reset_database(state: &AppState) -> Result<()> {
         "DROP TABLE IF EXISTS schema_migrations CASCADE",
     ];
 
-    for statement in drop_statements { let _ = state.db_execute_sql(statement).await.map_err(|e| { warn!("Failed to execute: {} - {}", statement, e); e }); }
+    for statement in drop_statements {
+        let _ = state.db_execute_sql(statement).await.map_err(|e| {
+            warn!("Failed to execute: {} - {}", statement, e);
+            e
+        });
+    }
 
     info!("🔄 Recreating schema...");
     run_migrations(state).await?;
@@ -249,8 +257,10 @@ async fn check_migration_status(state: &AppState) -> Result<()> {
     if pending.is_empty() {
         info!("  ✅ No pending migrations");
     } else {
-    info!("  ⏳ Pending migrations: {}", pending.len());
-    for name in pending { info!("  ⏳ {}", name); }
+        info!("  ⏳ Pending migrations: {}", pending.len());
+        for name in pending {
+            info!("  ⏳ {}", name);
+        }
     }
 
     Ok(())

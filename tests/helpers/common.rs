@@ -1,7 +1,7 @@
 use assert_cmd::Command;
 use std::fs;
-use tempfile::TempDir;
 use std::path::PathBuf;
+use tempfile::TempDir;
 
 pub fn make_temp_dirs() -> (TempDir, PathBuf, PathBuf) {
     let tmp = tempfile::tempdir().unwrap();
@@ -14,8 +14,15 @@ pub fn make_temp_dirs() -> (TempDir, PathBuf, PathBuf) {
 
 pub fn run_cargo_gen_biscuit_keys(args: &[&str]) {
     let mut cmd = Command::new("cargo");
-    cmd.arg("run").arg("--manifest-path").arg("Cargo.toml").arg("--bin").arg("gen_biscuit_keys").arg("--");
-    for a in args { cmd.arg(a); }
+    cmd.arg("run")
+        .arg("--manifest-path")
+        .arg("Cargo.toml")
+        .arg("--bin")
+        .arg("gen_biscuit_keys")
+        .arg("--");
+    for a in args {
+        cmd.arg(a);
+    }
     cmd.assert().success();
 }
 
@@ -23,7 +30,9 @@ pub fn find_gz_in_dir(backup_dir: &PathBuf) -> bool {
     for entry in fs::read_dir(backup_dir).unwrap() {
         let entry = entry.unwrap();
         let name = entry.file_name().to_string_lossy().to_string();
-        if name.ends_with(".gz") { return true; }
+        if name.ends_with(".gz") {
+            return true;
+        }
     }
     false
 }
@@ -31,16 +40,44 @@ pub fn find_gz_in_dir(backup_dir: &PathBuf) -> bool {
 /// Run gen_biscuit_keys multiple times to create backups
 pub fn run_gen_biscuit_keys_multiple_backups(out_dir: &str, backup_dir: &str, times: usize) {
     for _ in 0..times {
-        run_cargo_gen_biscuit_keys(&["--format", "files", "--out-dir", out_dir, "--backup", "--backup-dir", backup_dir, "--force"]);
+        run_cargo_gen_biscuit_keys(&[
+            "--format",
+            "files",
+            "--out-dir",
+            out_dir,
+            "--backup",
+            "--backup-dir",
+            backup_dir,
+            "--force",
+        ]);
     }
 }
 
 /// Run a two-phase (initial + compressed) backup generation used by multiple tests
 pub fn run_compressed_backup_sequence(out_dir: &str, backup_dir: &str) {
     // initial generation (creates base keys + uncompressed backup)
-    run_cargo_gen_biscuit_keys(&["--format", "files", "--out-dir", out_dir, "--backup", "--backup-dir", backup_dir, "--force"]);
+    run_cargo_gen_biscuit_keys(&[
+        "--format",
+        "files",
+        "--out-dir",
+        out_dir,
+        "--backup",
+        "--backup-dir",
+        backup_dir,
+        "--force",
+    ]);
     // second pass with compression flag
-    run_cargo_gen_biscuit_keys(&["--format", "files", "--out-dir", out_dir, "--backup", "--backup-dir", backup_dir, "--backup-compress", "--force"]);
+    run_cargo_gen_biscuit_keys(&[
+        "--format",
+        "files",
+        "--out-dir",
+        out_dir,
+        "--backup",
+        "--backup-dir",
+        backup_dir,
+        "--backup-compress",
+        "--force",
+    ]);
 }
 
 /// Count backups with a given prefix in a directory

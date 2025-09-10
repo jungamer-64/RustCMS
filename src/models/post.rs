@@ -175,7 +175,22 @@ pub struct UpdatePostRequest {
 
 // Builder-style convenience constructors to remove repetitive None initializations in handlers
 impl UpdatePostRequest {
-    pub fn empty() -> Self { Self { title: None, content: None, excerpt: None, slug: None, published: None, tags: None, category: None, featured_image: None, meta_title: None, meta_description: None, published_at: None, status: None } }
+    pub fn empty() -> Self {
+        Self {
+            title: None,
+            content: None,
+            excerpt: None,
+            slug: None,
+            published: None,
+            tags: None,
+            category: None,
+            featured_image: None,
+            meta_title: None,
+            meta_description: None,
+            published_at: None,
+            status: None,
+        }
+    }
     pub fn publish_now(mut self) -> Self {
         self.published = Some(true);
         self.status = Some(PostStatus::Published);
@@ -270,7 +285,9 @@ fn default_page() -> usize {
     1
 }
 
-fn default_limit() -> usize { 20 }
+fn default_limit() -> usize {
+    20
+}
 
 impl Post {
     /// Generate excerpt from content if not provided
@@ -308,7 +325,7 @@ impl Post {
 
     /// Get post status enum for compatibility
     pub fn get_status(&self) -> Result<PostStatus> {
-    PostStatus::parse_str(&self.status)
+        PostStatus::parse_str(&self.status)
     }
 
     /// Get author ID as string (for compatibility with existing code)
@@ -318,12 +335,12 @@ impl Post {
 
     /// Check if post has a specific tag
     pub fn has_tag(&self, tag: &str) -> bool {
-    crate::utils::vec_helpers::contains_case_insensitive(&self.tags, tag)
+        crate::utils::vec_helpers::contains_case_insensitive(&self.tags, tag)
     }
 
     /// Check if post is in a specific category
     pub fn has_category(&self, category: &str) -> bool {
-    crate::utils::vec_helpers::contains_case_insensitive(&self.categories, category)
+        crate::utils::vec_helpers::contains_case_insensitive(&self.categories, category)
     }
 }
 
@@ -337,12 +354,12 @@ impl CreatePostRequest {
 
     /// Validate and clean tags
     pub fn clean_tags(&self) -> Vec<String> {
-    crate::utils::text::clean_tags(self.tags.as_ref())
+        crate::utils::text::clean_tags(self.tags.as_ref())
     }
 
     /// Clean categories
     pub fn clean_categories(&self) -> Vec<String> {
-    crate::utils::text::clean_categories(self.category.as_ref())
+        crate::utils::text::clean_categories(self.category.as_ref())
     }
 
     /// Convert to NewPost for database insertion
@@ -379,10 +396,13 @@ impl CreatePostRequest {
 impl PostFilter {
     /// Validate and sanitize filter parameters
     pub fn validate_and_sanitize(&mut self) {
-    // Normalize page/limit using shared helper
-    let (p, l) = crate::models::pagination::normalize_page_limit(Some(self.page as u32), Some(self.limit as u32));
-    self.page = p as usize;
-    self.limit = l as usize;
+        // Normalize page/limit using shared helper
+        let (p, l) = crate::models::pagination::normalize_page_limit(
+            Some(self.page as u32),
+            Some(self.limit as u32),
+        );
+        self.page = p as usize;
+        self.limit = l as usize;
 
         // Sanitize search query
         if let Some(search) = &self.search {
@@ -413,7 +433,8 @@ impl PostFilter {
             SortOrder::Desc => format!("-{}", sort_token),
             SortOrder::Asc => sort_token.to_string(),
         };
-        let (col, desc) = crate::utils::sort::parse_sort(Some(token), sort_token, default_desc, &allowed);
+        let (col, desc) =
+            crate::utils::sort::parse_sort(Some(token), sort_token, default_desc, &allowed);
         format!("{} {}", col, if desc { "DESC" } else { "ASC" })
     }
 }
@@ -436,7 +457,7 @@ mod tests {
         assert_eq!(generate_slug("Hello World"), "hello-world");
         assert_eq!(generate_slug("Hello, World!"), "hello-world");
         assert_eq!(generate_slug("Multiple   Spaces"), "multiple-spaces");
-    assert_eq!(generate_slug("Special@#$Characters"), "special-characters");
+        assert_eq!(generate_slug("Special@#$Characters"), "special-characters");
     }
 
     #[test]
