@@ -19,10 +19,10 @@ impl Modify for SecurityAddon {
         http.bearer_format = Some("Biscuit".to_string());
         components.add_security_scheme("BearerAuth", SecurityScheme::Http(http));
 
-    // Legacy LoginResponse schema is intentionally omitted here because
-    // the version of `utoipa` in use exposes `schemas` helpers rather
-    // than `ToSchema::schema()`. The legacy schema is conditionally
-    // included by feature gates elsewhere when required.
+        // Legacy LoginResponse schema is intentionally omitted here because
+        // the version of `utoipa` in use exposes `schemas` helpers rather
+        // than `ToSchema::schema()`. The legacy schema is conditionally
+        // included by feature gates elsewhere when required.
     }
 }
 
