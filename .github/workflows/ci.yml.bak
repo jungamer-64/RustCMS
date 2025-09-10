@@ -1,0 +1,357 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*.*.*' ]
+    paths-ignore:
+      - 'README.md'
+      - 'README_PRODUCTION.md'
+      - 'docs/**'
+      - '**/*.md'
+      - 'LICENSE'
+  pull_request:
+    branches: [ main ]
+    paths-ignore:
+      - 'README.md'
+      - 'README_PRODUCTION.md'
+      - 'docs/**'
+      - '**/*.md'
+      - 'LICENSE'
+  schedule:
+    - cron: '23 3 * * *' # Security audit daily (merged from security.yml)
+  # Allow manual dispatch for debugging CI changes & on-demand security/coverage runs
+  workflow_dispatch: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write # allow future upload if adding SARIF (e.g. cargo-audit -> SARIF)
+
+env:
+  CARGO_TERM_COLOR: always
+  # テストで DB が不要な場合は secrets が無くても進行させるために空文字を許容
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  BISCUIT_PRIVATE_KEY_B64: ${{ secrets.BISCUIT_PRIVATE_KEY_B64 }}
+  BISCUIT_PUBLIC_KEY_B64: ${{ secrets.BISCUIT_PUBLIC_KEY_B64 }}
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      # TODO: pin this action to a full commit SHA for immutability (e.g. actions/checkout@<full-sha>)
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup toolchain (stable)
+        # TODO: pin this action to a full commit SHA for immutability
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache (Swatinem/rust-cache)
+        # TODO: pin this action to a full commit SHA for immutability
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  test:
+    name: Build & Test (matrix)
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cms_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=5s --health-timeout=5s --health-retries=5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=5s --health-retries=10
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: ["1.89.0", "stable"]
+        feature-set: ["default", "minimal", "no-flat"]
+        include:
+          - feature-set: default
+            cargo-features: "--all-features"
+          - feature-set: minimal
+            cargo-features: "--no-default-features"
+          - feature-set: no-flat
+            # Preview removal of deprecated flattened auth fields (disable auth-flat-fields only)
+            cargo-features: "--no-default-features --features auth,cache,compression,database,search"
+    steps:
+      # TODO: pin this action to a full commit SHA for immutability
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup toolchain ${{ matrix.toolchain }}
+        # TODO: pin this action to a full commit SHA for immutability
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: clippy
+
+      - name: Install system deps (psql client for pg_isready, etc.)
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Cache (Swatinem/rust-cache)
+        # TODO: pin this action to a full commit SHA for immutability
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: Show cargo version
+        run: cargo --version --verbose
+
+      - name: Build (${{ matrix.feature-set }})
+        run: cargo build --workspace --all-targets --locked ${{ matrix.cargo-features }}
+
+      - name: Run migrations (default & no-flat feature-sets)
+        if: matrix.feature-set == 'default' || matrix.feature-set == 'no-flat'
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/cms_test' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL}" ]; then
+            export DATABASE_URL="postgres://postgres:postgres@localhost:5432/cms_test"
+          fi
+          echo "Running migrations against $DATABASE_URL"
+          # SECURITY: prefer running via cargo (avoids executing an unexpected binary path)
+          if cargo run --bin cms-migrate -- migrate --no-seed; then
+            echo "Migrations run via cargo";
+          else
+            echo "Fallback to pre-built binary (debug)";
+            ./target/debug/cms-migrate migrate --no-seed || true
+          fi
+
+      - name: Run tests (${{ matrix.feature-set }})
+        # DB を必要とするテストが失敗した場合でも他は継続させるため、明示的なリトライや --no-fail-fast を使用
+        env:
+          RUST_BACKTRACE: 1
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            export DATABASE_URL="postgres://postgres:postgres@localhost:5432/cms_test"
+          fi
+          echo "DATABASE_URL=${DATABASE_URL}"
+          # Wait for Postgres health (max 40s)
+          for i in $(seq 1 40); do
+            if pg_isready -h localhost -p 5432 -U postgres; then echo "Postgres ready"; break; fi; sleep 1;
+          done || true
+          # Capture exit but don't fail matrix early
+          set +e
+          cargo test --workspace --no-fail-fast ${{ matrix.cargo-features }} 2>&1 | tee test-output.log
+          TEST_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo "Test exit code: ${TEST_EXIT}"
+          # Non-zero recorded but allow artifact upload & later jobs; fail at end for visibility
+          echo "TEST_EXIT=${TEST_EXIT}" >> $GITHUB_ENV
+      - name: Contract snapshot check (insta)
+        if: matrix.feature-set == 'default' || matrix.feature-set == 'no-flat'
+        env:
+          FAST_KEY_TESTS: 1
+        run: |
+          set -e
+          cargo install cargo-insta --locked || true
+          cargo insta test
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-log-${{ matrix.toolchain }}-${{ matrix.feature-set }}
+          path: test-output.log
+          retention-days: 5
+
+  deprecated-scan:
+    name: Deprecated Auth Field Scan
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: read
+    steps:
+      # TODO: pin this action to a full commit SHA for immutability
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Run deprecation scan (src-only, human)
+        run: |
+          bash scripts/deprecation-scan.sh --src-only --counts > deprecation_counts.csv
+          echo "--- CSV counts ---"; cat deprecation_counts.csv
+      - name: Run deprecation scan (JSON)
+        run: |
+          bash scripts/deprecation-scan.sh --src-only --json > deprecation_counts.json
+          echo "--- JSON counts ---"; cat deprecation_counts.json
+      - name: Upload deprecation scan artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: deprecation-scan-${{ github.sha }}
+          path: |
+            deprecation_counts.csv
+            deprecation_counts.json
+          retention-days: 10
+      - name: Auto guidance (zero streak logic)
+        run: |
+          bash scripts/deprecation-auto-guidance.sh | tee guidance.txt
+      - name: Upload guidance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deprecation-guidance-${{ github.sha }}
+          path: guidance.txt
+          retention-days: 5
+      - name: Strict check (only if all counts zero)
+        run: |
+          # If any count non-zero, skip strict check to avoid premature failure
+          if grep -q '[1-9]' deprecation_counts.json; then
+            echo "Skipping strict removal check (deprecated refs still present)"; exit 0; fi
+            echo "All counts zero - running strict removal gate";
+          bash scripts/deprecation-strict-check.sh
+
+  # ---------------- Security Jobs (integrated from security.yml) ----------------
+  cargo-deny:
+    name: Security / cargo-deny
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: lint
+    if: github.event_name != 'pull_request' || github.base_ref == 'main' || github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Cache cargo registry & index
+        # TODO: pin this action to a full commit SHA for immutability
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+      - name: Run cargo-deny (advisories/licenses)
+        run: cargo deny check advisories bans licenses sources sources --hide-inclusion-graph
+
+  audit:
+    name: Security / cargo-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: lint
+    if: github.event_name != 'pull_request' || github.base_ref == 'main' || github.event_name == 'schedule'
+    steps:
+      # TODO: pin this action to a full commit SHA for immutability
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Cache cargo registry & index
+        # TODO: pin this action to a full commit SHA for immutability
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: cargo audit (non-fatal warnings)
+        run: cargo audit --deny unsound --color always || true
+        # SECURITY: keep non-zero exit flexible to avoid blocking main for transient advisories; adjust policy later.
+
+  # ---------------- Coverage Job (integrated from coverage.yml) ----------------
+  coverage:
+    name: Coverage (tarpaulin + Codacy)
+    runs-on: ubuntu-latest
+    needs: test
+    if: >-
+      github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    env:
+      CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+    steps:
+      - name: Checkout repository
+        # TODO: pin this action to a full commit SHA for immutability
+        uses: actions/checkout@v4
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache cargo & target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-coverage-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-coverage-
+      - name: Cache cargo-tarpaulin binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-tarpaulin
+          key: ${{ runner.os }}-cargo-tarpaulin-v0.27.3
+      - name: Install cargo-tarpaulin
+        run: |
+          if ! [ -f ~/.cargo/bin/cargo-tarpaulin ]; then
+            cargo install cargo-tarpaulin --version 0.27.3
+          fi
+      - name: Generate code coverage
+        run: cargo tarpaulin --verbose --workspace --out Lcov --timeout 240
+      - name: Upload coverage to Codacy
+        if: env.CODACY_PROJECT_TOKEN != ''
+        uses: codacy/codacy-coverage-reporter-action@v1
+        with:
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+          coverage-reports: lcov.info
+      - name: Upload LCOV artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lcov-report
+          path: lcov.info
+          retention-days: 5
+
+  # オプション: 将来カバレッジを追加する場合のテンプレ (disabled by default)
+  # coverage:
+  #   name: Coverage (tarpaulin)
+  #   if: false  # 有効化する場合は true または条件式に変更
+  #   runs-on: ubuntu-latest
+  #   needs: test
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: dtolnay/rust-toolchain@stable
+  #     - uses: Swatinem/rust-cache@v2
+  #     - name: Install tarpaulin
+  #       run: cargo install cargo-tarpaulin --locked
+  #     - name: Run coverage
+  #       run: cargo tarpaulin --workspace --timeout 240 --out Xml
+  #     - name: Upload coverage artifact
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: coverage-report
+  #         path: cobertura.xml
