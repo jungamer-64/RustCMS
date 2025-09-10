@@ -43,8 +43,10 @@ mod api_key_adapter_tests {
     #[tokio::test]
     async fn adapter_blocks_after_threshold() {
         // Ensure env threshold determinism; backend reads on construction.
-        env::set_var("API_KEY_FAIL_WINDOW_SECS", "60");
-        env::set_var("API_KEY_FAIL_THRESHOLD", "2"); // block after >2 failures
+        unsafe {
+            std::env::set_var("API_KEY_FAIL_WINDOW_SECS", "60");
+            std::env::set_var("API_KEY_FAIL_THRESHOLD", "2"); // block after >2 failures
+        }
         let adapter = ApiKeyFailureLimiterAdapter::from_env();
         // First 3 checks correspond to 3 failures (record_failure increments internally)
         assert_eq!(adapter.check("k1"), RateLimitDecision::Allowed);
