@@ -47,7 +47,8 @@ jobs:
       contents: read
     steps:
       # TODO: pin this action to a full commit SHA for immutability (e.g. actions/checkout@<full-sha>)
-      - uses: actions/checkout@v4
+      # original uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           fetch-depth: 1
 
@@ -106,7 +107,8 @@ jobs:
             cargo-features: "--no-default-features --features auth,cache,compression,database,search"
     steps:
       # TODO: pin this action to a full commit SHA for immutability
-      - uses: actions/checkout@v4
+      # original uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           fetch-depth: 1
 
@@ -197,7 +199,8 @@ jobs:
       contents: read
     steps:
       # TODO: pin this action to a full commit SHA for immutability
-      - uses: actions/checkout@v4
+      # original uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           fetch-depth: 1
       - name: Run deprecation scan (src-only, human)
@@ -242,7 +245,8 @@ jobs:
     needs: lint
     if: github.event_name != 'pull_request' || github.base_ref == 'main' || github.event_name == 'schedule'
     steps:
-      - uses: actions/checkout@v4
+      # original uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           fetch-depth: 1
       - name: Cache cargo registry & index
@@ -266,7 +270,8 @@ jobs:
     if: github.event_name != 'pull_request' || github.base_ref == 'main' || github.event_name == 'schedule'
     steps:
       # TODO: pin this action to a full commit SHA for immutability
-      - uses: actions/checkout@v4
+      # original uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           fetch-depth: 1
       - name: Cache cargo registry & index
