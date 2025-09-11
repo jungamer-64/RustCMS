@@ -298,7 +298,7 @@ impl PostRepository {
 
         let offset = (filter.page - 1) * filter.limit;
         
-        let search_query = format!("%{}%", query.to_lowercase());
+    let search_query = format!("%{query}%", query = query.to_lowercase());
         
         let (posts, total_count) = self
             .timed("search", || async {
