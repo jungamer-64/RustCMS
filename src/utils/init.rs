@@ -3,7 +3,7 @@ use crate::error::Result;
 use crate::telemetry;
 
 /// Initialize logging/telemetry and return loaded Config
-pub async fn init_logging_and_config() -> Result<Config> {
+pub fn init_logging_and_config() -> Result<Config> {
     // Initialize tracing subscriber (idempotent)
     let _ = telemetry::init_telemetry();
 
@@ -24,7 +24,7 @@ pub fn init_env() {
 
 /// Initialize AppState from environment via Config
 pub async fn init_app_state() -> crate::Result<crate::AppState> {
-    let config = init_logging_and_config().await?;
+    let config = init_logging_and_config()?;
     crate::AppState::from_config(config).await
 }
 

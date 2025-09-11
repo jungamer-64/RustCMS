@@ -13,7 +13,7 @@ pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize logging (config will be loaded by init_app_state)
-    let _config = cms_backend::utils::init::init_logging_and_config().await?;
+    let _config = cms_backend::utils::init::init_logging_and_config()?;
 
     info!(
         "🔧 Enterprise CMS Database Migration Tool v{}",
