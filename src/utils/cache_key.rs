@@ -21,7 +21,8 @@ pub const CACHE_PREFIX_USER_POSTS: &str = "user_posts:user:"; // + {uuid}:...
 /// Convenience helper to build a simple entity id based cache key.
 /// Example: entity_id_key("post", uuid) => "post:id:{uuid}"
 pub fn entity_id_key(prefix: &str, id: impl std::fmt::Display) -> String {
-    format!("{prefix}:id:{id}", prefix = prefix, id = id)
+    // use shorthand inlined format args (Rust 1.58+)
+    format!("{prefix}:id:{id}")
 }
 
 /// Enum describing list style cache keys we standardize on. This avoids a
@@ -96,12 +97,15 @@ impl CacheKeyBuilder {
     }
     fn push_kv(&mut self, key: &str, val: String) {
         // Enforce uniqueness of labels to prevent accidental overwrites like .kv("page",1).kv("page",2)
+        // Keep label uniqueness check; include the key in the debug message as positional arg.
         debug_assert!(
             !self.used_labels.contains(key),
-            "duplicate cache key segment label detected: {key}"
+            "duplicate cache key segment label detected: {}",
+            key
         );
         self.used_labels.insert(key.to_string());
-    self.segs.push(format!("{key}:{val}", key = key, val = val));
+        // use inlined formatting shorthand
+        self.segs.push(format!("{key}:{val}"));
     }
     pub fn kv(mut self, key: &str, value: impl std::fmt::Display) -> Self {
         self.push_kv(key, value.to_string());
@@ -118,7 +122,10 @@ impl CacheKeyBuilder {
         if self.segs.is_empty() {
             self.base
         } else {
-            format!("{base}:{segs}", base = self.base, segs = self.segs.join(":"))
+            // assign to locals so we can use the inlined format shorthand
+            let base = self.base;
+            let segs = self.segs.join(":");
+            format!("{base}:{segs}")
         }
     }
 }
