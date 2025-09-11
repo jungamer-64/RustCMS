@@ -25,13 +25,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Use the initialized state
     let state = app_state;
 
-    // Build router and attach state
-    let app: Router = create_router().with_state(state);
+    // Build router and attach state (clone to avoid move when state used later)
+    let app: Router = create_router().with_state(state.clone());
 
     // Bind to configured address
     let host = config.server.host.clone();
     let port = config.server.port;
-        let addr = format!("{}:{}", state.config.server.host, state.config.server.port).parse::<SocketAddr>()?;
+    let addr = format!("{}:{}", state.config.server.host, state.config.server.port).parse::<SocketAddr>()?;
 
     info!("Binding admin server to {}", addr);
 
