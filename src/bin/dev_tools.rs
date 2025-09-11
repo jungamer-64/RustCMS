@@ -202,7 +202,7 @@ async fn main() -> Result<()> {
             use std::net::SocketAddr;
             let addr: SocketAddr = "127.0.0.1:3003"
                 .parse()
-                .map_err(|e| cms_backend::AppError::Config(format!("Addr parse error: {e}", e = e)))?;
+                .map_err(|e| cms_backend::AppError::Config(format!("Addr parse error: {}", e)))?;
             cms_backend::utils::bin_utils::run_docs_server(addr).await?;
             return Ok(());
         }
