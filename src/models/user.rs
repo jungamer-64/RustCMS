@@ -220,19 +220,19 @@ impl User {
         let mut update_sets = Vec::new();
 
         if let Some(ref new_username) = updates.username {
-            update_sets.push(format!("username = '{}'", new_username));
+            update_sets.push(format!("username = '{username}'", username = new_username));
         }
         if let Some(ref new_email) = updates.email {
-            update_sets.push(format!("email = '{}'", new_email));
+            update_sets.push(format!("email = '{email}'", email = new_email));
         }
         if let Some(ref new_first_name) = updates.first_name {
-            update_sets.push(format!("first_name = '{}'", new_first_name));
+            update_sets.push(format!("first_name = '{first_name}'", first_name = new_first_name));
         }
         if let Some(ref new_last_name) = updates.last_name {
-            update_sets.push(format!("last_name = '{}'", new_last_name));
+            update_sets.push(format!("last_name = '{last_name}'", last_name = new_last_name));
         }
         if let Some(ref new_role) = updates.role {
-            update_sets.push(format!("role = '{}'", new_role.as_str()));
+            update_sets.push(format!("role = '{role}'", role = new_role.as_str()));
         }
         if let Some(new_is_active) = updates.is_active {
             update_sets.push(format!("is_active = {}", new_is_active));
