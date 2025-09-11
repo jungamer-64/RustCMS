@@ -203,7 +203,8 @@ where
             ServiceHealth {
                 status: status.to_string(),
                 response_time_ms: start.elapsed().as_millis() as f64,
-                error: Some(format!("{:?}", e)),
+                // use inlined debug formatting
+                error: Some(format!("{e:?}")),
                 details: serde_json::json!({}),
             }
         }
