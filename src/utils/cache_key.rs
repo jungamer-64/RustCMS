@@ -21,7 +21,7 @@ pub const CACHE_PREFIX_USER_POSTS: &str = "user_posts:user:"; // + {uuid}:...
 /// Convenience helper to build a simple entity id based cache key.
 /// Example: entity_id_key("post", uuid) => "post:id:{uuid}"
 pub fn entity_id_key(prefix: &str, id: impl std::fmt::Display) -> String {
-    format!("{}:id:{}", prefix, id)
+    format!("{prefix}:id:{id}", prefix = prefix, id = id)
 }
 
 /// Enum describing list style cache keys we standardize on. This avoids a
@@ -101,7 +101,7 @@ impl CacheKeyBuilder {
             "duplicate cache key segment label detected: {key}"
         );
         self.used_labels.insert(key.to_string());
-        self.segs.push(format!("{}:{}", key, val));
+    self.segs.push(format!("{key}:{val}", key = key, val = val));
     }
     pub fn kv(mut self, key: &str, value: impl std::fmt::Display) -> Self {
         self.push_kv(key, value.to_string());
@@ -118,7 +118,7 @@ impl CacheKeyBuilder {
         if self.segs.is_empty() {
             self.base
         } else {
-            format!("{}:{}", self.base, self.segs.join(":"))
+            format!("{base}:{segs}", base = self.base, segs = self.segs.join(":"))
         }
     }
 }
