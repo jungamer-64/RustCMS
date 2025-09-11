@@ -204,7 +204,7 @@ where
                 status: status.to_string(),
                 response_time_ms: start.elapsed().as_millis() as f64,
                 // use inlined debug formatting
-                error: Some(format!("{e:?}")),
+                error: Some(format!("{:?}", e)),
                 details: serde_json::json!({}),
             }
         }
@@ -632,7 +632,7 @@ impl AppState {
     #[cfg(feature = "cache")]
     pub async fn invalidate_post_caches(&self, id: uuid::Uuid) {
         use crate::utils::cache_key::{CACHE_PREFIX_POST_ID, CACHE_PREFIX_POSTS};
-            let key = format!("{prefix}{id}", prefix = CACHE_PREFIX_POST_ID, id = id);
+            let key = format!("{}{}", CACHE_PREFIX_POST_ID, id);
         let mut metrics = self.metrics.write().await;
         match self.cache.delete(&key).await {
             Ok(_) => {
@@ -644,7 +644,7 @@ impl AppState {
             }
         }
         drop(metrics);
-            self.cache_invalidate_prefix(&format!("{prefix}*", prefix = CACHE_PREFIX_POSTS))
+            self.cache_invalidate_prefix(&format!("{}*", CACHE_PREFIX_POSTS))
             .await; // prefix helper already logs
     }
 
@@ -653,7 +653,7 @@ impl AppState {
         use crate::utils::cache_key::{
             CACHE_PREFIX_USER_ID, CACHE_PREFIX_USER_POSTS, CACHE_PREFIX_USERS,
         };
-            let key = format!("{prefix}{id}", prefix = CACHE_PREFIX_USER_ID, id = id);
+            let key = format!("{}{}", CACHE_PREFIX_USER_ID, id);
         let mut metrics = self.metrics.write().await;
         match self.cache.delete(&key).await {
             Ok(_) => {
@@ -665,9 +665,9 @@ impl AppState {
             }
         }
         drop(metrics);
-            self.cache_invalidate_prefix(&format!("{prefix}*", prefix = CACHE_PREFIX_USERS))
+            self.cache_invalidate_prefix(&format!("{}*", CACHE_PREFIX_USERS))
             .await;
-            self.cache_invalidate_prefix(&format!("{prefix}{id}:*", prefix = CACHE_PREFIX_USER_POSTS, id = id))
+            self.cache_invalidate_prefix(&format!("{}{}:*", CACHE_PREFIX_USER_POSTS, id))
             .await;
     }
 
