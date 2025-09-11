@@ -232,7 +232,7 @@ impl RedisRateLimiter {
         }
     }
     fn key(&self, k: &str) -> String {
-        format!("{prefix}{k}", prefix = self.key_prefix, k = k)
+    format!("{}{}", self.key_prefix, k)
     }
     fn as_dyn(&self) -> &dyn ApiKeyRateLimiter {
         self
@@ -294,7 +294,7 @@ impl ApiKeyRateLimiter for RedisRateLimiter {
                     let mut total = 0usize;
                     loop {
                                     let prefix = &self.key_prefix;
-                                    let pattern = format!("{prefix}*");
+                                    let pattern = format!("{}*", self.key_prefix);
                         let res: redis::RedisResult<(u64, Vec<String>)> = redis::cmd("SCAN")
                             .arg(cursor)
                             .arg("MATCH")
