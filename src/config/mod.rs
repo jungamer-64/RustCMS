@@ -333,7 +333,7 @@ impl Config {
             .add_source(config::File::with_name("config/default").required(false));
         if profile != "development" {
             builder = builder.add_source(
-                config::File::with_name(&format!("config/{}", profile)).required(false),
+                config::File::with_name(&format!("config/{p}", p = profile)).required(false),
             );
         }
         builder = builder
