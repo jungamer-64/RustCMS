@@ -47,25 +47,25 @@ use crate::{
 // --- Key file helper funcs (extracted for reduced complexity in try_load_dir_keys) ---
 fn read_file_string(path: &std::path::Path, label: &str) -> crate::Result<String> {
     std::fs::read_to_string(path).map_err(|e| {
-    crate::AppError::Internal(format!("Failed reading biscuit {label} key file: {e}", label = label, e = e))
+                    crate::AppError::Internal(format!("Failed reading biscuit {} key file: {}", label, e))
     })
 }
 fn decode_key_b64(data: &str, label: &str) -> crate::Result<Vec<u8>> {
     STANDARD.decode(data).map_err(|e| {
-    crate::AppError::Internal(format!("Failed to decode biscuit {label} key b64: {e}", label = label, e = e))
+                    crate::AppError::Internal(format!("Failed to decode biscuit {} key b64: {}", label, e))
     })
 }
 fn read_biscuit_private_key(path: &std::path::Path) -> crate::Result<PrivateKey> {
     let b64 = read_file_string(path, "private")?;
     let bytes = decode_key_b64(&b64, "private")?;
     PrivateKey::from_bytes(&bytes, BiscuitAlgorithm::Ed25519)
-        .map_err(|e| crate::AppError::Internal(format!("Failed to parse biscuit private key: {e}")))
+        .map_err(|e| crate::AppError::Internal(format!("Failed to parse biscuit private key: {}", e)))
 }
 fn read_biscuit_public_key(path: &std::path::Path) -> crate::Result<PublicKey> {
     let b64 = read_file_string(path, "public")?;
     let bytes = decode_key_b64(&b64, "public")?;
     PublicKey::from_bytes(&bytes, BiscuitAlgorithm::Ed25519)
-        .map_err(|e| crate::AppError::Internal(format!("Failed to parse biscuit public key: {e}")))
+        .map_err(|e| crate::AppError::Internal(format!("Failed to parse biscuit public key: {}", e)))
 }
 
 #[derive(Debug, Error)]
@@ -549,9 +549,9 @@ impl AuthService {
             username = user.username,
             role = user.role
         ));
-        program.push_str(&format!("token_type(\"{t}\");\n", t = token_type));
-        program.push_str(&format!("exp({e});\n", e = exp_unix));
-        program.push_str(&format!("session(\"{sid}\", {v});\n", sid = session_id, v = version));
+            program.push_str(&format!("token_type(\"{}\");\n", token_type));
+            program.push_str(&format!("exp({});\n", exp_unix));
+            program.push_str(&format!("session(\"{}\", {});\n", session_id, version));
 
         let builder: BiscuitBuilder = biscuit_auth::Biscuit::builder();
         let builder = builder
