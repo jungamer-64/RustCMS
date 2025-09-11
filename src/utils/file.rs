@@ -93,7 +93,7 @@ pub fn calculate_file_hash(file_path: &Path) -> Result<String, FileError> {
         hasher.update(&buffer[..bytes_read]);
     }
 
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(format!("{value:x}", value = hasher.finalize()))
 }
 
 /// 非同期でファイルのハッシュを計算
@@ -110,7 +110,7 @@ pub async fn calculate_file_hash_async(file_path: &Path) -> Result<String, FileE
         hasher.update(&buffer[..bytes_read]);
     }
 
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(format!("{value:x}", value = hasher.finalize()))
 }
 
 /// 安全なファイル名を生成
@@ -121,7 +121,7 @@ pub fn generate_safe_filename(original_name: &str) -> String {
     if extension.is_empty() {
         uuid.to_string()
     } else {
-        format!("{}.{}", uuid, extension)
+    format!("{uuid}.{extension}", uuid = uuid, extension = extension)
     }
 }
 
@@ -274,9 +274,9 @@ pub fn format_file_size(bytes: u64) -> String {
     }
 
     if unit_index == 0 {
-        format!("{} {}", bytes, UNITS[unit_index])
+    format!("{bytes} {unit}", bytes = bytes, unit = UNITS[unit_index])
     } else {
-        format!("{:.2} {}", size, UNITS[unit_index])
+    format!("{size:.2} {unit}", size = size, unit = UNITS[unit_index])
     }
 }
 

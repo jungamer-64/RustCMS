@@ -11,7 +11,7 @@ pub fn format_validation_errors(errors: &ValidationErrors) -> HashMap<String, Ve
             if let Some(message) = &error.message {
                 messages.push(message.to_string());
             } else {
-                messages.push(format!("Invalid value for field '{}'", field));
+                messages.push(format!("Invalid value for field '{field}'", field = field));
             }
         }
         formatted.insert(field.to_string(), messages);
