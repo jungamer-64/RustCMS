@@ -300,7 +300,7 @@ impl PostRepository {
         
     // Use inlined format args with to_lowercase result built first
     let lowered = query.to_lowercase();
-    let search_query = format!("%{lowered}%");
+    let search_query = format!("%{}%", lowered);
         
         let (posts, total_count) = self
             .timed("search", || async {
