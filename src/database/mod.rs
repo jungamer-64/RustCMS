@@ -129,7 +129,10 @@ fn map_diesel_result<T>(
             diesel::result::Error::NotFound => {
                 Err(crate::AppError::NotFound(not_found_msg.to_string()))
             }
-            other => Err(crate::AppError::Internal(format!("{ctx}: {other}", ctx = ctx, other = other))),
+            other => Err(crate::AppError::Internal({
+                let ctx = ctx;
+                format!("{ctx}: {other}", other = other)
+            })),
         },
     }
 }
