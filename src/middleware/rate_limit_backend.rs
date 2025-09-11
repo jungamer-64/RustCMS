@@ -245,7 +245,7 @@ impl ApiKeyRateLimiter for RedisRateLimiter {
         if self.disabled {
             return false;
         }
-        let k = self.key(key);
+    let k = self.key(key);
         let window_secs = self.window.as_secs() as usize;
         // Redis atomic pattern: INCR then set EXPIRE if first
         // Using block_on not acceptable; function is sync. We use a dedicated runtime handle via tokio::runtime context.
@@ -293,7 +293,8 @@ impl ApiKeyRateLimiter for RedisRateLimiter {
                     let mut cursor: u64 = 0;
                     let mut total = 0usize;
                     loop {
-                                    let pattern = format!("{prefix}*", prefix = self.key_prefix);
+                                    let prefix = &self.key_prefix;
+                                    let pattern = format!("{prefix}*");
                         let res: redis::RedisResult<(u64, Vec<String>)> = redis::cmd("SCAN")
                             .arg(cursor)
                             .arg("MATCH")
