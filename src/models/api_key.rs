@@ -209,7 +209,7 @@ impl ApiKey {
             }
         }
         let body = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
-    format!("{prefix}{body}", prefix = PREFIX, body = body)
+    format!("{}{}", PREFIX, body)
     }
 
     pub(crate) fn hash_key(key: &str) -> String {
@@ -279,6 +279,6 @@ impl ApiKey {
         if raw.len() <= 10 {
             return "***".into();
         }
-    format!("{start}…{end}", start = &raw[..6], end = &raw[raw.len() - 4..])
+    format!("{}…{}", &raw[..6], &raw[raw.len() - 4..])
     }
 }
