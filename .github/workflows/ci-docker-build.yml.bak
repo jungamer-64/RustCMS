@@ -54,14 +54,14 @@ jobs:
     steps:
       - name: Checkout
         # TODO: pin this action to a full commit SHA for immutability
-        uses: actions/checkout@v4
+  uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
             fetch-depth: 0
 
       - name: Derive meta (tags/labels)
         id: meta
         # TODO: pin this action to a full commit SHA for immutability
-        uses: docker/metadata-action@v5
+  uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f
         with:
           images: ${{ env.IMAGE_BASE }}
           tags: |
@@ -79,16 +79,16 @@ jobs:
 
       - name: Set up QEMU
         # TODO: pin this action to a full commit SHA for immutability
-        uses: docker/setup-qemu-action@v3
+  uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392
 
       - name: Set up Docker Buildx
         # TODO: pin this action to a full commit SHA for immutability
-        uses: docker/setup-buildx-action@v3
+  uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
 
       - name: Login to GHCR
         if: github.event_name == 'push'
         # TODO: pin this action to a full commit SHA for immutability
-        uses: docker/login-action@v3
+  uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -97,7 +97,7 @@ jobs:
       - name: Build (and maybe push)
         id: build
         # TODO: pin this action to a full commit SHA for immutability
-        uses: docker/build-push-action@v6
+  uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
         with:
           context: .
           file: Dockerfile
@@ -124,7 +124,7 @@ jobs:
       - name: Upload image artifact (PR)
         if: github.event_name == 'pull_request'
         # TODO: pin this action to a full commit SHA for immutability
-        uses: actions/upload-artifact@v4
+  uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: image-${{ matrix.variant }}
           path: dist/${{ matrix.variant }}.tar
@@ -133,7 +133,7 @@ jobs:
       - name: Trivy scan (advisory)
         if: github.event_name == 'pull_request'
         # TODO: pin this action to a full commit SHA for immutability
-        uses: aquasecurity/trivy-action@0.24.0
+  uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8
         continue-on-error: true
         with:
           image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
