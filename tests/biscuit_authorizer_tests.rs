@@ -5,7 +5,7 @@ use biscuit_auth::{Biscuit, KeyPair};
 
 fn build_token(user_id: &str, username: &str, role: &str) -> (Biscuit, KeyPair) {
     let kp = KeyPair::new();
-    let fact = format!("user(\"{}\", \"{}\", \"{}\")", user_id, username, role);
+    let fact = format!("user(\"{user_id}\", \"{username}\", \"{role}\")", user_id = user_id, username = username, role = role);
     let token = Biscuit::builder()
         .fact(fact.as_str())
         .expect("add fact")

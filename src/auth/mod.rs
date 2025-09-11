@@ -47,12 +47,12 @@ use crate::{
 // --- Key file helper funcs (extracted for reduced complexity in try_load_dir_keys) ---
 fn read_file_string(path: &std::path::Path, label: &str) -> crate::Result<String> {
     std::fs::read_to_string(path).map_err(|e| {
-        crate::AppError::Internal(format!("Failed reading biscuit {label} key file: {e}"))
+    crate::AppError::Internal(format!("Failed reading biscuit {label} key file: {e}", label = label, e = e))
     })
 }
 fn decode_key_b64(data: &str, label: &str) -> crate::Result<Vec<u8>> {
     STANDARD.decode(data).map_err(|e| {
-        crate::AppError::Internal(format!("Failed to decode biscuit {label} key b64: {e}"))
+    crate::AppError::Internal(format!("Failed to decode biscuit {label} key b64: {e}", label = label, e = e))
     })
 }
 fn read_biscuit_private_key(path: &std::path::Path) -> crate::Result<PrivateKey> {
