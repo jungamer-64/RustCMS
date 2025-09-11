@@ -98,8 +98,9 @@ impl CacheService {
     where
         T: Serialize,
     {
-        let serialized = serde_json::to_vec(value)?;
-    let full_key = format!("{prefix}{key}", prefix = self.config.key_prefix, key = key);
+            let serialized = serde_json::to_vec(value)?;
+            let prefix = &self.config.key_prefix;
+            let full_key = format!("{prefix}{key}");
 
         // Set in Redis (multiplexed)
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
@@ -141,7 +142,8 @@ impl CacheService {
     where
         T: DeserializeOwned,
     {
-    let full_key = format!("{prefix}{key}", prefix = self.config.key_prefix, key = key);
+    let prefix = &self.config.key_prefix;
+    let full_key = format!("{prefix}{key}");
 
         // Try memory cache first
         {
@@ -193,7 +195,8 @@ impl CacheService {
 
     /// Delete value from cache
     pub async fn delete(&self, key: &str) -> Result<()> {
-    let full_key = format!("{prefix}{key}", prefix = self.config.key_prefix, key = key);
+    let prefix = &self.config.key_prefix;
+    let full_key = format!("{prefix}{key}");
 
         // Remove from Redis
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
@@ -207,7 +210,8 @@ impl CacheService {
 
     /// Check if key exists in cache
     pub async fn exists(&self, key: &str) -> Result<bool> {
-    let full_key = format!("{prefix}{key}", prefix = self.config.key_prefix, key = key);
+    let prefix = &self.config.key_prefix;
+    let full_key = format!("{prefix}{key}");
 
         // Check memory cache first
         {
@@ -250,7 +254,8 @@ impl CacheService {
     /// Clear all cache entries
     pub async fn clear(&self) -> Result<()> {
         // Clear Redis with pattern
-    let pattern = format!("{prefix}*", prefix = self.config.key_prefix);
+    let prefix = &self.config.key_prefix;
+    let pattern = format!("{prefix}*");
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
 
         let keys: Vec<String> = conn.keys(&pattern).await?;
