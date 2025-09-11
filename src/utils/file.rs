@@ -121,7 +121,7 @@ pub fn generate_safe_filename(original_name: &str) -> String {
     if extension.is_empty() {
         uuid.to_string()
     } else {
-    format!("{uuid}.{extension}", uuid = uuid, extension = extension)
+        format!("{}.{}", uuid, extension)
     }
 }
 
@@ -274,9 +274,9 @@ pub fn format_file_size(bytes: u64) -> String {
     }
 
     if unit_index == 0 {
-    format!("{bytes} {unit}", bytes = bytes, unit = UNITS[unit_index])
+        format!("{} {}", bytes, UNITS[unit_index])
     } else {
-    format!("{size:.2} {unit}", size = size, unit = UNITS[unit_index])
+        format!("{:.2} {}", size, UNITS[unit_index])
     }
 }
 

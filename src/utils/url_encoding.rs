@@ -66,7 +66,7 @@ pub fn encode_slug(input: &str) -> String {
 pub fn decode_slug(input: &str) -> crate::Result<String> {
     percent_decode_str(input)
         .decode_utf8()
-    .map_err(|e| AppError::BadRequest(format!("Invalid slug encoding: {e}")))
+    .map_err(|e| AppError::BadRequest(format!("Invalid slug encoding: {}", e)))
         .map(|cow| cow.into_owned())
 }
 
@@ -78,7 +78,7 @@ pub fn url_encode(input: &str) -> String {
 /// 簡易URLデコード（完全互換）
 pub fn url_decode(input: &str) -> crate::Result<String> {
     decode(input)
-    .map_err(|e| AppError::BadRequest(format!("URL decode error: {e}")))
+    .map_err(|e| AppError::BadRequest(format!("URL decode error: {}", e)))
         .map(|cow| cow.into_owned())
 }
 

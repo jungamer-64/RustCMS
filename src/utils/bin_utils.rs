@@ -57,6 +57,6 @@ pub async fn run_docs_server(addr: SocketAddr) -> crate::Result<()> {
         .map_err(crate::AppError::IO)?;
     axum::serve(listener, app)
         .await
-        .map_err(|e| crate::AppError::Internal(format!("axum serve error: {e}")))?;
+    .map_err(|e| crate::AppError::Internal(format!("axum serve error: {}", e)))?;
     Ok(())
 }
