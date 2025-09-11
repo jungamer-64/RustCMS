@@ -307,9 +307,10 @@ impl Post {
     /// Check if post is published and publication date has passed
     pub fn is_publicly_visible(&self) -> bool {
         self.status == "published"
-            && self
-                .published_at
-                .is_none_or(|pub_date| pub_date <= Utc::now())
+            && match self.published_at {
+                None => true,
+                Some(pub_date) => pub_date <= Utc::now(),
+            }
     }
 
     /// Check if post is published
