@@ -100,7 +100,7 @@ impl CacheService {
     {
             let serialized = serde_json::to_vec(value)?;
             let prefix = &self.config.key_prefix;
-            let full_key = format!("{prefix}{key}");
+            let full_key = format!("{}{}", prefix, key);
 
         // Set in Redis (multiplexed)
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
@@ -143,7 +143,7 @@ impl CacheService {
         T: DeserializeOwned,
     {
     let prefix = &self.config.key_prefix;
-    let full_key = format!("{prefix}{key}");
+    let full_key = format!("{}{}", prefix, key);
 
         // Try memory cache first
         {
@@ -196,7 +196,7 @@ impl CacheService {
     /// Delete value from cache
     pub async fn delete(&self, key: &str) -> Result<()> {
     let prefix = &self.config.key_prefix;
-    let full_key = format!("{prefix}{key}");
+    let full_key = format!("{}{}", prefix, key);
 
         // Remove from Redis
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
@@ -211,7 +211,7 @@ impl CacheService {
     /// Check if key exists in cache
     pub async fn exists(&self, key: &str) -> Result<bool> {
     let prefix = &self.config.key_prefix;
-    let full_key = format!("{prefix}{key}");
+    let full_key = format!("{}{}", prefix, key);
 
         // Check memory cache first
         {
@@ -236,7 +236,7 @@ impl CacheService {
 
     /// Set TTL for existing key
     pub async fn expire(&self, key: &str, ttl: Duration) -> Result<()> {
-    let full_key = format!("{prefix}{key}", prefix = self.config.key_prefix, key = key);
+    let full_key = format!("{}{}", self.config.key_prefix, key);
 
         // Set TTL in Redis
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
@@ -255,7 +255,7 @@ impl CacheService {
     pub async fn clear(&self) -> Result<()> {
         // Clear Redis with pattern
     let prefix = &self.config.key_prefix;
-    let pattern = format!("{prefix}*");
+    let pattern = format!("{}*", prefix);
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
 
         let keys: Vec<String> = conn.keys(&pattern).await?;
@@ -397,22 +397,22 @@ pub struct CacheKey;
 
 impl CacheKey {
     pub fn user(id: &str) -> String {
-    format!("user:{id}", id = id)
+    format!("user:{}", id)
     }
 
     pub fn post(id: &str) -> String {
-    format!("post:{id}", id = id)
+    format!("post:{}", id)
     }
 
     pub fn session(id: &str) -> String {
-    format!("session:{id}", id = id)
+    format!("session:{}", id)
     }
 
     pub fn search_results(query: &str, page: u32) -> String {
-    format!("search:{query}:{page}", query = query, page = page)
+    format!("search:{}:{}", query, page)
     }
 
     pub fn api_response(endpoint: &str, params: &str) -> String {
-    format!("api:{endpoint}:{params}", endpoint = endpoint, params = params)
+    format!("api:{}:{}", endpoint, params)
     }
 }

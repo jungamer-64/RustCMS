@@ -22,7 +22,7 @@ pub const CACHE_PREFIX_USER_POSTS: &str = "user_posts:user:"; // + {uuid}:...
 /// Example: entity_id_key("post", uuid) => "post:id:{uuid}"
 pub fn entity_id_key(prefix: &str, id: impl std::fmt::Display) -> String {
     // use shorthand inlined format args (Rust 1.58+)
-    format!("{prefix}:id:{id}")
+    format!("{}:id:{}", prefix, id)
 }
 
 /// Enum describing list style cache keys we standardize on. This avoids a
@@ -105,7 +105,7 @@ impl CacheKeyBuilder {
         );
         self.used_labels.insert(key.to_string());
         // use inlined formatting shorthand
-        self.segs.push(format!("{key}:{val}"));
+    self.segs.push(format!("{}:{}", key, val));
     }
     pub fn kv(mut self, key: &str, value: impl std::fmt::Display) -> Self {
         self.push_kv(key, value.to_string());
@@ -125,7 +125,7 @@ impl CacheKeyBuilder {
             // assign to locals so we can use the inlined format shorthand
             let base = self.base;
             let segs = self.segs.join(":");
-            format!("{base}:{segs}")
+            format!("{}:{}", base, segs)
         }
     }
 }
