@@ -544,12 +544,14 @@ impl AuthService {
     ) -> Result<String> {
         let mut program = String::new();
         program.push_str(&format!(
-            "user(\"{}\", \"{}\", \"{}\");\n",
-            user.id, user.username, user.role
+            "user(\"{id}\", \"{username}\", \"{role}\");\n",
+            id = user.id,
+            username = user.username,
+            role = user.role
         ));
-        program.push_str(&format!("token_type(\"{}\");\n", token_type));
-        program.push_str(&format!("exp({});\n", exp_unix));
-        program.push_str(&format!("session(\"{}\", {});\n", session_id, version));
+        program.push_str(&format!("token_type(\"{t}\");\n", t = token_type));
+        program.push_str(&format!("exp({e});\n", e = exp_unix));
+        program.push_str(&format!("session(\"{sid}\", {v});\n", sid = session_id, v = version));
 
         let builder: BiscuitBuilder = biscuit_auth::Biscuit::builder();
         let builder = builder
@@ -620,23 +622,23 @@ impl AuthService {
             .map_err(|e| AuthError::Biscuit(format!("Authorizer run failed: {}", e)))?;
         let (id_s, username, role_s) = self.biscuit_query_triple(
             &mut authorizer,
-            r#"data($id,$u,$r) <- user($id,$u,$r)"#,
+            "data($id,$u,$r) <- user($id,$u,$r)",
             "user facts",
         )?;
         let user_id = Uuid::parse_str(&id_s).map_err(|_| AuthError::InvalidToken)?;
         let role = UserRole::parse_str(&role_s).map_err(|_| AuthError::InvalidToken)?;
         let token_type = self.biscuit_query_string(
             &mut authorizer,
-            r#"data($t) <- token_type($t)"#,
+            "data($t) <- token_type($t)",
             "token_type",
         )?;
-        let exp = self.biscuit_query_i64(&mut authorizer, r#"data($e) <- exp($e)"#, "exp")?;
+    let exp = self.biscuit_query_i64(&mut authorizer, "data($e) <- exp($e)", "exp")?;
         if exp < Utc::now().timestamp() {
             return Err(AuthError::TokenExpired.into());
         }
         let (session_id, version) = self.biscuit_query_session(
             &mut authorizer,
-            r#"data($sid,$v) <- session($sid,$v)"#,
+            "data($sid,$v) <- session($sid,$v)",
             "session",
         )?;
         Ok(ParsedBiscuit {
@@ -833,7 +835,6 @@ pub fn require_admin_permission(auth_context: &AuthContext) -> crate::Result<()>
 mod tests {
     use super::*;
     use uuid::Uuid;
-    use chrono::Utc;
 
     #[test]
     fn require_admin_permission_allows_admin() {
