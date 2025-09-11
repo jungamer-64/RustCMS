@@ -22,7 +22,7 @@ impl PostStatus {
             "draft" => Ok(PostStatus::Draft),
             "published" => Ok(PostStatus::Published),
             "archived" => Ok(PostStatus::Archived),
-            _ => Err(AppError::BadRequest(format!("Invalid post status: {}", s))),
+            _ => Err(AppError::BadRequest(format!("Invalid post status: {s}", s = s))),
         }
     }
 }
@@ -299,7 +299,7 @@ impl Post {
             if content_text.len() <= length {
                 content_text
             } else {
-                format!("{}...", &content_text[..length])
+                format!("{trunc}...", trunc = &content_text[..length])
             }
         }
     }

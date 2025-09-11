@@ -57,7 +57,7 @@ impl UserRole {
             "author" => Ok(UserRole::Author),
             "contributor" => Ok(UserRole::Contributor),
             "subscriber" => Ok(UserRole::Subscriber),
-            _ => Err(AppError::BadRequest(format!("Invalid user role: {}", s))),
+            _ => Err(AppError::BadRequest(format!("Invalid user role: {s}", s = s))),
         }
     }
 }
