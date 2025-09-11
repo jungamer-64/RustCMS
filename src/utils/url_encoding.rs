@@ -49,7 +49,7 @@ pub fn encode_url_param(input: &str) -> String {
 pub fn decode_url_param(input: &str) -> crate::Result<String> {
     percent_decode_str(input)
         .decode_utf8()
-    .map_err(|e| AppError::BadRequest(format!("Invalid URL encoding: {e}")))
+        .map_err(|e| AppError::BadRequest(format!("Invalid URL encoding: {}", e)))
         .map(|cow| cow.into_owned())
 }
 

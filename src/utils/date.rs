@@ -52,17 +52,17 @@ pub fn humanize_duration(datetime: &DateTime<Utc>) -> String {
     if duration.num_seconds() < 60 {
         "just now".to_string()
     } else if duration.num_minutes() < 60 {
-    format!("{mins} minutes ago", mins = duration.num_minutes())
+    format!("{} minutes ago", duration.num_minutes())
     } else if duration.num_hours() < 24 {
-    format!("{hours} hours ago", hours = duration.num_hours())
+    format!("{} hours ago", duration.num_hours())
     } else if duration.num_days() < 7 {
-    format!("{days} days ago", days = duration.num_days())
+    format!("{} days ago", duration.num_days())
     } else if duration.num_days() < 30 {
-    format!("{weeks} weeks ago", weeks = duration.num_days() / 7)
+    format!("{} weeks ago", duration.num_days() / 7)
     } else if duration.num_days() < 365 {
-    format!("{months} months ago", months = duration.num_days() / 30)
+    format!("{} months ago", duration.num_days() / 30)
     } else {
-    format!("{years} years ago", years = duration.num_days() / 365)
+    format!("{} years ago", duration.num_days() / 365)
     }
 }
 

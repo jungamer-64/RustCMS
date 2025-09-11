@@ -93,7 +93,7 @@ pub fn calculate_file_hash(file_path: &Path) -> Result<String, FileError> {
         hasher.update(&buffer[..bytes_read]);
     }
 
-    Ok(format!("{value:x}", value = hasher.finalize()))
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 /// 非同期でファイルのハッシュを計算
@@ -110,7 +110,7 @@ pub async fn calculate_file_hash_async(file_path: &Path) -> Result<String, FileE
         hasher.update(&buffer[..bytes_read]);
     }
 
-    Ok(format!("{value:x}", value = hasher.finalize()))
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 /// 安全なファイル名を生成
