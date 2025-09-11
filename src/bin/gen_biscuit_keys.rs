@@ -95,7 +95,7 @@ fn prune_versions(dir: &Path, keep: usize) {
         .collect();
     for v in to_remove {
         for prefix in ["biscuit_private_v", "biscuit_public_v"] {
-            let path = dir.join(format!("{}{}.b64", prefix, v));
+            let path = dir.join(format!("{prefix}{v}.b64", prefix = prefix, v = v));
             if path.exists() {
                 if let Err(e) = fs::remove_file(&path) {
                     eprintln!("Failed to remove old version {}: {}", path.display(), e);
@@ -111,7 +111,7 @@ fn write_file_if_allowed(path: &Path, data: &str, force: bool) -> std::io::Resul
     if path.exists() && !force {
         return Err(std::io::Error::new(
             std::io::ErrorKind::AlreadyExists,
-            format!("{} already exists", path.display()),
+            format!("{p} already exists", p = path.display()),
         ));
     }
     let mut f = fs::File::create(path)?;
@@ -140,7 +140,7 @@ fn append_env_file(path: &Path, priv_b64: &str, pub_b64: &str, force: bool) -> s
         if !force {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
-                format!("{} already contains biscuit entries", path.display()),
+                format!("{p} already contains biscuit entries", p = path.display()),
             ));
         }
         // Remove existing lines and append fresh ones

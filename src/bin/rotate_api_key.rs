@@ -49,7 +49,7 @@ async fn main() -> cms_backend::Result<()> {
             permissions,
         } => {
             let uuid = uuid::Uuid::parse_str(&id)
-                .map_err(|e| cms_backend::AppError::BadRequest(format!("invalid uuid: {}", e)))?;
+                .map_err(|e| cms_backend::AppError::BadRequest(format!("invalid uuid: {e}", e = e)))?;
             let perms_opt = if permissions.is_empty() {
                 None
             } else {

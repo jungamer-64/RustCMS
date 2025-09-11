@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app: Router = create_router().with_state(state);
 
     // Bind to configured address
-    let addr = format!("{}:{}", config.server.host, config.server.port).parse::<SocketAddr>()?;
+    let addr = format!("{host}:{port}", host = config.server.host, port = config.server.port).parse::<SocketAddr>()?;
 
     info!("Binding admin server to {}", addr);
 
