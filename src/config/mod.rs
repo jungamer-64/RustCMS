@@ -332,8 +332,9 @@ impl Config {
         let mut builder = config::Config::builder()
             .add_source(config::File::with_name("config/default").required(false));
         if profile != "development" {
+            let profile_path = format!("config/{}", profile);
             builder = builder.add_source(
-                config::File::with_name(&format!("config/{}", profile)).required(false),
+                config::File::with_name(&profile_path).required(false),
             );
         }
         builder = builder
@@ -392,7 +393,8 @@ impl Config {
             let joined = cfg.security.cors_origins[0].clone();
             cfg.security.cors_origins = joined
                 .split(',')
-                .map(|s| s.trim().to_string())
+                .map(str::trim)
+                .map(str::to_string)
                 .filter(|s| !s.is_empty())
                 .collect();
         }
