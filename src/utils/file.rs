@@ -59,7 +59,7 @@ pub fn get_file_extension(filename: &str) -> Option<String> {
     Path::new(filename)
         .extension()
         .and_then(|ext| ext.to_str())
-        .map(|ext| ext.to_lowercase())
+    .map(|ext| ext.to_lowercase())
 }
 
 /// ファイルタイプを検証
@@ -73,10 +73,9 @@ pub fn validate_file_type(filename: &str, allowed_extensions: &[&str]) -> Result
 /// ファイルサイズを検証
 pub fn validate_file_size(size: u64, max_size: u64) -> Result<(), FileError> {
     if size > max_size {
-        Err(FileError::FileTooLarge)
-    } else {
-        Ok(())
+        return Err(FileError::FileTooLarge);
     }
+    Ok(())
 }
 
 /// ファイルのハッシュを計算
