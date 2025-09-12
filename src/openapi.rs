@@ -1,7 +1,9 @@
-//! OpenAPI Documentation - Simplified for compilation
+//! `OpenAPI` Documentation - Simplified for compilation
 //!
-//! Temporary simplified OpenAPI configuration to resolve compilation issues
+//! Temporary simplified `OpenAPI` configuration to resolve compilation issues
 //! Full API documentation will be restored after fixing dependencies
+
+#![allow(clippy::needless_for_each)]
 
 use utoipa::Modify;
 use utoipa::OpenApi;
@@ -14,7 +16,7 @@ struct SecurityAddon;
 
 impl Modify for SecurityAddon {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        let components = openapi.components.get_or_insert(Default::default());
+    let components = openapi.components.get_or_insert(utoipa::openapi::Components::default());
         let mut http = Http::new(HttpAuthScheme::Bearer);
         http.bearer_format = Some("Biscuit".to_string());
         components.add_security_scheme("BearerAuth", SecurityScheme::Http(http));
@@ -24,6 +26,7 @@ impl Modify for SecurityAddon {
 // Minimal, well-formed OpenApi declarations: one for legacy feature, one for non-legacy.
 
 #[cfg(feature = "legacy-auth-flat")]
+#[allow(clippy::needless_for_each)]
 #[derive(OpenApi)]
 #[openapi(
     info(
@@ -46,6 +49,7 @@ impl Modify for SecurityAddon {
 pub struct ApiDoc;
 
 #[cfg(not(feature = "legacy-auth-flat"))]
+#[allow(clippy::needless_for_each)]
 #[derive(OpenApi)]
 #[openapi(
     info(
