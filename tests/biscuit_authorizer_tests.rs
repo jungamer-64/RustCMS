@@ -5,7 +5,7 @@ use biscuit_auth::{Biscuit, KeyPair};
 
 fn build_token(user_id: &str, username: &str, role: &str) -> (Biscuit, KeyPair) {
     let kp = KeyPair::new();
-    let fact = format!("user(\"{user_id}\", \"{username}\", \"{role}\")", user_id = user_id, username = username, role = role);
+    let fact = format!("user(\"{user_id}\", \"{username}\", \"{role}\")");
     let token = Biscuit::builder()
         .fact(fact.as_str())
         .expect("add fact")
@@ -34,7 +34,7 @@ fn biscuit_authorizer_no_fact_returns_empty() {
     let mut authorizer = token.authorizer().expect("authorizer");
     let q = r"data($id,$u,$r) <- user($id,$u,$r)";
     let rows: Vec<(String, String, String)> = authorizer.query_all(q).expect("query");
-    assert!(rows.is_empty(), "expected no rows, got {:?}", rows);
+    assert!(rows.is_empty(), "expected no rows, got {rows:?}");
 }
 
 #[test]
