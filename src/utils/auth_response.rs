@@ -24,7 +24,8 @@ pub struct AuthSuccess<T> {
 }
 
 impl<T> AuthSuccess<T> {
-    pub fn new(tokens: AuthTokens, user: Option<UserInfo>, extra: Option<T>) -> Self {
+    #[must_use]
+    pub const fn new(tokens: AuthTokens, user: Option<UserInfo>, extra: Option<T>) -> Self {
         Self {
             success: true,
             tokens,
@@ -42,7 +43,7 @@ impl From<crate::auth::AuthResponse> for AuthTokens {
 
 #[cfg_attr(
     feature = "auth-flat-fields",
-    doc = "統一認証レスポンス (login/register 用)\n\n`tokens` オブジェクトに加え、後方互換のため従来フラットなフィールド (access_token / refresh_token / biscuit_token / expires_in / session_id / token) も保持する。\n\nNOTE: フラットフィールドは feature `auth-flat-fields` 有効時のみ含まれ 3.0.0 で削除予定。"
+    doc = "統一認証レスポンス (login/register 用)\n\n`tokens` オブジェクトに加え、後方互換のため従来フラットなフィールド (`access_token` / `refresh_token` / `biscuit_token` / `expires_in` / `session_id` / `token`) も保持する。\n\nNOTE: フラットフィールドは feature `auth-flat-fields` 有効時のみ含まれ 3.0.0 で削除予定。"
 )]
 #[cfg_attr(
     not(feature = "auth-flat-fields"),
@@ -68,7 +69,7 @@ pub struct AuthSuccessResponse {
     #[cfg(feature = "auth-flat-fields")]
     #[deprecated(note = "Use tokens.session_id (will be removed in 3.0.0)")]
     pub session_id: String,
-    /// 旧クライアント互換 (token == access_token)
+    /// 旧クライアント互換 (`token` == `access_token`)
     #[cfg(feature = "auth-flat-fields")]
     #[deprecated(note = "Use tokens.access_token (alias, will be removed in 3.0.0)")]
     pub token: String,
@@ -76,7 +77,7 @@ pub struct AuthSuccessResponse {
 
 impl From<crate::auth::AuthResponse> for AuthSuccessResponse {
     fn from(a: crate::auth::AuthResponse) -> Self {
-        AuthSuccessResponse::from_parts(&a.tokens, a.user)
+        Self::from_parts(&a.tokens, a.user)
     }
 }
 
@@ -90,6 +91,7 @@ impl AuthSuccessResponse {
             user,
         }
     }
+    #[must_use]
     pub fn from_parts(tokens: &AuthTokens, user: UserInfo) -> Self {
         #[allow(deprecated)]
         {
