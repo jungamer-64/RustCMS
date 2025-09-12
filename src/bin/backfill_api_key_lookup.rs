@@ -73,11 +73,14 @@ async fn main() -> anyhow::Result<()> {
         let rows: Vec<cms_backend::models::ApiKey> =
             state.db_list_api_keys_missing_lookup().await?;
         let scanned_count = rows.len();
-        let mut expired_marked = 0usize;
-        if args.expire && !args.dry_run {
+        let expired_marked = if args.expire && !args.dry_run {
             let now = Utc::now();
-            expired_marked = state.db_expire_api_keys_missing_lookup(now).await?;
-        }
+            state
+                .db_expire_api_keys_missing_lookup(now)
+                .await?
+        } else {
+            0usize
+        };
 
         let report = Report {
             scanned: scanned_count,
