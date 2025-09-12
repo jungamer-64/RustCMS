@@ -23,6 +23,7 @@ pub struct CsrfService {
 
 impl CsrfService {
     /// Create new CSRF protection service
+    #[must_use]
     pub fn new() -> Self {
         // Generate secure random key for CSRF token generation
         let mut key = [0u8; 32];
