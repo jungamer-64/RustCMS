@@ -115,6 +115,7 @@ pub struct Paginated<T> {
 }
 
 impl<T> Paginated<T> {
+    #[must_use]
     pub fn new(items: Vec<T>, total: usize, page: u32, limit: u32) -> Self {
         let total_pages = calc_total_pages(total, limit);
         Self {
@@ -138,7 +139,7 @@ impl<T> Paginated<T> {
 // Bridge to shared API types for responses
 impl<T> From<Paginated<T>> for crate::utils::api_types::PaginatedResponse<T> {
     fn from(p: Paginated<T>) -> Self {
-        crate::utils::api_types::PaginatedResponse {
+        Self {
             data: p.items,
             pagination: crate::utils::api_types::Pagination {
                 page: p.page,
@@ -158,6 +159,7 @@ pub struct PaginatedBuilder<T> {
     limit: u32,
 }
 impl<T> PaginatedBuilder<T> {
+    #[must_use]
     pub fn new(page: u32, limit: u32) -> Self {
         Self {
             items: Vec::new(),
@@ -174,6 +176,7 @@ impl<T> PaginatedBuilder<T> {
         self.total = total;
         self
     }
+    #[must_use]
     pub fn build(self) -> Paginated<T> {
         Paginated::new(self.items, self.total, self.page, self.limit)
     }
