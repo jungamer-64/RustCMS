@@ -294,7 +294,7 @@ impl ApiKeyRateLimiter for RedisRateLimiter {
                     let mut total = 0usize;
                     loop {
                                     let prefix = &self.key_prefix;
-                                    let pattern = format!("{}*", self.key_prefix);
+                                    let pattern = format!("{}*", prefix);
                         let res: redis::RedisResult<(u64, Vec<String>)> = redis::cmd("SCAN")
                             .arg(cursor)
                             .arg("MATCH")
@@ -308,9 +308,8 @@ impl ApiKeyRateLimiter for RedisRateLimiter {
                                 total += keys.len();
                                 if next == 0 {
                                     break total;
-                                } else {
-                                    cursor = next;
                                 }
+                                cursor = next;
                             }
                             Err(_) => break 0,
                         };
