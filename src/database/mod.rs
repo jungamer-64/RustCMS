@@ -300,7 +300,7 @@ impl Database {
             &request.password,
             request.first_name,
             request.last_name,
-            request.role,
+            &request.role,
         )?;
         self.with_conn(|conn| {
             let created: User = User::create(conn, &user)?;

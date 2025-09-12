@@ -148,13 +148,17 @@ impl User {
         Self::new(username, email, None, first_name, last_name, role)
     }
 
+    /// パスワード付きの新規ユーザーを作成する
+    ///
+    /// # Errors
+    /// パスワードのハッシュ化に失敗した場合、エラーを返します。
     pub fn new_with_password(
         username: String,
         email: String,
         password: &str,
         first_name: Option<String>,
         last_name: Option<String>,
-        role: UserRole,
+        role: &UserRole,
     ) -> Result<Self, crate::AppError> {
         let password_hash = password::hash_password(password)?;
 
