@@ -76,6 +76,10 @@ pub struct CacheService {
 
 impl CacheService {
     /// Create new cache service
+    ///
+    /// # Errors
+    /// - Redis への接続確立に失敗した場合。
+    /// - シリアライズ/デシリアライズに失敗した場合。
     pub async fn new(config: &RedisConfig) -> Result<Self> {
         let redis_client = Client::open(config.url.as_str())?;
 
@@ -94,13 +98,17 @@ impl CacheService {
     }
 
     /// Set value in cache with TTL
+    ///
+    /// # Errors
+    /// - Redis との通信に失敗した場合。
+    /// - 値のシリアライズに失敗した場合。
     pub async fn set<T>(&self, key: String, value: &T, ttl: Option<Duration>) -> Result<()>
     where
-        T: Serialize,
+        T: Serialize + Sync,
     {
-            let serialized = serde_json::to_vec(value)?;
-            let prefix = &self.config.key_prefix;
-            let full_key = format!("{}{}", prefix, key);
+        let serialized = serde_json::to_vec(value)?;
+        let prefix = &self.config.key_prefix;
+        let full_key = format!("{prefix}{key}");
 
         // Set in Redis (multiplexed)
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
@@ -113,9 +121,11 @@ impl CacheService {
         // Set in memory cache
         self.memory_insert(full_key, serialized, ttl).await;
 
-        // Update stats
-        let mut stats = self.stats.write().await;
-        stats.total_operations += 1;
+        // Update stats (limit guard lifetime)
+        {
+            let mut stats = self.stats.write().await;
+            stats.total_operations += 1;
+        }
 
         Ok(())
     }
@@ -138,12 +148,16 @@ impl CacheService {
     }
 
     /// Get value from cache
+    ///
+    /// # Errors
+    /// - Redis との通信に失敗した場合。
+    /// - 取得したデータのデシリアライズに失敗した場合。
     pub async fn get<T>(&self, key: &str) -> Result<Option<T>>
     where
         T: DeserializeOwned,
     {
-    let prefix = &self.config.key_prefix;
-    let full_key = format!("{}{}", prefix, key);
+        let prefix = &self.config.key_prefix;
+        let full_key = format!("{prefix}{key}");
 
         // Try memory cache first
         {
@@ -194,9 +208,12 @@ impl CacheService {
     }
 
     /// Delete value from cache
+    ///
+    /// # Errors
+    /// - Redis との通信に失敗した場合。
     pub async fn delete(&self, key: &str) -> Result<()> {
-    let prefix = &self.config.key_prefix;
-    let full_key = format!("{}{}", prefix, key);
+        let prefix = &self.config.key_prefix;
+        let full_key = format!("{prefix}{key}");
 
         // Remove from Redis
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
@@ -209,9 +226,12 @@ impl CacheService {
     }
 
     /// Check if key exists in cache
+    ///
+    /// # Errors
+    /// - Redis との通信に失敗した場合。
     pub async fn exists(&self, key: &str) -> Result<bool> {
-    let prefix = &self.config.key_prefix;
-    let full_key = format!("{}{}", prefix, key);
+        let prefix = &self.config.key_prefix;
+        let full_key = format!("{prefix}{key}");
 
         // Check memory cache first
         {
@@ -235,8 +255,11 @@ impl CacheService {
     }
 
     /// Set TTL for existing key
+    ///
+    /// # Errors
+    /// - Redis との通信に失敗した場合。
     pub async fn expire(&self, key: &str, ttl: Duration) -> Result<()> {
-    let full_key = format!("{}{}", self.config.key_prefix, key);
+        let full_key = format!("{}{}", self.config.key_prefix, key);
 
         // Set TTL in Redis
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
@@ -252,10 +275,13 @@ impl CacheService {
     }
 
     /// Clear all cache entries
+    ///
+    /// # Errors
+    /// - Redis との通信に失敗した場合。
     pub async fn clear(&self) -> Result<()> {
         // Clear Redis with pattern
-    let prefix = &self.config.key_prefix;
-    let pattern = format!("{}*", prefix);
+        let prefix = &self.config.key_prefix;
+        let pattern = format!("{prefix}*");
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
 
         let keys: Vec<String> = conn.keys(&pattern).await?;
@@ -294,6 +320,9 @@ impl CacheService {
     }
 
     /// Health check
+    ///
+    /// # Errors
+    /// - Redis との通信に失敗した場合。
     pub async fn health_check(&self) -> Result<()> {
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         let _: String = conn.set("health_check", "ok").await?;
@@ -302,6 +331,7 @@ impl CacheService {
     }
 
     /// Evict least recently used entries from memory cache
+    #[allow(clippy::unused_async)]
     async fn evict_lru(&self, memory_cache: &mut HashMap<String, CacheEntry<Vec<u8>>>) {
         if memory_cache.is_empty() {
             return;
@@ -328,11 +358,15 @@ impl CacheService {
     }
 
     /// Warm cache with frequently accessed data
+    ///
+    /// # Errors
+    /// - 内部処理でエラーが発生した場合。
+    #[allow(clippy::unused_async)]
     pub async fn warm_cache(&self, keys: Vec<String>) -> Result<()> {
         for key in keys {
             // Try to load from database or other source
             // This is a placeholder - implement according to your needs
-            tracing::info!("Warming cache for key: {}", key);
+            tracing::info!("Warming cache for key: {key}");
         }
         Ok(())
     }
@@ -397,22 +431,22 @@ pub struct CacheKey;
 
 impl CacheKey {
     pub fn user(id: &str) -> String {
-    format!("user:{}", id)
+        format!("user:{id}")
     }
 
     pub fn post(id: &str) -> String {
-    format!("post:{}", id)
+        format!("post:{id}")
     }
 
     pub fn session(id: &str) -> String {
-    format!("session:{}", id)
+        format!("session:{id}")
     }
 
     pub fn search_results(query: &str, page: u32) -> String {
-    format!("search:{}:{}", query, page)
+        format!("search:{query}:{page}")
     }
 
     pub fn api_response(endpoint: &str, params: &str) -> String {
-    format!("api:{}:{}", endpoint, params)
+        format!("api:{endpoint}:{params}")
     }
 }
