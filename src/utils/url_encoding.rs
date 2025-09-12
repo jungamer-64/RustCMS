@@ -37,6 +37,7 @@ const SLUG_SAFE: &AsciiSet = &URL_SAFE
     .add(b']'); // 右角括弧
 
 /// URLパラメータの安全なエンコード
+#[must_use]
 pub fn encode_url_param(input: &str) -> String {
     if is_already_encoded(input) {
         input.to_string()
@@ -46,14 +47,18 @@ pub fn encode_url_param(input: &str) -> String {
 }
 
 /// URLパラメータの安全なデコード
+///
+/// # Errors
+/// 入力が不正なエンコードでUTF-8として解釈できない場合、`BadRequest` を返します。
 pub fn decode_url_param(input: &str) -> crate::Result<String> {
     percent_decode_str(input)
         .decode_utf8()
-        .map_err(|e| AppError::BadRequest(format!("Invalid URL encoding: {}", e)))
+    .map_err(|e| AppError::BadRequest(format!("Invalid URL encoding: {e}")))
         .map(std::borrow::Cow::into_owned)
 }
 
 /// スラッグの安全なエンコード（より厳密）
+#[must_use]
 pub fn encode_slug(input: &str) -> String {
     if is_already_encoded(input) {
         input.to_string()
@@ -63,22 +68,29 @@ pub fn encode_slug(input: &str) -> String {
 }
 
 /// スラッグの安全なデコード
+///
+/// # Errors
+/// 入力が不正なエンコードでUTF-8として解釈できない場合、`BadRequest` を返します。
 pub fn decode_slug(input: &str) -> crate::Result<String> {
     percent_decode_str(input)
         .decode_utf8()
-    .map_err(|e| AppError::BadRequest(format!("Invalid slug encoding: {}", e)))
+    .map_err(|e| AppError::BadRequest(format!("Invalid slug encoding: {e}")))
     .map(std::borrow::Cow::into_owned)
 }
 
 /// 簡易URLエンコード（完全互換）
+#[must_use]
 pub fn url_encode(input: &str) -> String {
     encode(input).to_string()
 }
 
 /// 簡易URLデコード（完全互換）
+///
+/// # Errors
+/// 入力が不正なエンコードでUTF-8として解釈できない場合、`BadRequest` を返します。
 pub fn url_decode(input: &str) -> crate::Result<String> {
     decode(input)
-    .map_err(|e| AppError::BadRequest(format!("URL decode error: {}", e)))
+    .map_err(|e| AppError::BadRequest(format!("URL decode error: {e}")))
     .map(std::borrow::Cow::into_owned)
 }
 
@@ -98,6 +110,9 @@ fn is_already_encoded(input: &str) -> bool {
 }
 
 /// パラメーター長さのバリデーション
+///
+/// # Errors
+/// `param` が `max_length` を超える場合に `BadRequest` を返します。
 pub fn validate_param_length(
     param: &str,
     max_length: usize,
@@ -115,6 +130,7 @@ pub fn validate_param_length(
 }
 
 /// 安全なスラッグ生成（日本語対応）
+#[must_use]
 pub fn generate_safe_slug(title: &str) -> String {
     // 1. 基本的な文字列正規化
     let normalized = title
@@ -134,14 +150,19 @@ pub fn generate_safe_slug(title: &str) -> String {
         .join("-");
 
     // 3. URLエンコード（非ASCII文字のみ）
-    if !cleaned.is_ascii() {
-        encode_slug(&cleaned)
-    } else {
+    if cleaned.is_ascii() {
         cleaned
+    } else {
+        encode_slug(&cleaned)
     }
 }
 
 /// URL安全性の検証
+///
+/// # Errors
+///
+/// 入力が長過ぎる、無効な文字を含む、あるいはデコードできない場合に
+/// `BadRequest` を返します。
 pub fn validate_url_param(input: &str) -> crate::Result<()> {
     // 最大長チェック
     if input.len() > 2048 {
@@ -162,6 +183,11 @@ pub fn validate_url_param(input: &str) -> crate::Result<()> {
 }
 
 /// スラッグ安全性の検証
+///
+/// # Errors
+///
+/// 入力が長過ぎる、空、無効な文字を含む、あるいはデコードできない場合に
+/// `BadRequest` を返します。
 pub fn validate_slug(input: &str) -> crate::Result<()> {
     // 最大長チェック
     if input.len() > 255 {
