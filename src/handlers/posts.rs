@@ -159,7 +159,7 @@ pub async fn create_post(
         let m = model.clone();
         async move {
             st.search_index_entity_safe(crate::utils::search_index::SearchEntity::Post(&m))
-                .await
+                .await;
         }
     });
     #[cfg(not(feature = "search"))]
@@ -177,6 +177,10 @@ pub async fn create_post(
 }
 
 /// Get post by ID
+///
+/// # Errors
+/// - 指定 ID の投稿が存在しない場合。
+/// - キャッシュまたは DB へのアクセスに失敗した場合。
 #[utoipa::path(
     get,
     path = "/api/v1/posts/{id}",
@@ -229,6 +233,10 @@ pub async fn get_post(
 }
 
 /// Get all posts with pagination and filtering
+///
+/// # Errors
+/// - クエリ条件に合致する投稿の取得で DB アクセスに失敗した場合。
+/// - キャッシュ操作に失敗した場合。
 #[utoipa::path(
     get,
     path = "/api/v1/posts",
@@ -299,6 +307,10 @@ pub async fn get_posts(
 }
 
 /// Update post
+///
+/// # Errors
+/// - 指定 ID の投稿が存在しない場合。
+/// - バリデーションまたは DB 更新に失敗した場合。
 #[utoipa::path(
     put,
     path = "/api/v1/posts/{id}",
@@ -378,6 +390,11 @@ pub async fn update_post(
         (status=500, description="Server error")
     )
 )]
+/// Delete post by ID.
+///
+/// # Errors
+/// - 指定 ID の投稿がない場合。
+/// - DB 操作に失敗した場合。
 pub async fn delete_post(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
