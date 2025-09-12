@@ -34,7 +34,7 @@ pub struct RegisterRequest {
 }
 
 #[cfg(feature = "legacy-auth-flat")]
-/// 旧 LoginResponse 型 (feature = legacy-auth-flat 有効時のみ公開) - 新規コードは AuthSuccessResponse を使用してください
+/// 旧 `LoginResponse` 型 (feature = `legacy-auth-flat` 有効時のみ公開) - 新規コードは `AuthSuccessResponse` を使用してください
 #[allow(dead_code)]
 #[allow(deprecated)]
 #[derive(Debug, Serialize, ToSchema)]
@@ -72,20 +72,28 @@ impl From<AuthSuccessResponse> for LoginResponse {
             user,
             ..
         } = a;
-        LoginResponse {
+        // access_token は token と重複して返すため、一度だけ clone/コピーを行う
+        let access_token = tokens.access_token;
+        Self {
             success,
-            access_token: tokens.access_token.clone(),
-            refresh_token: tokens.refresh_token.clone(),
-            biscuit_token: tokens.biscuit_token.clone(),
+            token: access_token.clone(),
+            access_token,
+            refresh_token: tokens.refresh_token,
+            biscuit_token: tokens.biscuit_token,
             user,
             expires_in: tokens.expires_in,
-            session_id: tokens.session_id.clone(),
-            token: tokens.access_token.clone(),
+            session_id: tokens.session_id,
         }
     }
 }
 
 /// Register a new user
+/// 新規ユーザーを登録します。
+///
+/// # Errors
+/// - 入力の検証に失敗した場合。
+/// - 既存ユーザーとの一意制約に違反した場合。
+/// - 内部エラーが発生した場合。
 #[utoipa::path(
     post,
     path = "/api/v1/auth/register",
@@ -137,7 +145,7 @@ pub async fn register(
     #[cfg(feature = "search")]
     if let Err(e) = state.search.index_user(&user).await {
         // Log error but don't fail the registration
-        eprintln!("Failed to index user for search: {}", e);
+        eprintln!("Failed to index user for search: {e}");
     }
 
     // Build full unified auth success response via new convenience wrapper
@@ -146,6 +154,11 @@ pub async fn register(
 }
 
 /// Login user
+/// 認証を行います。
+///
+/// # Errors
+/// - 資格情報が不正な場合。
+/// - 内部エラーが発生した場合。
 #[utoipa::path(
     post,
     path = "/api/v1/auth/login",
@@ -191,6 +204,11 @@ pub async fn login(
 }
 
 /// Logout user
+/// 認証セッションを無効化します。
+///
+/// # Errors
+/// - 認証情報が欠如/無効な場合。
+/// - 内部エラーが発生した場合。
 #[utoipa::path(
     post,
     path = "/api/v1/auth/logout",
@@ -220,6 +238,11 @@ pub async fn logout(
 }
 
 /// Get current user profile
+/// 現在のユーザープロファイルを取得します（ダミー実装）。
+///
+/// # Errors
+/// - 未認証の場合。
+/// - 内部エラーが発生した場合。
 #[utoipa::path(
     get,
     path = "/api/v1/auth/profile",
