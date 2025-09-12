@@ -10,6 +10,48 @@ use tracing::{error, info, warn};
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
 
+#[derive(Parser)]
+#[command(
+    name = "cms-migrate",
+    version = env!("CARGO_PKG_VERSION"),
+    about = "Enterprise CMS Database Migration Tool"
+)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Run pending migrations
+    Migrate {
+        /// Skip automatic seeding after migrations
+        #[arg(long = "no-seed")]
+        no_seed: bool,
+    },
+    /// Rollback migrations (default: 1 step)
+    Rollback {
+        /// Number of steps to rollback
+        steps: Option<usize>,
+    },
+    /// Drop all tables and recreate (DANGEROUS!)
+    Reset,
+    /// Seed database with initial data
+    Seed,
+    /// Show migration status
+    Status,
+    /// Create database backup
+    Backup {
+        /// Backup path (default: ./backups)
+        path: Option<String>,
+    },
+    /// Restore database from backup
+    Restore {
+        /// Path to backup file
+        path: String,
+    },
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize logging (config will be loaded by init_app_state)
@@ -19,45 +61,6 @@ async fn main() -> Result<()> {
         "🔧 Enterprise CMS Database Migration Tool v{}",
         env!("CARGO_PKG_VERSION")
     );
-
-    // Parse CLI using clap
-    #[derive(Parser)]
-    #[command(name = "cms-migrate", version = env!("CARGO_PKG_VERSION"), about = "Enterprise CMS Database Migration Tool")]
-    struct Cli {
-        #[command(subcommand)]
-        command: Commands,
-    }
-
-    #[derive(Subcommand)]
-    enum Commands {
-        /// Run pending migrations
-        Migrate {
-            /// Skip automatic seeding after migrations
-            #[arg(long = "no-seed")]
-            no_seed: bool,
-        },
-        /// Rollback migrations (default: 1 step)
-        Rollback {
-            /// Number of steps to rollback
-            steps: Option<usize>,
-        },
-        /// Drop all tables and recreate (DANGEROUS!)
-        Reset,
-        /// Seed database with initial data
-        Seed,
-        /// Show migration status
-        Status,
-        /// Create database backup
-        Backup {
-            /// Backup path (default: ./backups)
-            path: Option<String>,
-        },
-        /// Restore database from backup
-        Restore {
-            /// Path to backup file
-            path: String,
-        },
-    }
 
     let cli = Cli::parse();
 
@@ -112,13 +115,13 @@ async fn main() -> Result<()> {
         Commands::Backup { path } => {
             let backup_path = path.as_deref().unwrap_or("./backups");
             info!("💾 Creating database backup to {}...", backup_path);
-            create_backup(state, backup_path).await?;
+            create_backup(state, backup_path)?;
             info!("✅ Database backup completed");
         }
         Commands::Restore { path } => {
             let backup_path = path;
             warn!("🔄 Restoring database from {}...", backup_path);
-            restore_backup(state, &backup_path).await?;
+            restore_backup(state, &backup_path);
             info!("✅ Database restore completed");
         }
     }
@@ -135,7 +138,7 @@ async fn run_migrations(state: &AppState) -> Result<()> {
 async fn rollback_migrations(state: &AppState, steps: usize) -> Result<()> {
     for _ in 0..steps {
         match state.db_revert_last_migration(MIGRATIONS).await {
-            Ok(_) => info!("✅ Reverted migration"),
+            Ok(()) => info!("✅ Reverted migration"),
             Err(e) => {
                 error!("❌ Failed to revert migration: {}", e);
                 break;
@@ -185,6 +188,7 @@ async fn reset_database(state: &AppState) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::cognitive_complexity)]
 async fn seed_database(state: &AppState) -> Result<()> {
     // Check if already seeded (use AppState wrapper)
     let existing_users: i64 = state.db_admin_users_count().await?;
@@ -202,8 +206,8 @@ async fn seed_database(state: &AppState) -> Result<()> {
         email: "admin@example.com".to_string(),
         password: "admin123".to_string(),
         role: cms_backend::models::UserRole::Admin,
-        first_name: Some("".to_string()),
-        last_name: Some("".to_string()),
+        first_name: Some(String::new()),
+        last_name: Some(String::new()),
     };
 
     let _admin = state.db_create_user(admin_user).await?;
@@ -239,6 +243,7 @@ async fn seed_database(state: &AppState) -> Result<()> {
 
 /// Fetch applied migration versions from either `schema_migrations` or
 /// `__diesel_schema_migrations` (fallback). Returns versions ordered asc.
+#[allow(clippy::cognitive_complexity)]
 async fn check_migration_status(state: &AppState) -> Result<()> {
     // Use helper to fetch applied migration versions (handles both table names)
     let applied = state.db_fetch_applied_migrations().await?;
@@ -265,7 +270,7 @@ async fn check_migration_status(state: &AppState) -> Result<()> {
     Ok(())
 }
 
-async fn create_backup(_state: &AppState, backup_path: &str) -> Result<()> {
+fn create_backup(_state: &AppState, backup_path: &str) -> Result<()> {
     // This is a simplified version - in production you'd use pg_dump
     info!("💾 Creating backup at: {}", backup_path);
 
@@ -285,7 +290,7 @@ async fn create_backup(_state: &AppState, backup_path: &str) -> Result<()> {
     Ok(())
 }
 
-async fn restore_backup(_state: &AppState, backup_path: &str) -> Result<()> {
+fn restore_backup(_state: &AppState, backup_path: &str) {
     // This is a simplified version - in production you'd use pg_restore
     info!("🔄 Restoring from backup: {}", backup_path);
 
@@ -299,6 +304,4 @@ async fn restore_backup(_state: &AppState, backup_path: &str) -> Result<()> {
     warn!(
         "⚠️  Restore functionality not fully implemented - use pg_restore for production restores"
     );
-
-    Ok(())
 }
