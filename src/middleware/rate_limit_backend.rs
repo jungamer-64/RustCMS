@@ -9,8 +9,18 @@ use std::sync::Once;
 use std::time::{Duration, Instant};
 use tokio::time::interval;
 
+#[cfg(feature = "monitoring")]
+#[inline]
+#[allow(clippy::cast_precision_loss)]
+const fn u64_to_f64(n: u64) -> f64 { n as f64 }
+
+#[cfg(feature = "monitoring")]
+#[inline]
+#[allow(clippy::cast_precision_loss)]
+const fn usize_to_f64(n: usize) -> f64 { n as f64 }
+
 /// Trait abstraction for API Key failure-based rate limiting backends.
-/// record_failure() returns true if the caller should now be rate limited (i.e. block request).
+/// `record_failure()` returns true if the caller should now be rate limited (i.e. block request).
 pub trait ApiKeyRateLimiter: Send + Sync + 'static {
     fn record_failure(&self, key: &str) -> bool;
     fn clear(&self, key: &str);
@@ -30,6 +40,7 @@ pub struct InMemoryRateLimiter {
 }
 
 impl InMemoryRateLimiter {
+    #[must_use]
     pub fn from_env() -> Self {
         let window = std::env::var("API_KEY_FAIL_WINDOW_SECS")
             .ok()
@@ -56,9 +67,9 @@ impl InMemoryRateLimiter {
         };
         #[cfg(feature = "monitoring")]
         {
-            gauge!("api_key_rate_limit_window_seconds").set(window as f64);
-            gauge!("api_key_rate_limit_threshold").set(threshold as f64);
-            gauge!("api_key_rate_limit_max_tracked").set(max_tracked as f64);
+            gauge!("api_key_rate_limit_window_seconds").set(u64_to_f64(window));
+            gauge!("api_key_rate_limit_threshold").set(f64::from(threshold));
+            gauge!("api_key_rate_limit_max_tracked").set(usize_to_f64(max_tracked));
             gauge!("api_key_rate_limit_enabled").set(if disabled { 0.0 } else { 1.0 });
         }
         inst
@@ -82,7 +93,7 @@ impl InMemoryRateLimiter {
                         continue;
                     }
                     let win = this.window;
-                    let _before = map.len(); // monitoring only
+                    let before_len = map.len(); // monitoring only
                     map.retain(|_, (_c, ts)| now.duration_since(*ts) <= win);
                     // If still over max_tracked (pathological), drop oldest excess
                     if map.len() > this.max_tracked {
@@ -95,8 +106,8 @@ impl InMemoryRateLimiter {
                     }
                     #[cfg(feature = "monitoring")]
                     {
-                        if _before != map.len() {
-                            gauge!("api_key_rate_limit_tracked_keys").set(map.len() as f64);
+                        if before_len != map.len() {
+                            gauge!("api_key_rate_limit_tracked_keys").set(usize_to_f64(map.len()));
                         }
                     }
                 }
@@ -112,30 +123,38 @@ impl ApiKeyRateLimiter for InMemoryRateLimiter {
         }
         // lazily start background cleaner
         self.spawn_background_cleaner();
-        let mut map = self.map.lock();
         let now = Instant::now();
-        // opportunistic cleanup
-        if map.len() > (self.max_tracked * 9 / 10) {
-            let win = self.window;
-            map.retain(|_, (_c, ts)| now.duration_since(*ts) <= win);
-        }
-        if map.len() >= self.max_tracked {
-            // drop oldest
-            if let Some(old) = map
-                .iter()
-                .min_by_key(|(_, (_c, ts))| *ts)
-                .map(|(k, _)| k.clone())
-            {
-                map.remove(&old);
+        #[allow(clippy::let_and_return)]
+        let exceeded = {
+            let mut map = self.map.lock();
+            // opportunistic cleanup
+            if map.len() > (self.max_tracked * 9 / 10) {
+                let win = self.window;
+                map.retain(|_, (_c, ts)| now.duration_since(*ts) <= win);
             }
-        }
-        let entry = map.entry(key.to_string()).or_insert((0, now));
-        if now.duration_since(entry.1) > self.window {
-            entry.0 = 0;
-            entry.1 = now;
-        }
-        entry.0 += 1;
-        entry.0 > self.threshold
+            if map.len() >= self.max_tracked {
+                // drop oldest
+                if let Some(old) = map
+                    .iter()
+                    .min_by_key(|(_, (_c, ts))| *ts)
+                    .map(|(k, _)| k.clone())
+                {
+                    map.remove(&old);
+                }
+            }
+            let exceeded = {
+                let entry = map.entry(key.to_string()).or_insert((0, now));
+                if now.duration_since(entry.1) > self.window {
+                    entry.0 = 0;
+                    entry.1 = now;
+                }
+                entry.0 += 1;
+                entry.0 > self.threshold
+            };
+            drop(map);
+            exceeded
+        };
+        exceeded
     }
     fn clear(&self, key: &str) {
         let mut map = self.map.lock();
@@ -184,15 +203,12 @@ pub struct RedisRateLimiter {
 #[cfg(feature = "cache")]
 impl RedisRateLimiter {
     fn from_env() -> Self {
-        let url = match std::env::var("REDIS_URL") {
-            Ok(v) => v,
-            Err(_) => {
-                // Fallback to disabled limiter with dummy client; avoid panic to improve robustness
-                tracing::warn!("REDIS_URL not set; Redis rate limiter will be disabled");
-                // Use localhost URL that will fail to connect but keep object constructed
-                "redis://127.0.0.1/".to_string()
-            }
-        };
+        let url = std::env::var("REDIS_URL").unwrap_or_else(|_| {
+            // Fallback to disabled limiter with dummy client; avoid panic to improve robustness
+            tracing::warn!("REDIS_URL not set; Redis rate limiter will be disabled");
+            // Use localhost URL that will fail to connect but keep object constructed
+            "redis://127.0.0.1/".to_string()
+        });
         let window = std::env::var("API_KEY_FAIL_WINDOW_SECS")
             .ok()
             .and_then(|v| v.parse::<u64>().ok())
@@ -208,8 +224,8 @@ impl RedisRateLimiter {
             std::env::var("API_KEY_FAIL_REDIS_PREFIX").unwrap_or_else(|_| "rk:".into());
         #[cfg(feature = "monitoring")]
         {
-            gauge!("api_key_rate_limit_window_seconds").set(window as f64);
-            gauge!("api_key_rate_limit_threshold").set(threshold as f64);
+            gauge!("api_key_rate_limit_window_seconds").set(Self::u64_to_f64(window));
+            gauge!("api_key_rate_limit_threshold").set(f64::from(threshold));
             gauge!("api_key_rate_limit_enabled").set(if disabled { 0.0 } else { 1.0 });
         }
         let client = match redis::Client::open(url) {
@@ -231,8 +247,13 @@ impl RedisRateLimiter {
             tracked_cache: Mutex::new((Instant::now(), 0)),
         }
     }
+    #[inline]
+    #[allow(clippy::cast_precision_loss)]
+    const fn u64_to_f64(n: u64) -> f64 {
+        n as f64
+    }
     fn key(&self, k: &str) -> String {
-    format!("{}{k}", self.key_prefix)
+        format!("{}{k}", self.key_prefix)
     }
     fn as_dyn(&self) -> &dyn ApiKeyRateLimiter {
         self
@@ -246,7 +267,7 @@ impl ApiKeyRateLimiter for RedisRateLimiter {
             return false;
         }
     let k = self.key(key);
-        let window_secs = self.window.as_secs() as usize;
+    let window_secs = usize::try_from(self.window.as_secs()).unwrap_or(usize::MAX);
         // Redis atomic pattern: INCR then set EXPIRE if first
         // Using block_on not acceptable; function is sync. We use a dedicated runtime handle via tokio::runtime context.
         // SAFETY: This function called within async context (middleware) but trait signature is sync; we use block_in_place.
@@ -260,9 +281,10 @@ impl ApiKeyRateLimiter for RedisRateLimiter {
                         Err(_) => return false,
                     }; // on error do not block
                     if cnt == 1 {
-                        let _: Result<(), _> = conn.expire(&k, window_secs as i64).await;
+                        let seconds = i64::try_from(window_secs).unwrap_or(i64::MAX);
+                        let _: Result<(), _> = conn.expire(&k, seconds).await;
                     }
-                    return cnt as u32 > threshold;
+                    return u32::try_from(cnt).unwrap_or(u32::MAX) > threshold;
                 }
                 false
             })
@@ -270,14 +292,14 @@ impl ApiKeyRateLimiter for RedisRateLimiter {
     }
     fn clear(&self, key: &str) {
         let k = self.key(key);
-    tokio::task::block_in_place(|| {
+        tokio::task::block_in_place(|| {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
                 if let Ok(mut conn) = self.client.get_multiplexed_async_connection().await {
                     let _: Result<(), _> = conn.del(&k).await;
                 }
-            })
-    });
+            });
+        });
     }
     fn tracked_len(&self) -> usize {
         let mut guard = self.tracked_cache.lock();
@@ -293,8 +315,8 @@ impl ApiKeyRateLimiter for RedisRateLimiter {
                     let mut cursor: u64 = 0;
                     let mut total = 0usize;
                     loop {
-                                    let prefix = &self.key_prefix;
-                                    let pattern = format!("{prefix}*");
+                        let prefix = &self.key_prefix;
+                        let pattern = format!("{prefix}*");
                         let res: redis::RedisResult<(u64, Vec<String>)> = redis::cmd("SCAN")
                             .arg(cursor)
                             .arg("MATCH")
@@ -312,7 +334,7 @@ impl ApiKeyRateLimiter for RedisRateLimiter {
                                 cursor = next;
                             }
                             Err(_) => break 0,
-                        };
+                        }
                     }
                 } else {
                     0
