@@ -6,12 +6,16 @@ use serde_json::json;
 
 /// Convenience helper returning `ApiOk({"message": msg})` to standardize
 /// simple status/message style responses across delete/revoke endpoints.
+#[must_use]
 pub fn ok_message(msg: &str) -> ApiOk<serde_json::Value> {
     ApiOk(json!({"message": msg}))
 }
 
 /// Generic helper for delete style endpoints that only need to run an async
 /// operation and then return a standard message payload.
+///
+/// # Errors
+/// Returns an error if the provided async operation `op` fails.
 pub async fn delete_with<F>(op: F, message: &str) -> crate::Result<ApiOk<serde_json::Value>>
 where
     F: std::future::Future<Output = crate::Result<()>>,
