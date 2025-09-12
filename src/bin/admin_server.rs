@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Bind to configured address
     let host = config.server.host.clone();
     let port = config.server.port;
-    let addr = format!("{}:{}", state.config.server.host, state.config.server.port).parse::<SocketAddr>()?;
+    let addr = format!("{}:{}", host, port).parse::<SocketAddr>()?;
 
     info!("Binding admin server to {}", addr);
 
