@@ -321,7 +321,9 @@ impl AppState {
     ///
     /// 概要: 環境変数や設定ファイルから `Config` を組み立て、`from_config` に委譲します。
     ///
-    /// エラー: 設定の読み込みや、後続の各サービス初期化に失敗した場合。
+    /// # Errors
+    ///
+    /// 設定の読み込みに失敗した場合、または `from_config` がエラーを返した場合に `Err` を返します。
     ///
     pub async fn from_env() -> Result<Self> {
         // Load configuration and delegate to from_config
@@ -331,8 +333,13 @@ impl AppState {
 
     /// 与えられた `Config` からアプリケーション状態を生成（集中初期化用）
     ///
-    /// Panic: 有効な feature に対応するサービスが初期化されていない場合（`AppStateBuilder::build`）。
-    /// Errors: DB/キャッシュ/検索/認証の初期化に失敗した場合。
+    /// # Panics
+    ///
+    /// 有効な feature に対応するサービスが初期化されていない場合、`AppStateBuilder::build` が panic します。
+    ///
+    /// # Errors
+    ///
+    /// DB/キャッシュ/検索/認証の初期化に失敗した場合に `Err` を返します。
     // Allow cognitive complexity: feature-gated initialization requires branching and is clearer consolidated here.
     #[allow(clippy::cognitive_complexity)]
     pub async fn from_config(config: Config) -> Result<Self> {
