@@ -84,7 +84,7 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB: cms_test
         ports: ["5432:5432"]
         options: >-
@@ -139,11 +139,15 @@ jobs:
       - name: Run migrations (default & no-flat feature-sets)
         if: matrix.feature-set == 'default' || matrix.feature-set == 'no-flat'
         env:
-          DATABASE_URL: ${{ env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/cms_test' }}
+          # Use repository secrets when available. When falling back for local/debug runs,
+          # avoid committing an actual password value in the workflow. Use a clearly
+          # non-sensitive placeholder so this file never contains a real credential.
+          DATABASE_URL: ${{ env.DATABASE_URL || 'postgres://postgres:REPLACE_ME@localhost:5432/cms_test' }}
         run: |
           set -euo pipefail
           if [ -z "${DATABASE_URL}" ]; then
-            export DATABASE_URL="postgres://postgres:postgres@localhost:5432/cms_test"
+            # Local/debug fallback (placeholder) - replace locally via env or CI secrets.
+            export DATABASE_URL="postgres://postgres:REPLACE_ME@localhost:5432/cms_test"
           fi
           echo "Running migrations against $DATABASE_URL"
           # SECURITY: prefer running via cargo (avoids executing an unexpected binary path)
@@ -161,7 +165,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${DATABASE_URL:-}" ]; then
-            export DATABASE_URL="postgres://postgres:postgres@localhost:5432/cms_test"
+            # Local/debug fallback (placeholder) - replace locally via env or CI secrets.
+            export DATABASE_URL="postgres://postgres:REPLACE_ME@localhost:5432/cms_test"
           fi
           echo "DATABASE_URL=${DATABASE_URL}"
           # Wait for Postgres health (max 40s)
