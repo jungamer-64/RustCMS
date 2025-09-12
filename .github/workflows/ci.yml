@@ -38,6 +38,8 @@ env:
   DATABASE_URL: ${{ secrets.DATABASE_URL }}
   BISCUIT_PRIVATE_KEY_B64: ${{ secrets.BISCUIT_PRIVATE_KEY_B64 }}
   BISCUIT_PUBLIC_KEY_B64: ${{ secrets.BISCUIT_PUBLIC_KEY_B64 }}
+  # Treat all Rust warnings as errors during normal build & test too
+  RUSTFLAGS: -D warnings
 
 jobs:
   lint:
