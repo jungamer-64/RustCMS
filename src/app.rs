@@ -664,7 +664,7 @@ impl AppState {
     #[cfg(feature = "cache")]
     pub async fn invalidate_post_caches(&self, id: uuid::Uuid) {
         use crate::utils::cache_key::{CACHE_PREFIX_POST_ID, CACHE_PREFIX_POSTS};
-        let key = format!("{}{}", CACHE_PREFIX_POST_ID, id);
+        let key = format!("{CACHE_PREFIX_POST_ID}{id}");
         let res = self.cache.delete(&key).await;
         let mut metrics = self.metrics.write().await;
         match res {
@@ -677,7 +677,7 @@ impl AppState {
             }
         }
         drop(metrics);
-                let posts_prefix = format!("{}*", CACHE_PREFIX_POSTS);
+                let posts_prefix = format!("{CACHE_PREFIX_POSTS}*");
                 self.cache_invalidate_prefix(&posts_prefix).await; // prefix helper already logs
     }
 
@@ -686,7 +686,7 @@ impl AppState {
         use crate::utils::cache_key::{
             CACHE_PREFIX_USER_ID, CACHE_PREFIX_USER_POSTS, CACHE_PREFIX_USERS,
         };
-        let key = format!("{}{}", CACHE_PREFIX_USER_ID, id);
+        let key = format!("{CACHE_PREFIX_USER_ID}{id}");
         let res = self.cache.delete(&key).await;
         let mut metrics = self.metrics.write().await;
         match res {
@@ -699,9 +699,9 @@ impl AppState {
             }
         }
         drop(metrics);
-                let users_prefix = format!("{}*", CACHE_PREFIX_USERS);
+                let users_prefix = format!("{CACHE_PREFIX_USERS}*");
                 self.cache_invalidate_prefix(&users_prefix).await;
-                let user_posts_prefix = format!("{}{}:*", CACHE_PREFIX_USER_POSTS, id);
+                let user_posts_prefix = format!("{CACHE_PREFIX_USER_POSTS}{id}:*");
                 self.cache_invalidate_prefix(&user_posts_prefix).await;
     }
 
