@@ -60,7 +60,7 @@ impl ApiKey {
         if perms.is_empty() {
             return Ok(()); // 空は許可（最小権限）
         }
-        let mut invalid: Vec<String> = perms
+        let invalid: Vec<String> = perms
             .iter()
             .filter(|p| !Self::ALLOWED_PERMISSIONS.contains(&p.as_str()))
             .cloned()
@@ -69,7 +69,7 @@ impl ApiKey {
             return Ok(());
         }
         let mut errors = ValidationErrors::new();
-        for inv in invalid.drain(..) {
+        for inv in invalid {
             let mut ve = ValidationError::new("invalid_permission");
             ve.add_param("value".into(), &inv);
             errors.add("permissions", ve);
@@ -78,6 +78,8 @@ impl ApiKey {
     }
 
     /// バリデーション付きコンストラクタ
+    /// # Errors
+    /// 入力検証に失敗した場合、`AppError::Validation` を返します。
     pub fn new_validated(
         name: String,
         user_id: Uuid,
@@ -87,6 +89,7 @@ impl ApiKey {
         Ok(Self::new(name, user_id, permissions))
     }
 
+    #[must_use]
     pub fn new(name: String, user_id: Uuid, permissions: Vec<String>) -> (Self, String) {
         let now = Utc::now();
         let raw_key = Self::generate_key();
@@ -109,10 +112,14 @@ impl ApiKey {
         (api_key, raw_key)
     }
 
+    /// レコードを作成します。
+    ///
+    /// # Errors
+    /// - DB エラーが発生した場合、`AppError` を返します。
     pub fn create(
         conn: &mut crate::database::PooledConnection,
-        api_key: &ApiKey,
-    ) -> Result<ApiKey, AppError> {
+        api_key: &Self,
+    ) -> Result<Self, AppError> {
         use crate::database::schema::api_keys;
         diesel::insert_into(api_keys::table)
             .values(api_key)
@@ -120,10 +127,14 @@ impl ApiKey {
             .map_err(AppError::from)
     }
 
+    /// ID 検索
+    ///
+    /// # Errors
+    /// - 見つからない/DB エラー時に `AppError` を返します。
     pub fn find_by_id(
         conn: &mut crate::database::PooledConnection,
         api_key_id: Uuid,
-    ) -> Result<ApiKey, AppError> {
+    ) -> Result<Self, AppError> {
         use crate::database::schema::api_keys::dsl::api_keys;
         api_keys
             .find(api_key_id)
@@ -131,10 +142,14 @@ impl ApiKey {
             .map_err(AppError::from)
     }
 
+    /// key ハッシュ検索
+    ///
+    /// # Errors
+    /// - 見つからない/DB エラー時に `AppError` を返します。
     pub fn find_by_key_hash(
         conn: &mut crate::database::PooledConnection,
         hash: &str,
-    ) -> Result<ApiKey, AppError> {
+    ) -> Result<Self, AppError> {
         use crate::database::schema::api_keys::dsl::{api_keys, key_hash};
         api_keys
             .filter(key_hash.eq(hash))
@@ -142,10 +157,14 @@ impl ApiKey {
             .map_err(AppError::from)
     }
 
+    /// ルックアップ用ハッシュ検索
+    ///
+    /// # Errors
+    /// - 見つからない/DB エラー時に `AppError` を返します。
     pub fn find_by_lookup_hash(
         conn: &mut crate::database::PooledConnection,
         lookup: &str,
-    ) -> Result<ApiKey, AppError> {
+    ) -> Result<Self, AppError> {
         use crate::database::schema::api_keys::dsl::{api_keys, api_key_lookup_hash};
         api_keys
             .filter(api_key_lookup_hash.eq(lookup))
@@ -153,6 +172,10 @@ impl ApiKey {
             .map_err(AppError::from)
     }
 
+    /// レコードを削除します。
+    ///
+    /// # Errors
+    /// - DB エラーが発生した場合、`AppError` を返します。
     pub fn delete(
         conn: &mut crate::database::PooledConnection,
         api_key_id: Uuid,
@@ -163,6 +186,10 @@ impl ApiKey {
             .map_err(AppError::from)
     }
 
+    /// 最終使用日時を現在時刻で更新します。
+    ///
+    /// # Errors
+    /// - DB 更新に失敗した場合、`AppError` を返します。
     pub fn update_last_used(
         conn: &mut crate::database::PooledConnection,
         api_key_id: Uuid,
@@ -174,11 +201,15 @@ impl ApiKey {
         Ok(())
     }
 
+    /// ユーザーに紐づく API Key 一覧を取得します。
+    ///
+    /// # Errors
+    /// - DB エラーが発生した場合、`AppError` を返します。
     pub fn list_for_user(
         conn: &mut crate::database::PooledConnection,
         target_user_id: Uuid,
         include_expired: bool,
-    ) -> Result<Vec<ApiKey>, AppError> {
+    ) -> Result<Vec<Self>, AppError> {
         use crate::database::schema::api_keys::dsl::{
             api_keys, created_at, expires_at, user_id,
         };
