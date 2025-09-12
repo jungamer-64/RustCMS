@@ -73,6 +73,14 @@ pub(crate) async fn paginate_users(
 }
 
 /// Get all users with pagination
+/// ユーザー一覧を返します。
+///
+/// # Errors
+/// - 入力検証や内部エラーが発生した場合、エラーを返します。
+/// ユーザーの更新を行います。
+///
+/// # Errors
+/// - 検証エラー、指定ユーザーなし、または内部エラー時にエラーを返します。
 #[utoipa::path(
     get,
     path = "/api/v1/users",
@@ -135,6 +143,14 @@ pub async fn get_users(
 }
 
 /// Get user by ID
+/// ユーザーIDで単一ユーザーを返します。
+///
+/// # Errors
+/// - 指定IDが存在しない場合や内部エラーの場合にエラーを返します。
+/// ユーザーを論理削除（無効化）します。
+///
+/// # Errors
+/// - 指定ユーザーなし、更新失敗、または内部エラー時にエラーを返します。
 #[utoipa::path(
     get,
     path = "/api/v1/users/{id}",
@@ -182,6 +198,10 @@ pub async fn get_user(
 }
 
 /// Update user
+/// ユーザーの投稿一覧を返します。
+///
+/// # Errors
+/// - ユーザーが存在しない場合や内部エラー時にエラーを返します。
 #[utoipa::path(
     put,
     path = "/api/v1/users/{id}",
@@ -232,6 +252,10 @@ pub async fn update_user(
 }
 
 /// Delete user (soft delete by deactivating)
+/// ユーザーのロールを変更します（管理者専用）。
+///
+/// # Errors
+/// - 無効なロール、対象ユーザーの未存在、または内部エラー時にエラーを返します。
 #[utoipa::path(
     delete,
     path = "/api/v1/users/{id}",
