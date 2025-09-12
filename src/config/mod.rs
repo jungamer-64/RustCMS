@@ -260,9 +260,9 @@ impl Default for AuthConfig {
             biscuit_root_key: "your-biscuit-root-key".to_string(),
             webauthn: WebAuthnConfig::default(),
             bcrypt_cost: 12,
-            session_timeout: 86400, // 24 hours
-            access_token_ttl_secs: 3600,
-            refresh_token_ttl_secs: 86400,
+            session_timeout: 86_400, // 24 hours
+            access_token_ttl_secs: 3_600,
+            refresh_token_ttl_secs: 86_400,
         }
     }
 }
@@ -273,7 +273,7 @@ impl Default for WebAuthnConfig {
             rp_id: "localhost".to_string(),
             rp_name: "CMS".to_string(),
             rp_origin: "http://localhost:3000".to_string(),
-            timeout: 60000,
+            timeout: 60_000,
         }
     }
 }
@@ -333,7 +333,7 @@ impl Config {
             .add_source(config::File::with_name("config/default").required(false));
         if profile != "development" {
             builder = builder.add_source(
-                config::File::with_name(&format!("config/{p}", p = profile)).required(false),
+                config::File::with_name(&format!("config/{}", profile)).required(false),
             );
         }
         builder = builder
