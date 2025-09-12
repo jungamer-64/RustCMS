@@ -57,15 +57,15 @@ async fn main() -> cms_backend::Result<()> {
             };
             let (resp, raw) = state.db_rotate_api_key(uuid, name, perms_opt).await?;
             println!(
-                "{{\n  \"old_key_id\": \"{}\",\n  \"new_key_id\": \"{}\",\n  \"new_raw_api_key\": \"{}\",\n  \"new_name\": \"{}\",\n  \"permissions\": {:?},\n  \"expires_at\": {:?}\n}}",
-                id, resp.id, raw, resp.name, resp.permissions, resp.expires_at
+                "{{\n  \"old_key_id\": \"{id}\",\n  \"new_key_id\": \"{}\",\n  \"new_raw_api_key\": \"{raw}\",\n  \"new_name\": \"{}\",\n  \"permissions\": {:?},\n  \"expires_at\": {:?}\n}}",
+                resp.id, resp.name, resp.permissions, resp.expires_at
             );
         }
         Commands::Delete { id } => {
             let uuid = uuid::Uuid::parse_str(&id)
                 .map_err(|e| cms_backend::AppError::BadRequest(format!("invalid uuid: {e}")))?;
             state.db_delete_api_key(uuid).await?;
-            println!("{{\n  \"deleted\": true,\n  \"id\": \"{}\"\n}}", id);
+            println!("{{\n  \"deleted\": true,\n  \"id\": \"{id}\"\n}}");
         }
     }
     Ok(())
