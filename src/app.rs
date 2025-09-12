@@ -1138,7 +1138,7 @@ impl AppState {
         id: uuid::Uuid,
         req: crate::models::UpdatePostRequest,
     ) -> crate::Result<crate::models::Post> {
-    timed_op!(self, "db", async { self.database.update_post(id, req) })
+    timed_op!(self, "db", async { self.database.update_post(id, &req) })
     }
 
     #[cfg(feature = "database")]
