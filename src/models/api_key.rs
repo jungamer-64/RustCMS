@@ -124,7 +124,7 @@ impl ApiKey {
         conn: &mut crate::database::PooledConnection,
         api_key_id: Uuid,
     ) -> Result<ApiKey, AppError> {
-        use crate::database::schema::api_keys::dsl::*;
+        use crate::database::schema::api_keys::dsl::api_keys;
         api_keys
             .find(api_key_id)
             .first(conn)
@@ -135,7 +135,7 @@ impl ApiKey {
         conn: &mut crate::database::PooledConnection,
         hash: &str,
     ) -> Result<ApiKey, AppError> {
-        use crate::database::schema::api_keys::dsl::*;
+        use crate::database::schema::api_keys::dsl::{api_keys, key_hash};
         api_keys
             .filter(key_hash.eq(hash))
             .first(conn)
@@ -146,7 +146,7 @@ impl ApiKey {
         conn: &mut crate::database::PooledConnection,
         lookup: &str,
     ) -> Result<ApiKey, AppError> {
-        use crate::database::schema::api_keys::dsl::*;
+        use crate::database::schema::api_keys::dsl::{api_keys, api_key_lookup_hash};
         api_keys
             .filter(api_key_lookup_hash.eq(lookup))
             .first(conn)
@@ -157,7 +157,7 @@ impl ApiKey {
         conn: &mut crate::database::PooledConnection,
         api_key_id: Uuid,
     ) -> Result<usize, AppError> {
-        use crate::database::schema::api_keys::dsl::*;
+        use crate::database::schema::api_keys::dsl::api_keys;
         diesel::delete(api_keys.find(api_key_id))
             .execute(conn)
             .map_err(AppError::from)
@@ -167,7 +167,7 @@ impl ApiKey {
         conn: &mut crate::database::PooledConnection,
         api_key_id: Uuid,
     ) -> Result<(), AppError> {
-        use crate::database::schema::api_keys::dsl::*;
+        use crate::database::schema::api_keys::dsl::{api_keys, last_used_at};
         diesel::update(api_keys.find(api_key_id))
             .set(last_used_at.eq(Some(Utc::now())))
             .execute(conn)?;
@@ -179,7 +179,9 @@ impl ApiKey {
         target_user_id: Uuid,
         include_expired: bool,
     ) -> Result<Vec<ApiKey>, AppError> {
-        use crate::database::schema::api_keys::dsl::*;
+        use crate::database::schema::api_keys::dsl::{
+            api_keys, created_at, expires_at, user_id,
+        };
         let mut query = api_keys.filter(user_id.eq(target_user_id)).into_boxed();
         if !include_expired {
             let now = Utc::now();
@@ -188,7 +190,7 @@ impl ApiKey {
         }
         query
             .order(created_at.desc())
-            .load::<ApiKey>(conn)
+            .load::<Self>(conn)
             .map_err(AppError::from)
     }
 
