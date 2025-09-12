@@ -347,7 +347,7 @@ fn maybe_backup_file(
     let ts = timestamp();
     let file_name = path
         .file_name()
-        .map(|s| s.to_string_lossy())
+    .map(|s| s.to_string_lossy())
         .unwrap_or_else(|| "backup".into());
     let bak_name = format!("{}.bak.{}", file_name, ts);
     let bak = if let Some(dir) = backup_dir {
@@ -532,11 +532,11 @@ fn main() {
     let out_dir: Option<String> = args
         .out_dir
         .as_ref()
-        .map(|p| p.to_string_lossy().to_string());
+        .map(|p| p.to_string_lossy().into_owned());
     let env_file: Option<String> = args
         .env_file
         .as_ref()
-        .map(|p| p.to_string_lossy().to_string());
+        .map(|p| p.to_string_lossy().into_owned());
     let format = args.format.map(|f| match f {
         OutputFormat::Files => "files".to_string(),
         OutputFormat::Env => "env".to_string(),
@@ -553,7 +553,7 @@ fn main() {
             Ok(read) => {
                 let mut versions: Vec<(u32, String)> = Vec::new();
                 for entry in read.flatten() {
-                    let name = entry.file_name().to_string_lossy().to_string();
+                    let name = entry.file_name().to_string_lossy().into_owned();
                     if let Some(v) = parse_version(&name) {
                         versions.push((v, name));
                     }

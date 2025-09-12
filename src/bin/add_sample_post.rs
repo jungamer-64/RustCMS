@@ -40,7 +40,7 @@ async fn main() {
         status: Some(PostStatus::Published),
     };
 
-    match db.create_post(req).await {
+    match db.create_post(req) {
         Ok(post) => {
             println!("Inserted sample post: {} (id={})", post.title, post.id);
         }
