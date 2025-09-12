@@ -211,7 +211,7 @@ impl ApiKey {
             }
         }
         let body = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
-    format!("{}{}", PREFIX, body)
+        format!("{PREFIX}{body}")
     }
 
     pub(crate) fn hash_key(key: &str) -> String {
@@ -231,10 +231,15 @@ impl ApiKey {
 
     /// ルックアップ用の決定的ハッシュ (衝突耐性と高速性重視 / 再計算可能)。
     /// 生キーが漏れてもハッシュ逆算は困難だが、オフライン総当りは可能なので rate-limit 前提。
+    #[must_use]
     pub fn lookup_hash(key: &str) -> String {
         crate::utils::hash::sha256_b64url(key.as_bytes())
     }
 
+    /// 与えられたプレーンキーが保存済みハッシュと一致するか検証します。
+    ///
+    /// # Errors
+    /// - ハッシュのパースに失敗した場合、`AppError::Authentication` を返します。
     pub fn verify_key(&self, key: &str) -> Result<bool, AppError> {
         use argon2::{Argon2, PasswordHash, PasswordVerifier};
 
@@ -246,6 +251,7 @@ impl ApiKey {
             .is_ok())
     }
 
+    #[must_use]
     pub fn get_permissions(&self) -> Vec<String> {
         self.permissions
             .as_array()
@@ -258,12 +264,14 @@ impl ApiKey {
             .unwrap_or_default()
     }
 
-    /// 期限切れかどうか (expires_at があり、それが現在時刻を過ぎている)
+    /// 期限切れかどうか (`expires_at` があり、それが現在時刻を過ぎている)
+    #[must_use]
     pub fn is_expired(&self, now: DateTime<Utc>) -> bool {
-        self.expires_at.map(|e| e <= now).unwrap_or(false)
+        self.expires_at.is_some_and(|e| e <= now)
     }
 
     /// 応答用構造体へ変換
+    #[must_use]
     pub fn to_response(&self) -> ApiKeyResponse {
         ApiKeyResponse {
             id: self.id,
@@ -277,6 +285,7 @@ impl ApiKey {
     }
 
     /// ログ出力や監査向けにキー本体を暴露しない短縮表示
+    #[must_use]
     pub fn mask_raw(raw: &str) -> String {
         if raw.len() <= 10 {
             return "***".into();
