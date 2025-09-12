@@ -11,6 +11,21 @@ use utoipa::ToSchema;
 use crate::utils::response_ext::ApiOk;
 use crate::{AppState, Result};
 
+// Map AppState ServiceHealth ("up"/"down"/"degraded"/"not_configured") into handler's shape
+fn map_service(hs: &crate::app::ServiceHealth) -> ServiceStatus {
+    let status = match hs.status.as_str() {
+        "up" => "healthy",
+        "down" => "unhealthy",
+        other => other, // "degraded" or "not_configured"
+    };
+    ServiceStatus {
+        status: status.to_string(),
+        response_time_ms: Some(hs.response_time_ms),
+        details: Some(hs.details.clone()),
+        error: hs.error.clone(),
+    }
+}
+
 /// Overall system health response
 #[derive(Debug, Serialize, ToSchema)]
 pub struct HealthResponse {
@@ -33,7 +48,8 @@ pub struct ServiceHealthDetails {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ServiceStatus {
     pub status: String,
-    pub response_time_ms: Option<u128>,
+    // Align with internal measurement type to avoid lossy/signed casts
+    pub response_time_ms: Option<f64>,
     pub details: Option<serde_json::Value>,
     pub error: Option<String>,
 }
@@ -48,6 +64,10 @@ pub struct SystemInfo {
 }
 
 /// Comprehensive health check
+/// システムの総合ヘルスチェックを返します。
+///
+/// # Errors
+/// - 内部の各サービスのヘルスチェックが失敗した場合、アプリケーションエラーを返します。
 #[utoipa::path(
     get,
     path = "/api/v1/health",
@@ -76,20 +96,6 @@ pub async fn health_check(State(state): State<AppState>) -> Result<impl IntoResp
     // Delegate to centralized AppState health_check for unified logic and metrics
     let h = state.health_check().await?;
 
-    // Map AppState ServiceHealth ("up"/"down"/"degraded"/"not_configured") into handler's shape
-    fn map_service(hs: &crate::app::ServiceHealth) -> ServiceStatus {
-        let status = match hs.status.as_str() {
-            "up" => "healthy",
-            "down" => "unhealthy",
-            other => other, // "degraded" or "not_configured"
-        };
-        ServiceStatus {
-            status: status.to_string(),
-            response_time_ms: Some(hs.response_time_ms as u128),
-            details: Some(hs.details.clone()),
-            error: hs.error.clone(),
-        }
-    }
 
     let services = ServiceHealthDetails {
         database: map_service(&h.database),
@@ -116,10 +122,8 @@ pub async fn health_check(State(state): State<AppState>) -> Result<impl IntoResp
     };
 
     let status_code = match h.status.as_str() {
-        "healthy" => StatusCode::OK,
-        "degraded" => StatusCode::SERVICE_UNAVAILABLE,
-        "unhealthy" => StatusCode::SERVICE_UNAVAILABLE,
-        _ => StatusCode::OK, // fallback
+        "unhealthy" | "degraded" => StatusCode::SERVICE_UNAVAILABLE,
+        _ => StatusCode::OK, // includes "healthy" and any other
     };
 
     Ok((status_code, ApiOk(response)))
@@ -148,6 +152,10 @@ pub async fn liveness() -> impl IntoResponse {
         value = json!({"status": "ready", "timestamp": "2025-09-05T12:00:00Z"})
     )
 )))))]
+/// # Errors
+///
+/// Underlying service health checks may fail (e.g. DB connectivity),
+/// in which case an internal error is returned.
 pub async fn readiness(State(state): State<AppState>) -> Result<impl IntoResponse> {
     // Delegate to centralized health_check and derive readiness from essential services
     let h = state.health_check().await?;

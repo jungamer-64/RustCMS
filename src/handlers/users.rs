@@ -73,6 +73,11 @@ pub(crate) async fn paginate_users(
 }
 
 /// Get all users with pagination
+/// ユーザー一覧を返します。
+///
+/// # Errors
+/// - フィルタ付き取得や件数カウントのための DB アクセスに失敗した場合。
+/// - キャッシュ層での取得・保存に失敗した場合。
 #[utoipa::path(
     get,
     path = "/api/v1/users",
@@ -135,6 +140,11 @@ pub async fn get_users(
 }
 
 /// Get user by ID
+/// ユーザーIDで単一ユーザーを返します。
+///
+/// # Errors
+/// - 指定IDのユーザーが存在しない場合。
+/// - DB もしくはキャッシュ操作に失敗した場合。
 #[utoipa::path(
     get,
     path = "/api/v1/users/{id}",
@@ -182,6 +192,11 @@ pub async fn get_user(
 }
 
 /// Update user
+/// ユーザーを更新します。
+///
+/// # Errors
+/// - バリデーションエラーや対象ユーザー未存在の場合。
+/// - DB 更新処理、または検索インデックス更新（有効時）に失敗した場合。
 #[utoipa::path(
     put,
     path = "/api/v1/users/{id}",
@@ -232,6 +247,11 @@ pub async fn update_user(
 }
 
 /// Delete user (soft delete by deactivating)
+/// ユーザーを論理削除（無効化）します。
+///
+/// # Errors
+/// - 指定ユーザーが存在しない場合。
+/// - DB 更新処理、または検索インデックス更新（有効時）に失敗した場合。
 #[utoipa::path(
     delete,
     path = "/api/v1/users/{id}",
@@ -270,6 +290,11 @@ pub async fn delete_user(
 }
 
 /// Get user's posts
+/// ユーザーの投稿一覧を返します。
+///
+/// # Errors
+/// - 対象ユーザーが存在しない場合。
+/// - 投稿一覧の取得や件数カウント、キャッシュ操作で失敗した場合。
 #[utoipa::path(
     get,
     path = "/api/v1/users/{id}/posts",
@@ -341,6 +366,11 @@ pub async fn get_user_posts(
 }
 
 /// Change user role (admin only)
+///
+/// # Errors
+/// - 不正なロール値が指定された場合（400）。
+/// - 対象ユーザーが存在しない場合（404）。
+/// - DB 更新やキャッシュ無効化処理で失敗した場合。
 #[utoipa::path(
     post,
     path = "/api/v1/users/{id}/role",

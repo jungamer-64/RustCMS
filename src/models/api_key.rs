@@ -60,7 +60,7 @@ impl ApiKey {
         if perms.is_empty() {
             return Ok(()); // 空は許可（最小権限）
         }
-        let mut invalid: Vec<String> = perms
+        let invalid: Vec<String> = perms
             .iter()
             .filter(|p| !Self::ALLOWED_PERMISSIONS.contains(&p.as_str()))
             .cloned()
@@ -69,7 +69,7 @@ impl ApiKey {
             return Ok(());
         }
         let mut errors = ValidationErrors::new();
-        for inv in invalid.drain(..) {
+        for inv in invalid {
             let mut ve = ValidationError::new("invalid_permission");
             ve.add_param("value".into(), &inv);
             errors.add("permissions", ve);
@@ -78,6 +78,8 @@ impl ApiKey {
     }
 
     /// バリデーション付きコンストラクタ
+    /// # Errors
+    /// 入力検証に失敗した場合、`AppError::Validation` を返します。
     pub fn new_validated(
         name: String,
         user_id: Uuid,
@@ -87,6 +89,7 @@ impl ApiKey {
         Ok(Self::new(name, user_id, permissions))
     }
 
+    #[must_use]
     pub fn new(name: String, user_id: Uuid, permissions: Vec<String>) -> (Self, String) {
         let now = Utc::now();
         let raw_key = Self::generate_key();
@@ -109,10 +112,14 @@ impl ApiKey {
         (api_key, raw_key)
     }
 
+    /// レコードを作成します。
+    ///
+    /// # Errors
+    /// - DB エラーが発生した場合、`AppError` を返します。
     pub fn create(
         conn: &mut crate::database::PooledConnection,
-        api_key: &ApiKey,
-    ) -> Result<ApiKey, AppError> {
+        api_key: &Self,
+    ) -> Result<Self, AppError> {
         use crate::database::schema::api_keys;
         diesel::insert_into(api_keys::table)
             .values(api_key)
@@ -120,66 +127,92 @@ impl ApiKey {
             .map_err(AppError::from)
     }
 
+    /// ID 検索
+    ///
+    /// # Errors
+    /// - 見つからない/DB エラー時に `AppError` を返します。
     pub fn find_by_id(
         conn: &mut crate::database::PooledConnection,
         api_key_id: Uuid,
-    ) -> Result<ApiKey, AppError> {
-        use crate::database::schema::api_keys::dsl::*;
+    ) -> Result<Self, AppError> {
+        use crate::database::schema::api_keys::dsl::api_keys;
         api_keys
             .find(api_key_id)
             .first(conn)
             .map_err(AppError::from)
     }
 
+    /// key ハッシュ検索
+    ///
+    /// # Errors
+    /// - 見つからない/DB エラー時に `AppError` を返します。
     pub fn find_by_key_hash(
         conn: &mut crate::database::PooledConnection,
         hash: &str,
-    ) -> Result<ApiKey, AppError> {
-        use crate::database::schema::api_keys::dsl::*;
+    ) -> Result<Self, AppError> {
+        use crate::database::schema::api_keys::dsl::{api_keys, key_hash};
         api_keys
             .filter(key_hash.eq(hash))
             .first(conn)
             .map_err(AppError::from)
     }
 
+    /// ルックアップ用ハッシュ検索
+    ///
+    /// # Errors
+    /// - 見つからない/DB エラー時に `AppError` を返します。
     pub fn find_by_lookup_hash(
         conn: &mut crate::database::PooledConnection,
         lookup: &str,
-    ) -> Result<ApiKey, AppError> {
-        use crate::database::schema::api_keys::dsl::*;
+    ) -> Result<Self, AppError> {
+        use crate::database::schema::api_keys::dsl::{api_keys, api_key_lookup_hash};
         api_keys
             .filter(api_key_lookup_hash.eq(lookup))
             .first(conn)
             .map_err(AppError::from)
     }
 
+    /// レコードを削除します。
+    ///
+    /// # Errors
+    /// - DB エラーが発生した場合、`AppError` を返します。
     pub fn delete(
         conn: &mut crate::database::PooledConnection,
         api_key_id: Uuid,
     ) -> Result<usize, AppError> {
-        use crate::database::schema::api_keys::dsl::*;
+        use crate::database::schema::api_keys::dsl::api_keys;
         diesel::delete(api_keys.find(api_key_id))
             .execute(conn)
             .map_err(AppError::from)
     }
 
+    /// 最終使用日時を現在時刻で更新します。
+    ///
+    /// # Errors
+    /// - DB 更新に失敗した場合、`AppError` を返します。
     pub fn update_last_used(
         conn: &mut crate::database::PooledConnection,
         api_key_id: Uuid,
     ) -> Result<(), AppError> {
-        use crate::database::schema::api_keys::dsl::*;
+        use crate::database::schema::api_keys::dsl::{api_keys, last_used_at};
         diesel::update(api_keys.find(api_key_id))
             .set(last_used_at.eq(Some(Utc::now())))
             .execute(conn)?;
         Ok(())
     }
 
+    /// ユーザーに紐づく API Key 一覧を取得します。
+    ///
+    /// # Errors
+    /// - DB エラーが発生した場合、`AppError` を返します。
     pub fn list_for_user(
         conn: &mut crate::database::PooledConnection,
         target_user_id: Uuid,
         include_expired: bool,
-    ) -> Result<Vec<ApiKey>, AppError> {
-        use crate::database::schema::api_keys::dsl::*;
+    ) -> Result<Vec<Self>, AppError> {
+        use crate::database::schema::api_keys::dsl::{
+            api_keys, created_at, expires_at, user_id,
+        };
         let mut query = api_keys.filter(user_id.eq(target_user_id)).into_boxed();
         if !include_expired {
             let now = Utc::now();
@@ -188,7 +221,7 @@ impl ApiKey {
         }
         query
             .order(created_at.desc())
-            .load::<ApiKey>(conn)
+            .load::<Self>(conn)
             .map_err(AppError::from)
     }
 
@@ -209,7 +242,7 @@ impl ApiKey {
             }
         }
         let body = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
-        format!("{}{}", PREFIX, body)
+        format!("{PREFIX}{body}")
     }
 
     pub(crate) fn hash_key(key: &str) -> String {
@@ -229,39 +262,47 @@ impl ApiKey {
 
     /// ルックアップ用の決定的ハッシュ (衝突耐性と高速性重視 / 再計算可能)。
     /// 生キーが漏れてもハッシュ逆算は困難だが、オフライン総当りは可能なので rate-limit 前提。
+    #[must_use]
     pub fn lookup_hash(key: &str) -> String {
         crate::utils::hash::sha256_b64url(key.as_bytes())
     }
 
+    /// 与えられたプレーンキーが保存済みハッシュと一致するか検証します。
+    ///
+    /// # Errors
+    /// - ハッシュのパースに失敗した場合、`AppError::Authentication` を返します。
     pub fn verify_key(&self, key: &str) -> Result<bool, AppError> {
         use argon2::{Argon2, PasswordHash, PasswordVerifier};
 
         let parsed_hash = PasswordHash::new(&self.key_hash)
-            .map_err(|e| AppError::Authentication(format!("Invalid hash format: {}", e)))?;
+            .map_err(|e| AppError::Authentication(format!("Invalid hash format: {e}")))?;
 
         Ok(Argon2::default()
             .verify_password(key.as_bytes(), &parsed_hash)
             .is_ok())
     }
 
+    #[must_use]
     pub fn get_permissions(&self) -> Vec<String> {
         self.permissions
             .as_array()
             .map(|arr| {
                 arr.iter()
                     .filter_map(|v| v.as_str())
-                    .map(|s| s.to_string())
+                    .map(str::to_string)
                     .collect()
             })
             .unwrap_or_default()
     }
 
-    /// 期限切れかどうか (expires_at があり、それが現在時刻を過ぎている)
+    /// 期限切れかどうか (`expires_at` があり、それが現在時刻を過ぎている)
+    #[must_use]
     pub fn is_expired(&self, now: DateTime<Utc>) -> bool {
-        self.expires_at.map(|e| e <= now).unwrap_or(false)
+        self.expires_at.is_some_and(|e| e <= now)
     }
 
     /// 応答用構造体へ変換
+    #[must_use]
     pub fn to_response(&self) -> ApiKeyResponse {
         ApiKeyResponse {
             id: self.id,
@@ -275,10 +316,11 @@ impl ApiKey {
     }
 
     /// ログ出力や監査向けにキー本体を暴露しない短縮表示
+    #[must_use]
     pub fn mask_raw(raw: &str) -> String {
         if raw.len() <= 10 {
             return "***".into();
         }
-        format!("{}…{}", &raw[..6], &raw[raw.len() - 4..])
+    format!("{}…{}", &raw[..6], &raw[raw.len() - 4..])
     }
 }

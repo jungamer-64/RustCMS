@@ -1,3 +1,4 @@
+#![allow(clippy::option_if_let_else)]
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -25,7 +26,8 @@ pub struct ApiResponse<T> {
 }
 
 impl<T> ApiResponse<T> {
-    pub fn success(data: T) -> Self {
+    #[must_use]
+    pub const fn success(data: T) -> Self {
         Self {
             success: true,
             data: Some(data),
@@ -35,7 +37,8 @@ impl<T> ApiResponse<T> {
         }
     }
 
-    pub fn success_with_message(data: T, message: String) -> Self {
+    #[must_use]
+    pub const fn success_with_message(data: T, message: String) -> Self {
         Self {
             success: true,
             data: Some(data),
@@ -47,7 +50,8 @@ impl<T> ApiResponse<T> {
 }
 
 impl ApiResponse<()> {
-    pub fn error(error: String) -> Self {
+    #[must_use]
+    pub const fn error(error: String) -> Self {
         Self {
             success: false,
             data: None,
@@ -57,7 +61,8 @@ impl ApiResponse<()> {
         }
     }
 
-    pub fn error_with_validation(error: String, validation_errors: Vec<ValidationError>) -> Self {
+    #[must_use]
+    pub const fn error_with_validation(error: String, validation_errors: Vec<ValidationError>) -> Self {
         Self {
             success: false,
             data: None,
@@ -96,10 +101,10 @@ pub struct PaginationQuery {
     pub per_page: u32,
 }
 
-fn default_page() -> u32 {
+const fn default_page() -> u32 {
     1
 }
-fn default_per_page() -> u32 {
+const fn default_per_page() -> u32 {
     20
 }
 
@@ -125,8 +130,10 @@ impl PaginationQuery {
         }
     }
 
-    pub fn offset(&self) -> u64 {
-        ((self.page - 1) * self.per_page) as u64
+    #[must_use]
+    pub const fn offset(&self) -> u64 {
+        // Use saturating_sub to avoid potential underflow when page == 0
+        (self.page.saturating_sub(1) * self.per_page) as u64
     }
 }
 
@@ -190,7 +197,7 @@ pub struct ValidationError {
 
 // ValidationErrorResponse は統合のため削除 (ApiResponse に統合)
 
-/// ApiResponse の具体例（ジェネリックなし）
+/// `ApiResponse` の具体例（ジェネリックなし）
 #[derive(Debug, Serialize, ToSchema)]
 #[schema(example = json!({
     "success": true,

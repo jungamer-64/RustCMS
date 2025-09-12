@@ -27,7 +27,7 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
 pub enum UserRole {
     SuperAdmin,
     Admin,
@@ -38,26 +38,31 @@ pub enum UserRole {
 }
 
 impl UserRole {
-    pub fn as_str(&self) -> &'static str {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
         match self {
-            UserRole::SuperAdmin => "super_admin",
-            UserRole::Admin => "admin",
-            UserRole::Editor => "editor",
-            UserRole::Author => "author",
-            UserRole::Contributor => "contributor",
-            UserRole::Subscriber => "subscriber",
+            Self::SuperAdmin => "super_admin",
+            Self::Admin => "admin",
+            Self::Editor => "editor",
+            Self::Author => "author",
+            Self::Contributor => "contributor",
+            Self::Subscriber => "subscriber",
         }
     }
 
+    /// 文字列から `UserRole` をパースする
+    ///
+    /// # Errors
+    /// 未知のロール文字列が与えられた場合、`AppError::BadRequest` を返します。
     pub fn parse_str(s: &str) -> Result<Self, AppError> {
         match s {
-            "super_admin" => Ok(UserRole::SuperAdmin),
-            "admin" => Ok(UserRole::Admin),
-            "editor" => Ok(UserRole::Editor),
-            "author" => Ok(UserRole::Author),
-            "contributor" => Ok(UserRole::Contributor),
-            "subscriber" => Ok(UserRole::Subscriber),
-            _ => Err(AppError::BadRequest(format!("Invalid user role: {}", s))),
+            "super_admin" => Ok(Self::SuperAdmin),
+            "admin" => Ok(Self::Admin),
+            "editor" => Ok(Self::Editor),
+            "author" => Ok(Self::Author),
+            "contributor" => Ok(Self::Contributor),
+            "subscriber" => Ok(Self::Subscriber),
+            _ => Err(AppError::BadRequest(format!("Invalid user role: {s}"))),
         }
     }
 }
@@ -88,7 +93,8 @@ pub struct UpdateUserRequest {
 }
 
 impl UpdateUserRequest {
-    pub fn empty() -> Self {
+    #[must_use]
+    pub const fn empty() -> Self {
         Self {
             username: None,
             email: None,
@@ -98,12 +104,14 @@ impl UpdateUserRequest {
             is_active: None,
         }
     }
+    #[must_use]
     pub fn deactivate() -> Self {
         Self {
             is_active: Some(false),
             ..Self::empty()
         }
     }
+    #[must_use]
     pub fn with_role(role: UserRole) -> Self {
         Self {
             role: Some(role),
@@ -113,6 +121,7 @@ impl UpdateUserRequest {
 }
 
 impl User {
+    #[must_use]
     pub fn new(
         username: String,
         email: String,
@@ -138,6 +147,7 @@ impl User {
         }
     }
 
+    #[must_use]
     pub fn new_passkey_user(
         username: String,
         email: String,
@@ -148,13 +158,17 @@ impl User {
         Self::new(username, email, None, first_name, last_name, role)
     }
 
+    /// パスワード付きの新規ユーザーを作成する
+    ///
+    /// # Errors
+    /// パスワードのハッシュ化に失敗した場合、エラーを返します。
     pub fn new_with_password(
         username: String,
         email: String,
         password: &str,
         first_name: Option<String>,
         last_name: Option<String>,
-        role: UserRole,
+        role: &UserRole,
     ) -> Result<Self, crate::AppError> {
         let password_hash = password::hash_password(password)?;
 
@@ -164,44 +178,60 @@ impl User {
             Some(password_hash),
             first_name,
             last_name,
-            role,
+            *role,
         ))
     }
 
+    /// ID でユーザーを取得する
+    ///
+    /// # Errors
+    /// データベース検索に失敗した場合、エラーを返します。
     pub fn find_by_id(
         conn: &mut crate::database::PooledConnection,
         user_id: Uuid,
-    ) -> Result<User, AppError> {
-        use crate::database::schema::users::dsl::*;
+    ) -> Result<Self, AppError> {
+        use crate::database::schema::users::dsl::users;
         users.find(user_id).first(conn).map_err(AppError::from)
     }
 
+    /// ユーザー名でユーザーを取得する
+    ///
+    /// # Errors
+    /// データベース検索に失敗した場合、エラーを返します。
     pub fn find_by_username(
         conn: &mut crate::database::PooledConnection,
         user_username: &str,
-    ) -> Result<User, AppError> {
-        use crate::database::schema::users::dsl::*;
+    ) -> Result<Self, AppError> {
+        use crate::database::schema::users::dsl::{users, username};
         users
             .filter(username.eq(user_username))
             .first(conn)
             .map_err(AppError::from)
     }
 
+    /// メールアドレスでユーザーを取得する
+    ///
+    /// # Errors
+    /// データベース検索に失敗した場合、エラーを返します。
     pub fn find_by_email(
         conn: &mut crate::database::PooledConnection,
         user_email: &str,
-    ) -> Result<User, AppError> {
-        use crate::database::schema::users::dsl::*;
+    ) -> Result<Self, AppError> {
+        use crate::database::schema::users::dsl::{users, email};
         users
             .filter(email.eq(user_email))
             .first(conn)
             .map_err(AppError::from)
     }
 
+    /// ユーザーを作成する
+    ///
+    /// # Errors
+    /// データベースへの挿入に失敗した場合、エラーを返します。
     pub fn create(
         conn: &mut crate::database::PooledConnection,
-        user: &User,
-    ) -> Result<User, AppError> {
+        user: &Self,
+    ) -> Result<Self, AppError> {
         use crate::database::schema::users;
         diesel::insert_into(users::table)
             .values(user)
@@ -209,37 +239,18 @@ impl User {
             .map_err(AppError::from)
     }
 
+    /// 指定したフィールドを更新する
+    ///
+    /// # Errors
+    /// データベース更新に失敗した場合、エラーを返します。
     pub fn update(
         conn: &mut crate::database::PooledConnection,
         user_id: Uuid,
         updates: &UpdateUserRequest,
-    ) -> Result<User, AppError> {
-        use crate::database::schema::users::dsl::*;
-
-        // Build a tuple of all possible updates
-        let mut update_sets = Vec::new();
-
-        if let Some(ref new_username) = updates.username {
-            update_sets.push(format!("username = '{}'", new_username));
-        }
-        if let Some(ref new_email) = updates.email {
-            update_sets.push(format!("email = '{}'", new_email));
-        }
-        if let Some(ref new_first_name) = updates.first_name {
-            update_sets.push(format!("first_name = '{}'", new_first_name));
-        }
-        if let Some(ref new_last_name) = updates.last_name {
-            update_sets.push(format!("last_name = '{}'", new_last_name));
-        }
-        if let Some(ref new_role) = updates.role {
-            update_sets.push(format!("role = '{}'", new_role.as_str()));
-        }
-        if let Some(new_is_active) = updates.is_active {
-            update_sets.push(format!("is_active = {}", new_is_active));
-        }
-
-        // Always update the timestamp
-        update_sets.push("updated_at = NOW()".to_string());
+    ) -> Result<Self, AppError> {
+        use crate::database::schema::users::dsl::{
+            email, first_name, is_active, last_name, role, updated_at, username, users,
+        };
 
         // Use conditional updates based on what fields are provided
         if let Some(ref new_username) = updates.username {
@@ -279,31 +290,42 @@ impl User {
             .execute(conn)?;
 
         // Return the updated user
-        User::find_by_id(conn, user_id)
+        Self::find_by_id(conn, user_id)
     }
 
+    /// 指定したユーザーを削除する
+    ///
+    /// # Errors
+    /// データベース操作に失敗した場合、エラーを返します。
     pub fn delete(
         conn: &mut crate::database::PooledConnection,
         user_id: Uuid,
     ) -> Result<usize, AppError> {
-        use crate::database::schema::users::dsl::*;
+        use crate::database::schema::users::dsl::users;
         diesel::delete(users.find(user_id))
             .execute(conn)
             .map_err(AppError::from)
     }
 
+    /// ユーザーのパスワードを検証する
+    ///
+    /// # Errors
+    /// パスワードハッシュの検証処理に失敗した場合、エラーを返します。
     pub fn verify_password(&self, password: &str) -> Result<bool, AppError> {
-        match &self.password_hash {
-            Some(hash) => password::verify_password(password, hash),
-            None => Ok(false), // Passkey-only user
-        }
+        self.password_hash
+            .as_ref()
+            .map_or_else(|| Ok(false), |hash| password::verify_password(password, hash))
     }
 
+    /// ログイン時刻を現在時刻で更新する
+    ///
+    /// # Errors
+    /// データベース更新に失敗した場合、エラーを返します。
     pub fn update_last_login(
         conn: &mut crate::database::PooledConnection,
         user_id: Uuid,
     ) -> Result<(), AppError> {
-        use crate::database::schema::users::dsl::*;
+        use crate::database::schema::users::dsl::{last_login, users};
         diesel::update(users.find(user_id))
             .set(last_login.eq(Some(Utc::now())))
             .execute(conn)?;

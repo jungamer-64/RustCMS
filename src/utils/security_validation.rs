@@ -8,6 +8,9 @@ use validator::ValidationError;
 
 /// Validate and sanitize user content (posts, comments, etc.)
 /// Prevents XSS while preserving safe formatting
+///
+/// # Errors
+/// Returns a [`ValidationError`] if content is empty or exceeds allowed limits.
 pub fn validate_and_sanitize_content(content: &str) -> Result<String, ValidationError> {
     // Length validation
     if content.is_empty() {
@@ -44,6 +47,9 @@ fn sanitize_safe_content(content: &str) -> String {
 }
 
 /// Validate user-provided titles and names
+///
+/// # Errors
+/// Returns a [`ValidationError`] when the title is empty or too long.
 pub fn validate_title(title: &str) -> Result<String, ValidationError> {
     let trimmed = title.trim();
 
@@ -60,6 +66,9 @@ pub fn validate_title(title: &str) -> Result<String, ValidationError> {
 }
 
 /// Validate and sanitize search queries
+///
+/// # Errors
+/// Returns a [`ValidationError`] if the query is empty, too long, or invalid after sanitization.
 pub fn validate_search_query(query: &str) -> Result<String, ValidationError> {
     let trimmed = query.trim();
 
@@ -85,6 +94,9 @@ pub fn validate_search_query(query: &str) -> Result<String, ValidationError> {
 }
 
 /// Validate email addresses with additional security checks
+///
+/// # Errors
+/// Returns a [`ValidationError`] if the email is invalid, too long, or contains control characters.
 pub fn validate_email_secure(email: &str) -> Result<String, ValidationError> {
     let trimmed = email.trim().to_lowercase();
 
@@ -100,7 +112,7 @@ pub fn validate_email_secure(email: &str) -> Result<String, ValidationError> {
     }
 
     // Prevent malicious characters
-    if trimmed.chars().any(|c| c.is_control()) {
+    if trimmed.chars().any(char::is_control) {
         return Err(ValidationError::new("email_invalid_chars"));
     }
 
@@ -108,6 +120,9 @@ pub fn validate_email_secure(email: &str) -> Result<String, ValidationError> {
 }
 
 /// Validate usernames with security considerations
+///
+/// # Errors
+/// Returns a [`ValidationError`] if the username is empty, too short/long, contains invalid characters, or is reserved.
 pub fn validate_username_secure(username: &str) -> Result<String, ValidationError> {
     let trimmed = username.trim();
 
@@ -133,10 +148,7 @@ pub fn validate_username_secure(username: &str) -> Result<String, ValidationErro
 
     // Prevent reserved usernames
     let reserved = ["admin", "root", "system", "null", "undefined", "api", "www"];
-    if reserved
-        .iter()
-        .any(|&reserved| trimmed.eq_ignore_ascii_case(reserved))
-    {
+    if reserved.iter().any(|&reserved| trimmed.eq_ignore_ascii_case(reserved)) {
         return Err(ValidationError::new("username_reserved"));
     }
 
@@ -144,6 +156,9 @@ pub fn validate_username_secure(username: &str) -> Result<String, ValidationErro
 }
 
 /// Validate file paths to prevent directory traversal
+///
+/// # Errors
+/// Returns a [`ValidationError`] if the path contains traversal or invalid characters.
 pub fn validate_file_path(path: &str) -> Result<String, ValidationError> {
     // Prevent directory traversal
     if path.contains("..") || path.contains("//") {
@@ -162,7 +177,8 @@ pub fn validate_file_path(path: &str) -> Result<String, ValidationError> {
 }
 
 /// Rate limiting: validate API request frequency
-pub fn validate_request_rate(requests_per_minute: u32) -> bool {
+#[must_use]
+pub const fn validate_request_rate(requests_per_minute: u32) -> bool {
     // Implement basic rate limiting validation
     requests_per_minute <= 100 // Max 100 requests per minute per IP
 }

@@ -41,7 +41,7 @@ fn versioned_keys_manifest_and_prune() {
             versions.push(v);
         }
     }
-    let distinct: HashSet<u32> = versions.iter().cloned().collect();
+    let distinct: HashSet<u32> = versions.iter().copied().collect();
     assert!(
         distinct.len() <= PRUNE_KEEP,
         "expected at most {PRUNE_KEEP} distinct versions, found {}",
@@ -69,13 +69,12 @@ fn versioned_keys_manifest_and_prune() {
     let mut buf = String::new();
     mf.read_to_string(&mut buf).unwrap();
     let v: Value = serde_json::from_str(&buf).expect("manifest.json invalid JSON");
-    let latest_version = v["latest_version"]
+    let latest_version_u64 = v["latest_version"]
         .as_u64()
         .expect("latest_version missing / not number");
-    assert_eq!(
-        latest_version as u32, max_version,
-        "manifest latest_version mismatch"
-    );
+    let latest_version = u32::try_from(latest_version_u64)
+        .expect("latest_version value too large for u32");
+    assert_eq!(latest_version, max_version, "manifest latest_version mismatch");
     assert!(
         v["private_fingerprint"].as_str().unwrap_or("").len() >= 32,
         "private_fingerprint too short"

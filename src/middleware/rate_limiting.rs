@@ -21,7 +21,8 @@ use metrics::{counter, gauge};
 pub struct RateLimitLayer;
 
 impl RateLimitLayer {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -68,11 +69,11 @@ where
         let mut service = self.service.clone();
 
         // Extract IP early
-        let ip = extract_ip_from_request(&request).unwrap_or(IpAddr::from([127, 0, 0, 1]));
+    let ip = extract_ip_from_request(&request).unwrap_or_else(|| IpAddr::from([127, 0, 0, 1]));
 
         // Pull state extension
         let state_opt = request.extensions().get::<AppState>().cloned();
-        let allowed = state_opt.as_ref().map(|s| s.allow_ip(&ip)).unwrap_or(true); // if no state, fail open
+    let allowed = state_opt.as_ref().map_or(true, |s| s.allow_ip(&ip)); // if no state, fail open
 
         #[cfg(feature = "monitoring")]
         {
@@ -82,15 +83,15 @@ where
                 counter!("ip_rate_limit_blocked_total").increment(1);
             }
             if let Some(st) = state_opt.as_ref() {
-                gauge!("ip_rate_limit_tracked_keys").set(st.rate_limiter.tracked_len() as f64);
+                let tracked = st.rate_limiter.tracked_len();
+                gauge!("ip_rate_limit_tracked_keys").set(usize_to_f64(tracked));
             }
         }
 
         if !allowed {
             let retry_after = state_opt
                 .as_ref()
-                .map(|s| s.rate_limiter.window_secs())
-                .unwrap_or(60);
+                .map_or(60, |s| s.rate_limiter.window_secs());
             let response = (
                 StatusCode::TOO_MANY_REQUESTS,
                 [("Retry-After", retry_after.to_string())],
@@ -102,6 +103,12 @@ where
 
         Box::pin(async move { service.call(request).await })
     }
+}
+
+#[inline]
+#[allow(clippy::cast_precision_loss)]
+const fn usize_to_f64(n: usize) -> f64 {
+    n as f64
 }
 
 fn extract_ip_from_request<B>(request: &Request<B>) -> Option<IpAddr> {

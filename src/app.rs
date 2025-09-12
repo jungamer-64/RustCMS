@@ -2,7 +2,7 @@
 //!
 //! Centralized application state containing all services for the CMS:
 //! - Database connections with pooling
-//! - Authentication service with biscuit-auth + WebAuthn
+//! - Authentication service with biscuit-auth + `WebAuthn`
 //! - Cache service with Redis + in-memory layers
 //! - Search service with Tantivy full-text search
 //! - Health monitoring and metrics collection
@@ -35,7 +35,8 @@ macro_rules! timed_op {
     ($self:ident, $kind:expr, $future:expr) => {{
         let start = std::time::Instant::now();
         let res = $future.await;
-        let elapsed = start.elapsed().as_millis() as f64;
+        // use floating-point seconds to avoid precision-loss cast from u128
+        let elapsed = start.elapsed().as_secs_f64() * 1000.0; // milliseconds as f64
         if res.is_ok() {
             match $kind {
                 #[cfg(feature = "database")] "db" => { $self.record_db_query(elapsed).await; },
@@ -191,7 +192,7 @@ where
     match fut.await {
         Ok(_) => ServiceHealth {
             status: "up".to_string(),
-            response_time_ms: start.elapsed().as_millis() as f64,
+            response_time_ms: start.elapsed().as_secs_f64() * 1000.0,
             error: None,
             details: serde_json::json!({}),
         },
@@ -202,8 +203,9 @@ where
             };
             ServiceHealth {
                 status: status.to_string(),
-                response_time_ms: start.elapsed().as_millis() as f64,
-                error: Some(format!("{:?}", e)),
+                response_time_ms: start.elapsed().as_secs_f64() * 1000.0,
+                // use inlined debug formatting
+                error: Some(format!("{e:?}")),
                 details: serde_json::json!({}),
             }
         }
@@ -223,7 +225,7 @@ fn service_not_configured(msg: &str) -> ServiceHealth {
 
 // (旧) update_running_avg は各 record_* 内へインライン化済み
 
-/// Builder pattern for AppState to handle conditional compilation
+/// Builder pattern for `AppState` to handle conditional compilation
 pub struct AppStateBuilder {
     pub config: Arc<Config>,
     pub metrics: Arc<RwLock<AppMetrics>>,
@@ -240,6 +242,11 @@ pub struct AppStateBuilder {
 }
 
 impl AppStateBuilder {
+    /// Build `AppState` from the collected parts.
+    ///
+    /// # Panics
+    /// 有効な feature に対応するサービスが初期化されていない場合は panic します。これはコンパイル時の feature と実行時の初期化の整合性を保証するためです。
+    #[must_use]
     pub fn build(self) -> AppState {
         AppState {
             #[cfg(feature = "database")]
@@ -308,6 +315,9 @@ pub struct ServiceHealth {
 
 impl AppState {
     /// Create application state from environment configuration
+    ///
+    /// # Errors
+    /// 設定の読み込みや各サービスの初期化に失敗した場合はエラーを返します。
     pub async fn from_env() -> Result<Self> {
         // Load configuration and delegate to from_config
         let config = Config::from_env()?;
@@ -315,6 +325,14 @@ impl AppState {
     }
 
     /// Create application state from a provided `Config` (useful for central init)
+    ///
+    /// # Panics
+    /// 有効化された feature に対するサービスが初期化されていない場合は panic します（`AppStateBuilder::build` 内）。
+    ///
+    /// # Errors
+    /// 各サービス（DB/キャッシュ/検索/認証）の初期化に失敗した場合、エラーを返します。
+    // Allow cognitive complexity: feature-gated initialization requires branching and is clearer consolidated here.
+    #[allow(clippy::cognitive_complexity)]
     pub async fn from_config(config: Config) -> Result<Self> {
         info!("🔧 Initializing application state from provided Config");
 
@@ -376,8 +394,10 @@ impl AppState {
 
         let mut app_state = app_state_builder.build();
         // Override default limiter with configured values
+        let max_reqs = u32::try_from(config.security.rate_limit_requests)
+            .unwrap_or(u32::MAX);
         app_state.rate_limiter = Arc::new(FixedWindowLimiter::new(
-            config.security.rate_limit_requests as u32,
+            max_reqs,
             config.security.rate_limit_window,
         ));
 
@@ -430,6 +450,9 @@ impl AppState {
     }
 
     /// Perform comprehensive health check of all services
+    ///
+    /// # Errors
+    /// 現在この関数自体はエラーを返しません（各サービスの失敗は `ServiceHealth` の `status`/`error` に反映されます）。
     pub async fn health_check(&self) -> Result<HealthStatus> {
         let start_time = Instant::now();
 
@@ -511,6 +534,8 @@ impl AppState {
     pub async fn get_metrics(&self) -> AppMetrics {
         let metrics = self.metrics.read().await;
         let mut current_metrics = metrics.clone();
+        // Release the read lock before performing any await to avoid holding the lock across .await
+        drop(metrics);
 
         // Add real-time computed metrics if cache is available
         #[cfg(feature = "cache")]
@@ -525,18 +550,22 @@ impl AppState {
 
     /// Update request metrics
     pub async fn record_request(&self) {
-        let mut metrics = self.metrics.write().await;
-        metrics.total_requests += 1;
+        {
+            let mut metrics = self.metrics.write().await;
+            metrics.total_requests += 1;
+        }
     }
 
     /// Update authentication metrics
     pub async fn record_auth_attempt(&self, success: bool) {
-        let mut metrics = self.metrics.write().await;
-        metrics.auth_attempts += 1;
-        if success {
-            metrics.auth_successes += 1;
-        } else {
-            metrics.auth_failures += 1;
+        {
+            let mut metrics = self.metrics.write().await;
+            metrics.auth_attempts += 1;
+            if success {
+                metrics.auth_successes += 1;
+            } else {
+                metrics.auth_failures += 1;
+            }
         }
     }
 
@@ -544,44 +573,56 @@ impl AppState {
     pub async fn record_search_query(&self, response_time_ms: f64) {
         let mut m = self.metrics.write().await;
         m.search_queries += 1;
+        // Average update using numerically stable, fewer-FLOPs formula:
+        // avg += (x - avg) / n
+        #[allow(clippy::cast_precision_loss)]
         let n = m.search_queries as f64;
-        m.search_avg_response_time_ms =
-            (m.search_avg_response_time_ms * (n - 1.0) + response_time_ms) / n;
+        m.search_avg_response_time_ms +=
+            (response_time_ms - m.search_avg_response_time_ms) / n;
     }
 
     /// Update database metrics
     pub async fn record_db_query(&self, response_time_ms: f64) {
         let mut m = self.metrics.write().await;
         m.db_queries += 1;
+        // avg += (x - avg) / n
+        #[allow(clippy::cast_precision_loss)]
         let n = m.db_queries as f64;
-        m.db_avg_response_time_ms = (m.db_avg_response_time_ms * (n - 1.0) + response_time_ms) / n;
+        m.db_avg_response_time_ms += (response_time_ms - m.db_avg_response_time_ms) / n;
     }
 
     /// Record error by type
     pub async fn record_error(&self, error_type: &str) {
-        let mut metrics = self.metrics.write().await;
-        metrics.errors_total += 1;
+        {
+            let mut metrics = self.metrics.write().await;
+            metrics.errors_total += 1;
 
-        match error_type {
-            "auth" => metrics.errors_auth += 1,
-            "db" => metrics.errors_db += 1,
-            "cache" => metrics.errors_cache += 1,
-            "search" => metrics.errors_search += 1,
-            _ => {}
+            match error_type {
+                "auth" => metrics.errors_auth += 1,
+                "db" => metrics.errors_db += 1,
+                "cache" => metrics.errors_cache += 1,
+                "search" => metrics.errors_search += 1,
+                _ => {}
+            }
         }
     }
 
     /// Get application uptime in seconds
+    #[must_use]
     pub fn uptime(&self) -> u64 {
         self.start_time.elapsed().as_secs()
     }
 
     /// Rate limit helper for IP addresses. Returns true if request allowed.
+    #[must_use]
     pub fn allow_ip(&self, ip: &std::net::IpAddr) -> bool {
         self.rate_limiter.allow(&ip.to_string())
     }
 
-    /// Convenience helper to get a pooled DB connection from AppState
+    /// Convenience helper to get a pooled DB connection from `AppState`
+    ///
+    /// # Errors
+    /// - DB プールが枯渇・停止しているなど、接続の取得に失敗した場合。
     #[cfg(feature = "database")]
     pub fn get_conn(&self) -> crate::Result<crate::database::PooledConnection> {
         self.database.get_connection()
@@ -589,6 +630,12 @@ impl AppState {
 
     // ---------------- Cache helper (get or compute & store) ----------------
     #[cfg(feature = "cache")]
+    /// キャッシュから値を取得し、存在しない場合は計算して保存します。
+    ///
+    /// # Errors
+    /// - `builder` が返す非同期処理がエラーを返した場合。
+    /// - 値のシリアライズ/デシリアライズに失敗した場合。
+    /// - Redis への保存でエラーが発生した場合（致命ではないため、内部ではログに留めます）。
     pub async fn cache_get_or_set<T, F, Fut>(
         &self,
         key: &str,
@@ -615,13 +662,14 @@ impl AppState {
     /// Wildcard削除はサービス側の delete がパターン処理をサポートしている前提。
     #[cfg(feature = "cache")]
     pub async fn cache_invalidate_prefix(&self, prefix: &str) {
-        let mut metrics = self.metrics.write().await;
-        match self.cache.delete(prefix).await {
-            Ok(_) => {
-                metrics.cache_invalidations += 1;
+        // 先に I/O（await）を終えてからメトリクスのロックを取得し、ロック保持時間を最小化
+        let res = self.cache.delete(prefix).await;
+        match res {
+            Ok(()) => {
+                self.metrics.write().await.cache_invalidations += 1;
             }
             Err(e) => {
-                metrics.cache_invalidation_errors += 1;
+                self.metrics.write().await.cache_invalidation_errors += 1;
                 warn!("cache invalidate failed prefix={} err={}", prefix, e);
             }
         }
@@ -631,20 +679,19 @@ impl AppState {
     #[cfg(feature = "cache")]
     pub async fn invalidate_post_caches(&self, id: uuid::Uuid) {
         use crate::utils::cache_key::{CACHE_PREFIX_POST_ID, CACHE_PREFIX_POSTS};
-        let key = format!("{}{}", CACHE_PREFIX_POST_ID, id);
-        let mut metrics = self.metrics.write().await;
-        match self.cache.delete(&key).await {
-            Ok(_) => {
-                metrics.cache_invalidations += 1;
+        let key = format!("{CACHE_PREFIX_POST_ID}{id}");
+        let res = self.cache.delete(&key).await;
+        match res {
+            Ok(()) => {
+                self.metrics.write().await.cache_invalidations += 1;
             }
             Err(e) => {
-                metrics.cache_invalidation_errors += 1;
+                self.metrics.write().await.cache_invalidation_errors += 1;
                 warn!(post_id=%id, error=%e, "post cache delete failed");
             }
         }
-        drop(metrics);
-        self.cache_invalidate_prefix(&format!("{}*", CACHE_PREFIX_POSTS))
-            .await; // prefix helper already logs
+        let posts_prefix = format!("{CACHE_PREFIX_POSTS}*");
+        self.cache_invalidate_prefix(&posts_prefix).await; // prefix helper already logs
     }
 
     #[cfg(feature = "cache")]
@@ -652,22 +699,21 @@ impl AppState {
         use crate::utils::cache_key::{
             CACHE_PREFIX_USER_ID, CACHE_PREFIX_USER_POSTS, CACHE_PREFIX_USERS,
         };
-        let key = format!("{}{}", CACHE_PREFIX_USER_ID, id);
-        let mut metrics = self.metrics.write().await;
-        match self.cache.delete(&key).await {
-            Ok(_) => {
-                metrics.cache_invalidations += 1;
+        let key = format!("{CACHE_PREFIX_USER_ID}{id}");
+        let res = self.cache.delete(&key).await;
+        match res {
+            Ok(()) => {
+                self.metrics.write().await.cache_invalidations += 1;
             }
             Err(e) => {
-                metrics.cache_invalidation_errors += 1;
+                self.metrics.write().await.cache_invalidation_errors += 1;
                 warn!(user_id=%id, error=%e, "user cache delete failed");
             }
         }
-        drop(metrics);
-        self.cache_invalidate_prefix(&format!("{}*", CACHE_PREFIX_USERS))
-            .await;
-        self.cache_invalidate_prefix(&format!("{}{}:*", CACHE_PREFIX_USER_POSTS, id))
-            .await;
+        let users_prefix = format!("{CACHE_PREFIX_USERS}*");
+        self.cache_invalidate_prefix(&users_prefix).await;
+        let user_posts_prefix = format!("{CACHE_PREFIX_USER_POSTS}{id}:*");
+        self.cache_invalidate_prefix(&user_posts_prefix).await;
     }
 
     // ---------------- Search index safe helpers (avoid duplicated error logging) ----------------
@@ -718,6 +764,11 @@ impl AppState {
 
     // --- Search service wrappers to record search metrics centrally ---
     #[cfg(feature = "search")]
+    /// 検索を実行します。
+    ///
+    /// # Errors
+    ///
+    /// 検索バックエンドへの問い合わせに失敗した場合にエラーを返します。
     pub async fn search_execute(
         &self,
         req: crate::search::SearchRequest,
@@ -726,17 +777,32 @@ impl AppState {
     }
 
     #[cfg(feature = "search")]
+    /// サジェストを取得します。
+    ///
+    /// # Errors
+    ///
+    /// 検索バックエンドからの応答取得に失敗した場合にエラーを返します。
     pub async fn search_suggest(&self, prefix: &str, limit: usize) -> crate::Result<Vec<String>> {
         timed_op!(self, "search", self.search.suggest(prefix, limit))
     }
 
     #[cfg(feature = "search")]
+    /// 検索統計情報を取得します。
+    ///
+    /// # Errors
+    ///
+    /// 統計取得時にバックエンド呼び出しが失敗した場合にエラーを返します。
     pub async fn search_get_stats(&self) -> crate::Result<crate::search::SearchStats> {
         timed_op!(self, "search", self.search.get_stats())
     }
 
     // --- Auth service wrappers to record auth metrics centrally ---
     #[cfg(feature = "auth")]
+    /// ユーザーを作成します。
+    ///
+    /// # Errors
+    ///
+    /// 入力検証や保存処理、外部サービス連携に失敗した場合にエラーを返します。
     pub async fn auth_create_user(
         &self,
         request: crate::models::CreateUserRequest,
@@ -745,6 +811,11 @@ impl AppState {
     }
 
     #[cfg(feature = "auth")]
+    /// ユーザー認証を実行します。
+    ///
+    /// # Errors
+    ///
+    /// 資格情報が不正、または内部処理に失敗した場合にエラーを返します。
     pub async fn auth_authenticate(
         &self,
         request: crate::auth::LoginRequest,
@@ -753,11 +824,21 @@ impl AppState {
     }
 
     #[cfg(feature = "auth")]
+    /// セッションを作成します。
+    ///
+    /// # Errors
+    ///
+    /// セッション発行時の保存や暗号化処理に失敗した場合にエラーを返します。
     pub async fn auth_create_session(&self, user_id: uuid::Uuid) -> crate::Result<String> {
         timed_op!(self, "auth", self.auth.create_session(user_id, self))
     }
 
     #[cfg(feature = "auth")]
+    /// `AuthResponse` を生成します。
+    ///
+    /// # Errors
+    ///
+    /// トークン生成やユーザー情報組み立てに失敗した場合にエラーを返します。
     pub async fn auth_build_auth_response(
         &self,
         user: crate::models::User,
@@ -774,6 +855,10 @@ impl AppState {
     /// Use this in handlers instead of manually converting `AuthResponse`.
     /// NOTE: Keeps backward compatibility because the underlying creation path is unchanged.
     #[cfg(feature = "auth")]
+    ///
+    /// # Errors
+    ///
+    /// 内部の `auth_build_auth_response` が失敗した場合にエラーを返します。
     pub async fn auth_build_success_response(
         &self,
         user: crate::models::User,
@@ -784,6 +869,11 @@ impl AppState {
     }
 
     #[cfg(feature = "auth")]
+    /// アクセストークンをリフレッシュします。
+    ///
+    /// # Errors
+    ///
+    /// リフレッシュトークンが不正、または内部の検証/保存処理に失敗した場合にエラーを返します。
     pub async fn auth_refresh_access_token(
         &self,
         refresh_token: &str,
@@ -794,8 +884,12 @@ impl AppState {
         timed_op!(self, "auth", self.auth.refresh_access_token(refresh_token))
     }
 
-    /// Convenience wrapper: refresh using a refresh token and return unified AuthSuccessResponse directly.
+    /// Convenience wrapper: refresh using a refresh token and return unified `AuthSuccessResponse` directly.
     #[cfg(feature = "auth")]
+    ///
+    /// # Errors
+    ///
+    /// 内部の `auth_refresh_access_token` が失敗した場合にエラーを返します。
     pub async fn auth_refresh_success_response(
         &self,
         refresh_token: &str,
@@ -804,13 +898,22 @@ impl AppState {
         Ok(crate::utils::auth_response::AuthSuccessResponse::from_parts(&tokens, user))
     }
 
-    /// Validate a token using the AuthService; returns the authenticated user on success and records an auth attempt
+    /// Validate a token using the `AuthService`; returns the authenticated user on success and records an auth attempt
     #[cfg(feature = "auth")]
+    ///
+    /// # Errors
+    ///
+    /// トークンが不正、または検証過程で失敗した場合にエラーを返します。
     pub async fn auth_validate_token(&self, token: &str) -> crate::Result<crate::models::User> {
         timed_op!(self, "auth", self.auth.validate_token(self, token))
     }
 
     #[cfg(feature = "auth")]
+    /// ビスケットトークンを検証します。
+    ///
+    /// # Errors
+    ///
+    /// ビスケットトークンの検証に失敗した場合にエラーを返します。
     pub async fn auth_verify_biscuit(
         &self,
         token: &str,
@@ -818,8 +921,12 @@ impl AppState {
         timed_op!(self, "auth", self.auth.verify_biscuit(self, token))
     }
 
-    /// Health check wrapper for AuthService that records timing
+    /// Health check wrapper for `AuthService` that records timing
     #[cfg(feature = "auth")]
+    ///
+    /// # Errors
+    ///
+    /// 健康チェックの内部処理で失敗した場合にエラーを返します。
     pub async fn auth_health_check(&self) -> crate::Result<crate::app::ServiceHealth> {
         // auth の内部 DB 呼び出しを個別にカウントする必要があれば AuthService 側で timed 化する想定
         Ok(self.check_auth_health().await)
@@ -827,6 +934,11 @@ impl AppState {
 
     // --- Database wrapper helpers that record metrics centrally on AppState ---
     #[cfg(feature = "database")]
+    /// ユーザーを作成します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や保存処理に失敗した場合にエラーを返します。
     pub async fn db_create_user(
         &self,
         req: crate::models::CreateUserRequest,
@@ -835,16 +947,31 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// ユーザーIDでユーザーを取得します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や取得クエリに失敗した場合にエラーを返します。
     pub async fn db_get_user_by_id(&self, id: uuid::Uuid) -> crate::Result<crate::models::User> {
         timed_op!(self, "db", self.database.get_user_by_id(id))
     }
 
     #[cfg(feature = "database")]
+    /// メールアドレスでユーザーを取得します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や取得クエリに失敗した場合にエラーを返します。
     pub async fn db_get_user_by_email(&self, email: &str) -> crate::Result<crate::models::User> {
         timed_op!(self, "db", self.database.get_user_by_email(email))
     }
 
     #[cfg(feature = "database")]
+    /// ユーザー一覧を取得します（フィルタ/ソート対応）。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や取得クエリに失敗した場合にエラーを返します。
     pub async fn db_get_users(
         &self,
         page: u32,
@@ -853,20 +980,28 @@ impl AppState {
         active: Option<bool>,
         sort: Option<String>,
     ) -> crate::Result<Vec<crate::models::User>> {
-        timed_op!(
-            self,
-            "db",
+        timed_op!(self, "db", async {
             self.database.get_users(page, limit, role, active, sort)
-        )
+        })
     }
 
     #[cfg(feature = "database")]
+    /// 最終ログイン時刻を更新します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や更新クエリに失敗した場合にエラーを返します。
     pub async fn db_update_last_login(&self, id: uuid::Uuid) -> crate::Result<()> {
-        timed_op!(self, "db", self.database.update_last_login(id))
+        timed_op!(self, "db", async { self.database.update_last_login(id) })
     }
 
     // Additional user helpers used by handlers/CLI
     #[cfg(feature = "database")]
+    /// ユーザー名でユーザーを取得します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や取得クエリに失敗した場合にエラーを返します。
     pub async fn db_get_user_by_username(
         &self,
         username: &str,
@@ -875,26 +1010,41 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// ユーザー情報を更新します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や更新クエリに失敗した場合にエラーを返します。
     pub async fn db_update_user(
         &self,
         id: uuid::Uuid,
         request: crate::models::UpdateUserRequest,
     ) -> crate::Result<crate::models::User> {
-        let user = timed_op!(self, "db", self.database.update_user(id, request))?;
+    let user = timed_op!(self, "db", async { self.database.update_user(id, &request) })?;
         #[cfg(feature = "cache")]
         self.invalidate_user_caches(id).await;
         Ok(user)
     }
 
     #[cfg(feature = "database")]
+    /// ユーザーを削除します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や削除クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_delete_user(&self, id: uuid::Uuid) -> crate::Result<()> {
-    timed_op!(self, "db", self.database.delete_user(id))?;
+    timed_op!(self, "db", async { self.database.delete_user(id) })?;
         #[cfg(feature = "cache")]
         self.invalidate_user_caches(id).await;
     Ok(())
     }
 
     #[cfg(feature = "database")]
+    /// ユーザーパスワードをリセットします。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や更新処理に失敗した場合にエラーを返します。
     pub async fn db_reset_user_password(
         &self,
         id: uuid::Uuid,
@@ -903,38 +1053,63 @@ impl AppState {
         timed_op!(
             self,
             "db",
-            self.database.reset_user_password(id, new_password)
+            async { self.database.reset_user_password(id, new_password) }
         )
     }
 
     #[cfg(feature = "database")]
+    /// ユーザー数を返します。
+    ///
+    /// # Errors
+    ///
+    /// 集計クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_count_users(&self) -> crate::Result<usize> {
-        timed_op!(self, "db", self.database.count_users())
+    timed_op!(self, "db", async { self.database.count_users() })
     }
 
     #[cfg(feature = "database")]
+    /// 条件付きのユーザー数を返します。
+    ///
+    /// # Errors
+    ///
+    /// 集計クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_count_users_filtered(
         &self,
         role: Option<String>,
         active: Option<bool>,
     ) -> crate::Result<usize> {
-        timed_op!(self, "db", self.database.count_users_filtered(role, active))
+    timed_op!(self, "db", async { self.database.count_users_filtered(role, active) })
     }
 
     #[cfg(feature = "database")]
+    /// 投稿を作成します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や保存処理に失敗した場合にエラーを返します。
     pub async fn db_create_post(
         &self,
         req: crate::models::CreatePostRequest,
     ) -> crate::Result<crate::models::Post> {
-        timed_op!(self, "db", self.database.create_post(req))
+    timed_op!(self, "db", async { self.database.create_post(req) })
     }
 
     #[cfg(feature = "database")]
+    /// 投稿IDで投稿を取得します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や取得クエリに失敗した場合にエラーを返します。
     pub async fn db_get_post_by_id(&self, id: uuid::Uuid) -> crate::Result<crate::models::Post> {
-        timed_op!(self, "db", self.database.get_post_by_id(id))
+    timed_op!(self, "db", async { self.database.get_post_by_id(id) })
     }
 
     #[cfg(feature = "database")]
+    /// 投稿一覧を取得します（フィルタ/ソート対応）。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や取得クエリに失敗した場合にエラーを返します。
     pub async fn db_get_posts(
         &self,
         page: u32,
@@ -947,36 +1122,61 @@ impl AppState {
         timed_op!(
             self,
             "db",
-            self.database
-                .get_posts(page, limit, status, author, tag, sort)
+            async { self.database
+                .get_posts(page, limit, status, author, tag, sort) }
         )
     }
 
     #[cfg(feature = "database")]
+    /// 投稿を更新します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や更新クエリに失敗した場合にエラーを返します。
     pub async fn db_update_post(
         &self,
         id: uuid::Uuid,
         req: crate::models::UpdatePostRequest,
     ) -> crate::Result<crate::models::Post> {
-        timed_op!(self, "db", self.database.update_post(id, req))
+    timed_op!(self, "db", async { self.database.update_post(id, &req) })
     }
 
     #[cfg(feature = "database")]
+    /// 投稿を削除します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や削除クエリの実行に失敗した場合、または対象の投稿が見つからない場合にエラーを返します。
     pub async fn db_delete_post(&self, id: uuid::Uuid) -> crate::Result<()> {
-        timed_op!(self, "db", self.database.delete_post(id))
+    timed_op!(self, "db", async { self.database.delete_post(id) })
     }
 
     #[cfg(feature = "database")]
+    /// 投稿数を返します（任意のタグでフィルター）。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や集計クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_count_posts(&self, tag: Option<&str>) -> crate::Result<usize> {
-        timed_op!(self, "db", self.database.count_posts(tag))
+    timed_op!(self, "db", async { self.database.count_posts(tag) })
     }
 
     #[cfg(feature = "database")]
+    /// 指定ユーザーの投稿数を返します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や集計クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_count_posts_by_author(&self, author_id: uuid::Uuid) -> crate::Result<usize> {
-        timed_op!(self, "db", self.database.count_posts_by_author(author_id))
+    timed_op!(self, "db", async { self.database.count_posts_by_author(author_id) })
     }
 
     #[cfg(feature = "database")]
+    /// ステータス/著者/タグでフィルターした投稿数を返します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や集計クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_count_posts_filtered(
         &self,
         status: Option<String>,
@@ -986,7 +1186,7 @@ impl AppState {
         timed_op!(
             self,
             "db",
-            self.database.count_posts_filtered(status, author, tag)
+            async { self.database.count_posts_filtered(status, author, tag) }
         )
     }
 
@@ -994,6 +1194,13 @@ impl AppState {
     // NOTE: 他の DB ラッパは timed_db! macro を直接使えるが、ここは一部で in-place クロージャを
     // 使っており都度 start/elapsed を書いていたため共通化。
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// 新しい API キーを作成します。
+    ///
+    /// # Errors
+    ///
+    /// - 入力値の検証に失敗した場合（名前や権限が不正など）。
+    /// - データベース接続の取得に失敗した場合。
+    /// - 生成した API キーの保存に失敗した場合。
     pub async fn db_create_api_key(
         &self,
         name: String,
@@ -1010,6 +1217,12 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// API キー ID から API キーを取得します。
+    ///
+    /// # Errors
+    ///
+    /// - データベース接続の取得に失敗した場合。
+    /// - 該当する API キーが存在しない、または取得時にエラーが発生した場合。
     pub async fn db_get_api_key(
         &self,
         id: uuid::Uuid,
@@ -1023,13 +1236,19 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
-    pub async fn db_delete_api_key(&self, _id: uuid::Uuid) -> crate::Result<()> {
-        use crate::database::schema::api_keys::dsl::*;
+    /// API キーを削除します。
+    ///
+    /// # Errors
+    ///
+    /// - データベース接続の取得や削除クエリの実行に失敗した場合。
+    /// - 指定した ID の API キーが存在しない場合は `NotFound` エラーを返します。
+    pub async fn db_delete_api_key(&self, key_id: uuid::Uuid) -> crate::Result<()> {
+        use crate::database::schema::api_keys::dsl::{api_keys, id as api_key_id};
         use diesel::prelude::*;
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
             let affected =
-                diesel::delete(api_keys.filter(crate::database::schema::api_keys::dsl::id.eq(_id)))
+                diesel::delete(api_keys.filter(api_key_id.eq(key_id)))
                     .execute(&mut conn)?;
             if affected == 0 {
                 return Err(crate::AppError::NotFound("api key not found".into()));
@@ -1039,6 +1258,13 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// 既存の API キーを新しい API キーにローテーションし、旧キーを失効させます。
+    ///
+    /// # Errors
+    ///
+    /// - 元の API キー取得に失敗した場合（存在しない等）。
+    /// - 新しい API キー生成・保存に失敗した場合。
+    /// - 旧キーの失効更新（`expires_at` の更新）でエラーが発生した場合。
     pub async fn db_rotate_api_key(
         &self,
         id: uuid::Uuid,
@@ -1047,8 +1273,8 @@ impl AppState {
     ) -> crate::Result<(crate::models::ApiKeyResponse, String)> {
         // Fetch existing
         let existing = self.db_get_api_key_model(id).await?;
-        let name = new_name.unwrap_or(existing.name.clone());
-        let perms = new_permissions.unwrap_or(existing.get_permissions());
+        let name = new_name.unwrap_or_else(|| existing.name.clone());
+        let perms = new_permissions.unwrap_or_else(|| existing.get_permissions());
         // Create replacement (same user)
         let (new_model_resp, raw) = self
             .db_create_api_key(name, existing.user_id, perms)
@@ -1056,7 +1282,7 @@ impl AppState {
         // Expire old key (soft: set expires_at = now)
         #[cfg(all(feature = "database", feature = "auth"))]
         {
-            use crate::database::schema::api_keys::dsl::*;
+            use crate::database::schema::api_keys::dsl::{api_keys, expires_at};
             use diesel::prelude::*;
             let mut conn = self.database.get_connection()?;
             let now = chrono::Utc::now();
@@ -1068,6 +1294,12 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// API キーを失効（削除）させます。
+    ///
+    /// # Errors
+    ///
+    /// - データベース接続の取得や削除処理に失敗した場合。
+    /// - 指定 ID の API キーが存在しない場合には `NotFound` 等のエラーが返る可能性があります。
     pub async fn db_revoke_api_key(&self, id: uuid::Uuid) -> crate::Result<()> {
         use crate::models::ApiKey;
         timed_op!(self, "db", async {
@@ -1078,37 +1310,44 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// 所有者チェック込みで API キーを削除します。
+    ///
+    /// # Errors
+    ///
+    /// - DB 接続/削除クエリ実行に失敗した場合。
+    /// - 指定 ID が存在するが所有者が一致しない場合は Authorization エラー。
+    /// - 指定 ID が存在しない場合は `NotFound` エラー。
     pub async fn db_revoke_api_key_owned(
         &self,
         key_id: uuid::Uuid,
         user: uuid::Uuid,
     ) -> crate::Result<()> {
-        use crate::database::schema::api_keys::dsl::*;
+        use crate::database::schema::api_keys::dsl::{api_keys, id as api_key_id, user_id};
         use crate::models::ApiKey;
         use diesel::prelude::*;
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
             let affected = diesel::delete(
-                api_keys.filter(
-                    crate::database::schema::api_keys::dsl::id
-                        .eq(key_id)
-                        .and(user_id.eq(user)),
-                ),
+                api_keys.filter(api_key_id.eq(key_id).and(user_id.eq(user))),
             )
             .execute(&mut conn)?;
             if affected == 0 {
                 let exists = ApiKey::find_by_id(&mut conn, key_id).ok();
                 if exists.is_some() {
                     return Err(crate::AppError::Authorization("not owner".into()));
-                } else {
-                    return Err(crate::AppError::NotFound("api key not found".into()));
                 }
+                return Err(crate::AppError::NotFound("api key not found".into()));
             }
             Ok(())
         })
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// API キーの最終使用時刻を更新します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続や更新処理に失敗した場合にエラーを返します。
     pub async fn db_touch_api_key(&self, id: uuid::Uuid) -> crate::Result<()> {
         use crate::models::ApiKey;
         timed_op!(self, "db", async {
@@ -1119,6 +1358,11 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// ユーザーの API キー一覧を返します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や取得クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_list_api_keys(
         &self,
         user_id: uuid::Uuid,
@@ -1133,6 +1377,11 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// lookup ハッシュで API キーを取得します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続や取得クエリに失敗した場合にエラーを返します。
     pub async fn db_get_api_key_by_lookup_hash(
         &self,
         lookup: &str,
@@ -1147,6 +1396,11 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// API キー ID から API キーのモデルを取得します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続や取得クエリに失敗した場合にエラーを返します。
     pub async fn db_get_api_key_model(
         &self,
         id: uuid::Uuid,
@@ -1159,14 +1413,19 @@ impl AppState {
         })
     }
 
-    /// Backfill api_key_lookup_hash for legacy rows (where it's an empty string), using a raw API key.
-    /// Returns Some(ApiKey) if a matching legacy key was found and updated; None otherwise.
+    /// Backfill `api_key_lookup_hash` for legacy rows (where it's an empty string), using a raw API key.
+    /// Returns `Some(ApiKey)` if a matching legacy key was found and updated; `None` otherwise.
+    ///
+    /// # Errors
+    ///
+    /// - データベース接続や取得/更新クエリの実行に失敗した場合。
+    /// - ハッシュ計算や検証処理で問題が発生した場合。
     #[cfg(all(feature = "database", feature = "auth"))]
     pub async fn db_backfill_api_key_lookup_for_raw(
         &self,
         raw: &str,
     ) -> crate::Result<Option<crate::models::ApiKey>> {
-        use crate::database::schema::api_keys::dsl::*;
+    use crate::database::schema::api_keys::dsl::{api_keys, api_key_lookup_hash};
         use crate::models::ApiKey as ApiKeyModel;
         use diesel::prelude::*;
 
@@ -1179,7 +1438,7 @@ impl AppState {
                 .load(&mut conn)?;
 
             // try to find a verifying match
-            for cand in candidates.iter_mut() {
+            for cand in &mut candidates {
                 if cand.verify_key(&raw).unwrap_or(false) {
                     // compute new lookup and persist
                     let new_lookup = ApiKeyModel::lookup_hash(&raw);
@@ -1196,27 +1455,31 @@ impl AppState {
 
     // --- Admin-specific DB helpers (to avoid direct Diesel in handlers) ---
     #[cfg(feature = "database")]
+    /// 管理者用: 最近の投稿一覧を取得します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得やクエリ実行に失敗した場合、エラーを返します。
     pub async fn db_admin_list_recent_posts(
         &self,
         limit: i64,
     ) -> crate::Result<Vec<crate::utils::common_types::PostSummary>> {
         use diesel::prelude::*;
+        #[derive(diesel::QueryableByName)]
+        struct Row {
+            #[diesel(sql_type = diesel::sql_types::Uuid)]
+            id: uuid::Uuid,
+            #[diesel(sql_type = diesel::sql_types::Text)]
+            title: String,
+            #[diesel(sql_type = diesel::sql_types::Uuid)]
+            author_id: uuid::Uuid,
+            #[diesel(sql_type = diesel::sql_types::Text)]
+            status: String,
+            #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+            created_at: chrono::DateTime<chrono::Utc>,
+        }
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
-
-            #[derive(diesel::QueryableByName)]
-            struct Row {
-                #[diesel(sql_type = diesel::sql_types::Uuid)]
-                id: uuid::Uuid,
-                #[diesel(sql_type = diesel::sql_types::Text)]
-                title: String,
-                #[diesel(sql_type = diesel::sql_types::Uuid)]
-                author_id: uuid::Uuid,
-                #[diesel(sql_type = diesel::sql_types::Text)]
-                status: String,
-                #[diesel(sql_type = diesel::sql_types::Timestamptz)]
-                created_at: chrono::DateTime<chrono::Utc>,
-            }
 
             let rows: Vec<Row> = diesel::sql_query(
                 "SELECT id, title, author_id, status, created_at FROM posts ORDER BY created_at DESC LIMIT $1",
@@ -1241,10 +1504,15 @@ impl AppState {
 
     // --- API Key maintenance helpers (legacy lookup_hash backfill visibility/ops) ---
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// lookup ハッシュが未設定の API キー一覧を返します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続や取得クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_list_api_keys_missing_lookup(
         &self,
     ) -> crate::Result<Vec<crate::models::ApiKey>> {
-        use crate::database::schema::api_keys::dsl::*;
+        use crate::database::schema::api_keys::dsl::{api_keys, api_key_lookup_hash};
         use diesel::prelude::*;
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
@@ -1256,11 +1524,16 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// lookup ハッシュ未設定の API キーを一括で失効させます。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続や更新クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_expire_api_keys_missing_lookup(
         &self,
         now: chrono::DateTime<chrono::Utc>,
     ) -> crate::Result<usize> {
-        use crate::database::schema::api_keys::dsl::*;
+        use crate::database::schema::api_keys::dsl::{api_keys, api_key_lookup_hash, expires_at};
         use diesel::prelude::*;
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
@@ -1273,6 +1546,11 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// 管理者用: 指定投稿を削除します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や削除クエリの実行に失敗、または該当投稿が存在しない場合にエラーを返します。
     pub async fn db_admin_delete_post(&self, post_id: uuid::Uuid) -> crate::Result<()> {
         use crate::database::schema::posts::dsl as posts_dsl;
         use diesel::prelude::*;
@@ -1288,6 +1566,11 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// 管理者用: ユーザー数を返します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や集計クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_admin_users_count(&self) -> crate::Result<i64> {
         use crate::database::schema::users::dsl as users_dsl;
         use diesel::prelude::*;
@@ -1299,6 +1582,11 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// 管理者用: 投稿数を返します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や集計クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_admin_posts_count(&self) -> crate::Result<i64> {
         use crate::database::schema::posts::dsl as posts_dsl;
         use diesel::prelude::*;
@@ -1310,6 +1598,11 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// 管理者用: admin ユーザーを検索します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や検索クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_admin_find_admin_user(&self) -> crate::Result<Option<crate::models::User>> {
         use crate::database::schema::users::dsl as users_dsl;
         use diesel::prelude::*;
@@ -1324,6 +1617,10 @@ impl AppState {
     }
 
     /// Execute a raw SQL statement and return affected rows
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や SQL 実行に失敗した場合にエラーを返します。
     #[cfg(feature = "database")]
     pub async fn db_execute_sql(&self, sql: &str) -> crate::Result<usize> {
         use diesel::prelude::*;
@@ -1335,7 +1632,11 @@ impl AppState {
         })
     }
 
-    /// Fetch applied migration versions from schema_migrations or __diesel_schema_migrations
+    /// Fetch applied migration versions from `schema_migrations` or `__diesel_schema_migrations`
+    ///
+    /// # Errors
+    ///
+    /// データベース接続やクエリ実行/フォールバック時の処理に失敗した場合にエラーを返します。
     #[cfg(feature = "database")]
     pub async fn db_fetch_applied_migrations(&self) -> crate::Result<Vec<String>> {
         use diesel::prelude::*;
@@ -1361,7 +1662,11 @@ impl AppState {
         })
     }
 
-    /// Ensure schema_migrations exists and copy rows from legacy table
+    /// Ensure `schema_migrations` exists and copy rows from legacy table
+    ///
+    /// # Errors
+    ///
+    /// SQL 実行に失敗した場合にエラーを返します。
     #[cfg(feature = "database")]
     pub async fn db_ensure_schema_migrations_compat(&self) -> crate::Result<()> {
         let create_sql = "CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());";
@@ -1373,6 +1678,11 @@ impl AppState {
 
     // --- Diesel migrations helpers to avoid direct conn in bins ---
     #[cfg(feature = "database")]
+    /// 保留中のマイグレーションを適用します。
+    ///
+    /// # Errors
+    ///
+    /// DB 接続の取得やマイグレーション適用処理に失敗した場合にエラーを返します。
     pub async fn db_run_pending_migrations(
         &self,
         migrations: diesel_migrations::EmbeddedMigrations,
@@ -1387,6 +1697,11 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// 直前のマイグレーションをロールバックします。
+    ///
+    /// # Errors
+    ///
+    /// DB 接続の取得やロールバック処理に失敗した場合にエラーを返します。
     pub async fn db_revert_last_migration(
         &self,
         migrations: diesel_migrations::EmbeddedMigrations,
@@ -1401,6 +1716,11 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// 保留中のマイグレーション名の一覧を返します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得やマイグレーション情報の取得に失敗した場合、エラーを返します。
     pub async fn db_list_pending_migrations(
         &self,
         migrations: diesel_migrations::EmbeddedMigrations,

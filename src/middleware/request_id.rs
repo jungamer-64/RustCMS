@@ -8,7 +8,8 @@ use uuid::Uuid;
 pub struct RequestIdLayer;
 
 impl RequestIdLayer {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -57,7 +58,7 @@ where
             .unwrap_or_else(|_| HeaderValue::from_static("unknown"));
         request
             .headers_mut()
-            .insert("X-Request-ID", header_value.clone());
+            .insert("X-Request-ID", header_value);
 
         let mut service = self.service.clone();
         Box::pin(async move {

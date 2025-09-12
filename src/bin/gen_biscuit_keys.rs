@@ -25,7 +25,7 @@ fn parse_version(name: &str) -> Option<u32> {
     None
 }
 
-fn next_version(dir: &Path) -> Option<u32> {
+fn next_version(dir: &Path) -> u32 {
     let mut max_v: u32 = 0;
     if dir.exists() && let Ok(read) = fs::read_dir(dir) {
         for entry in read.flatten() {
@@ -35,7 +35,7 @@ fn next_version(dir: &Path) -> Option<u32> {
             }
         }
     }
-    Some(max_v + 1)
+    max_v + 1
 }
 
 // replaced by utils::hash::sha256_hex
@@ -59,9 +59,8 @@ fn update_manifest(dir: &Path, version: u32, priv_fp: &str, pub_fp: &str) {
     if let Ok(json) = serde_json::to_string_pretty(&manifest) {
         if let Err(e) = fs::write(&manifest_path, json) {
             eprintln!(
-                "Failed to write manifest {}: {}",
+                "Failed to write manifest {}: {e}",
                 manifest_path.display(),
-                e
             );
         } else {
             println!("Updated manifest at {}", manifest_path.display());
@@ -77,7 +76,10 @@ fn prune_versions(dir: &Path, keep: usize) {
     if let Ok(read) = fs::read_dir(dir) {
         for entry in read.flatten() {
             if let Some(name) = entry.file_name().to_str()
-                && name.starts_with("biscuit_private_v") && name.ends_with(".b64")
+                && name.starts_with("biscuit_private_v")
+                && std::path::Path::new(name)
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("b64"))
                 && let Some(v) = parse_version(name)
             {
                 versions.push(v);
@@ -90,15 +92,15 @@ fn prune_versions(dir: &Path, keep: usize) {
     versions.sort_unstable(); // ascending
     let to_remove: Vec<u32> = versions
         .iter()
-        .cloned()
+        .copied()
         .take(versions.len() - keep)
         .collect();
     for v in to_remove {
         for prefix in ["biscuit_private_v", "biscuit_public_v"] {
-            let path = dir.join(format!("{}{}.b64", prefix, v));
+            let path = dir.join(format!("{prefix}{v}.b64"));
             if path.exists() {
                 if let Err(e) = fs::remove_file(&path) {
-                    eprintln!("Failed to remove old version {}: {}", path.display(), e);
+                    eprintln!("Failed to remove old version {}: {e}", path.display());
                 } else {
                     println!("Pruned old version file {}", path.display());
                 }
@@ -111,7 +113,7 @@ fn write_file_if_allowed(path: &Path, data: &str, force: bool) -> std::io::Resul
     if path.exists() && !force {
         return Err(std::io::Error::new(
             std::io::ErrorKind::AlreadyExists,
-            format!("{} already exists", path.display()),
+                format!("{} already exists", path.display()),
         ));
     }
     let mut f = fs::File::create(path)?;
@@ -121,55 +123,50 @@ fn write_file_if_allowed(path: &Path, data: &str, force: bool) -> std::io::Resul
 
 fn append_env_file(path: &Path, priv_b64: &str, pub_b64: &str, force: bool) -> std::io::Result<()> {
     // If file doesn't exist, create and write header
-    let mut create = false;
-    if !path.exists() {
-        create = true;
-    }
+    let create = !path.exists();
 
     if create {
         let mut f = fs::File::create(path)?;
         writeln!(f, "# Generated biscuit keys")?;
-        writeln!(f, "BISCUIT_PRIVATE_KEY_B64={}", priv_b64)?;
-        writeln!(f, "BISCUIT_PUBLIC_KEY_B64={}", pub_b64)?;
-        return Ok(());
-    }
-
-    // If exists, check if it already contains the variables
-    let content = fs::read_to_string(path)?;
-    if content.contains("BISCUIT_PRIVATE_KEY_B64=") || content.contains("BISCUIT_PUBLIC_KEY_B64=") {
-        if !force {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::AlreadyExists,
-                format!("{} already contains biscuit entries", path.display()),
-            ));
-        }
-        // Remove existing lines and append fresh ones
-        let filtered: Vec<&str> = content
-            .lines()
-            .filter(|l| {
-                !l.starts_with("BISCUIT_PRIVATE_KEY_B64=")
-                    && !l.starts_with("BISCUIT_PUBLIC_KEY_B64=")
-            })
-            .collect();
-        let mut f = fs::File::create(path)?;
-        for line in filtered {
-            writeln!(f, "{}", line)?;
-        }
-        writeln!(f, "BISCUIT_PRIVATE_KEY_B64={}", priv_b64)?;
-        writeln!(f, "BISCUIT_PUBLIC_KEY_B64={}", pub_b64)?;
-        Ok(())
+        writeln!(f, "BISCUIT_PRIVATE_KEY_B64={priv_b64}")?;
+        writeln!(f, "BISCUIT_PUBLIC_KEY_B64={pub_b64}")?;
     } else {
-        let mut f = fs::OpenOptions::new().append(true).open(path)?;
-        writeln!(f, "\n# Generated biscuit keys")?;
-        writeln!(f, "BISCUIT_PRIVATE_KEY_B64={}", priv_b64)?;
-        writeln!(f, "BISCUIT_PUBLIC_KEY_B64={}", pub_b64)?;
-        Ok(())
+        // If exists, check if it already contains the variables
+        let content = fs::read_to_string(path)?;
+        if content.contains("BISCUIT_PRIVATE_KEY_B64=") || content.contains("BISCUIT_PUBLIC_KEY_B64=") {
+            if !force {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    format!("{} already contains biscuit entries", path.display()),
+                ));
+            }
+            // Remove existing lines and append fresh ones
+            let filtered: Vec<&str> = content
+                .lines()
+                .filter(|l| {
+                    !l.starts_with("BISCUIT_PRIVATE_KEY_B64=")
+                        && !l.starts_with("BISCUIT_PUBLIC_KEY_B64=")
+                })
+                .collect();
+            let mut f = fs::File::create(path)?;
+            for line in filtered {
+                writeln!(f, "{line}")?;
+            }
+            writeln!(f, "BISCUIT_PRIVATE_KEY_B64={priv_b64}")?;
+            writeln!(f, "BISCUIT_PUBLIC_KEY_B64={pub_b64}")?;
+        } else {
+            let mut f = fs::OpenOptions::new().append(true).open(path)?;
+            writeln!(f, "\n# Generated biscuit keys")?;
+            writeln!(f, "BISCUIT_PRIVATE_KEY_B64={priv_b64}")?;
+            writeln!(f, "BISCUIT_PUBLIC_KEY_B64={pub_b64}")?;
+        }
     }
+    Ok(())
 }
 
 fn report_write_file_result(path: &Path, res: std::io::Result<()>, label: &str, force: bool) {
     match res {
-        Ok(_) => println!("Wrote {} to {}", label, path.display()),
+        Ok(()) => println!("Wrote {label} to {}", path.display()),
         Err(e) => {
             if e.kind() == std::io::ErrorKind::AlreadyExists && !force {
                 eprintln!(
@@ -178,7 +175,7 @@ fn report_write_file_result(path: &Path, res: std::io::Result<()>, label: &str, 
                     path.display()
                 );
             } else {
-                eprintln!("Failed to write {}: {}", label, e);
+                eprintln!("Failed to write {label}: {e}");
             }
         }
     }
@@ -186,22 +183,21 @@ fn report_write_file_result(path: &Path, res: std::io::Result<()>, label: &str, 
 
 fn report_env_result(envfile: &str, res: std::io::Result<()>, force: bool) {
     match res {
-        Ok(_) => println!("Written keys into {}", envfile),
+        Ok(()) => println!("Written keys into {envfile}"),
         Err(e) => {
             if e.kind() == std::io::ErrorKind::AlreadyExists && !force {
                 eprintln!(
-                    "{} already contains biscuit entries. Use --force to overwrite or choose another env file.",
-                    envfile
+                    "{envfile} already contains biscuit entries. Use --force to overwrite or choose another env file."
                 );
             } else {
-                eprintln!("Failed to write env file {}: {}", envfile, e);
+                eprintln!("Failed to write env file {envfile}: {e}");
             }
         }
     }
 }
 
 // --- DRY helpers for output flows ---
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 fn handle_files_output(
     dir: &str,
     versioned: bool,
@@ -218,15 +214,15 @@ fn handle_files_output(
 ) {
     let path = Path::new(dir);
     if let Err(e) = fs::create_dir_all(path) {
-        eprintln!("Failed to create out-dir {}: {}", dir, e);
+        eprintln!("Failed to create out-dir {dir}: {e}");
         std::process::exit(1);
     }
 
     let (priv_path, pub_path) = if versioned {
-        let v = next_version(path).unwrap_or(1);
+    let v = next_version(path);
         (
-            path.join(format!("biscuit_private_v{}.b64", v)),
-            path.join(format!("biscuit_public_v{}.b64", v)),
+            path.join(format!("biscuit_private_v{v}.b64")),
+            path.join(format!("biscuit_public_v{v}.b64")),
         )
     } else {
         (
@@ -242,7 +238,7 @@ fn handle_files_output(
         max_backups,
         Some(backup_compress),
     ) {
-        eprintln!("Backup failed: {}", e);
+        eprintln!("Backup failed: {e}");
     }
     if let Err(e) = maybe_backup_file(
         &pub_path,
@@ -251,7 +247,7 @@ fn handle_files_output(
         max_backups,
         Some(backup_compress),
     ) {
-        eprintln!("Backup failed: {}", e);
+        eprintln!("Backup failed: {e}");
     }
 
     report_write_file_result(
@@ -271,18 +267,12 @@ fn handle_files_output(
         let latest_priv = path.join("biscuit_private.b64");
         let latest_pub = path.join("biscuit_public.b64");
         if let Err(e) = fs::write(&latest_priv, priv_b64) {
-            eprintln!(
-                "Failed to update latest alias {}: {}",
-                latest_priv.display(),
-                e
-            );
+            let latest_priv_disp = latest_priv.display().to_string();
+            eprintln!("Failed to update latest alias {latest_priv_disp}: {e}");
         }
         if let Err(e) = fs::write(&latest_pub, pub_b64) {
-            eprintln!(
-                "Failed to update latest alias {}: {}",
-                latest_pub.display(),
-                e
-            );
+            let latest_pub_disp = latest_pub.display().to_string();
+            eprintln!("Failed to update latest alias {latest_pub_disp}: {e}");
         }
     }
 
@@ -292,8 +282,7 @@ fn handle_files_output(
         let priv_fp = hash::sha256_hex(priv_b64.as_bytes());
         let pub_fp = hash::sha256_hex(pub_b64.as_bytes());
         println!(
-            "private_fingerprint_sha256={} public_fingerprint_sha256={}",
-            priv_fp, pub_fp
+            "private_fingerprint_sha256={priv_fp} public_fingerprint_sha256={pub_fp}"
         );
         if !no_manifest {
             update_manifest(path, v, &priv_fp, &pub_fp);
@@ -317,7 +306,7 @@ fn handle_env_output(
 ) {
     let path = Path::new(envfile);
     if let Err(e) = maybe_backup_env(path, backup, backup_dir, max_backups, Some(backup_compress)) {
-        eprintln!("Backup failed: {}", e);
+        eprintln!("Backup failed: {e}");
     }
     report_env_result(
         envfile,
@@ -330,15 +319,15 @@ fn timestamp() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let start = SystemTime::now();
     let since = start.duration_since(UNIX_EPOCH).unwrap_or_default();
-    format!("{}", since.as_secs())
+    since.as_secs().to_string()
 }
 
 fn maybe_backup_file(
     path: &Path,
     backup: bool,
     backup_dir: Option<&Path>,
-    _max_backups: Option<usize>,
-    _compress: Option<bool>,
+    max_backups: Option<usize>,
+    compress_opt: Option<bool>,
 ) -> std::io::Result<()> {
     if !backup || !path.exists() {
         return Ok(());
@@ -347,9 +336,8 @@ fn maybe_backup_file(
     let ts = timestamp();
     let file_name = path
         .file_name()
-        .map(|s| s.to_string_lossy())
-        .unwrap_or_else(|| "backup".into());
-    let bak_name = format!("{}.bak.{}", file_name, ts);
+        .map_or_else(|| "backup".into(), |s| s.to_string_lossy());
+    let bak_name = format!("{file_name}.bak.{ts}");
     let bak = if let Some(dir) = backup_dir {
         dir.join(bak_name)
     } else {
@@ -359,37 +347,30 @@ fn maybe_backup_file(
     if let Some(parent) = bak.parent()
         && let Err(e) = fs::create_dir_all(parent)
     {
-        eprintln!("Failed to create backup dir {}: {}", parent.display(), e);
+    eprintln!("Failed to create backup dir {}: {e}", parent.display());
     }
 
     let post_backup = |bak_path: &Path| {
-        if let Some(n) = _max_backups
+        if let Some(n) = max_backups
             && n > 0
             && let Some(parent) = bak_path.parent()
             && let Err(e) = enforce_backup_retention(parent, &file_name, n)
         {
-            eprintln!("Failed to enforce backup retention for {}: {}", file_name, e);
+            eprintln!("Failed to enforce backup retention for {file_name}: {e}");
         }
-        if let Some(true) = _compress
-            && let Err(e) = compress_file(bak_path)
-        {
+        if compress_opt == Some(true) && let Err(e) = compress_file(bak_path) {
             eprintln!("Failed to compress backup {}: {}", bak_path.display(), e);
         }
     };
 
-    match fs::rename(path, &bak) {
-        Ok(()) => {
-            println!("Backed up {} -> {}", path.display(), bak.display());
-            post_backup(&bak);
-            Ok(())
-        }
-        Err(_) => {
-            fs::copy(path, &bak)?;
-            println!("Backed up (copied) {} -> {}", path.display(), bak.display());
-            post_backup(&bak);
-            Ok(())
-        }
+    if matches!(fs::rename(path, &bak), Ok(())) {
+        println!("Backed up {} -> {}", path.display(), bak.display());
+    } else {
+        fs::copy(path, &bak)?;
+        println!("Backed up (copied) {} -> {}", path.display(), bak.display());
     }
+    post_backup(&bak);
+    Ok(())
 }
 
 fn compress_file(path: &Path) -> std::io::Result<()> {
@@ -398,7 +379,7 @@ fn compress_file(path: &Path) -> std::io::Result<()> {
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("backup");
-    let gz_name = format!("{}.gz", file_name);
+    let gz_name = format!("{file_name}.gz");
     let gz_path = path.with_file_name(gz_name);
     let f = fs::File::create(&gz_path)?;
     let mut encoder = GzEncoder::new(f, Compression::default());
@@ -452,7 +433,7 @@ fn enforce_backup_retention(dir: &Path, file_name: &str, keep: usize) -> std::io
     // Keep the first `keep` entries, remove the rest
     for (_ts, path) in entries.into_iter().skip(keep) {
         if let Err(e) = fs::remove_file(&path) {
-            eprintln!("Failed to remove old backup {}: {}", path.display(), e);
+            eprintln!("Failed to remove old backup {}: {e}", path.display());
         } else {
             println!("Removed old backup {}", path.display());
         }
@@ -468,12 +449,13 @@ fn enforce_backup_retention(dir: &Path, file_name: &str, keep: usize) -> std::io
     version,
     about = "Generate biscuit keypair (base64) and optionally write to files/.env"
 )]
+#[allow(clippy::struct_excessive_bools)]
 struct Args {
-    /// Write biscuit_private.b64 and biscuit_public.b64 into <dir>
+    /// Write `biscuit_private.b64` and `biscuit_public.b64` into <dir>
     #[arg(long, value_name = "DIR")]
     out_dir: Option<PathBuf>,
 
-    /// Append BISCUIT_PRIVATE_KEY_B64 / BISCUIT_PUBLIC_KEY_B64 to <file> (default: none)
+    /// Append `BISCUIT_PRIVATE_KEY_B64` / `BISCUIT_PUBLIC_KEY_B64` to <file> (default: none)
     #[arg(long, value_name = "FILE")]
     env_file: Option<PathBuf>,
 
@@ -498,7 +480,7 @@ struct Args {
     #[arg(long)]
     backup_compress: bool,
 
-    /// Save as versioned files (biscuit_private_vN.b64) and keep latest unversioned copy
+    /// Save as versioned files (`biscuit_private_vN.b64`) and keep latest unversioned copy
     #[arg(long)]
     versioned: bool,
 
@@ -506,7 +488,7 @@ struct Args {
     #[arg(long)]
     list: bool,
 
-    /// When used with --versioned, also write/update unversioned biscuit_private.b64 / biscuit_public.b64 as alias to latest
+    /// When used with `--versioned`, also write/update unversioned `biscuit_private.b64` / `biscuit_public.b64` as alias to latest
     #[arg(long)]
     latest_alias: bool,
 
@@ -527,16 +509,17 @@ enum OutputFormat {
     Stdout,
 }
 
+#[allow(clippy::too_many_lines)]
 fn main() {
     let args = Args::parse();
     let out_dir: Option<String> = args
         .out_dir
         .as_ref()
-        .map(|p| p.to_string_lossy().to_string());
+        .map(|p| p.to_string_lossy().into_owned());
     let env_file: Option<String> = args
         .env_file
         .as_ref()
-        .map(|p| p.to_string_lossy().to_string());
+        .map(|p| p.to_string_lossy().into_owned());
     let format = args.format.map(|f| match f {
         OutputFormat::Files => "files".to_string(),
         OutputFormat::Env => "env".to_string(),
@@ -553,7 +536,7 @@ fn main() {
             Ok(read) => {
                 let mut versions: Vec<(u32, String)> = Vec::new();
                 for entry in read.flatten() {
-                    let name = entry.file_name().to_string_lossy().to_string();
+                    let name = entry.file_name().to_string_lossy().into_owned();
                     if let Some(v) = parse_version(&name) {
                         versions.push((v, name));
                     }
@@ -564,11 +547,11 @@ fn main() {
                     versions.sort_by_key(|x| x.0);
                     println!("Found versions (oldest -> newest):");
                     for (v, name) in versions {
-                        println!("v{} => {}", v, name);
+                        println!("v{v} => {name}");
                     }
                 }
             }
-            Err(e) => eprintln!("Cannot read directory {}: {}", path.display(), e),
+            Err(e) => eprintln!("Cannot read directory {}: {e}", path.display()),
         }
         return;
     }
@@ -578,8 +561,8 @@ fn main() {
     let pub_b64 = STANDARD.encode(kp.public().to_bytes());
 
     println!("# Generated biscuit keypair (base64)");
-    println!("BISCUIT_PRIVATE_KEY_B64={}", priv_b64);
-    println!("BISCUIT_PUBLIC_KEY_B64={}", pub_b64);
+    println!("BISCUIT_PRIVATE_KEY_B64={priv_b64}");
+    println!("BISCUIT_PUBLIC_KEY_B64={pub_b64}");
 
     // Decide outputs based on explicit format or provided targets
     let format = format.map(|s| s.to_ascii_lowercase());
@@ -602,9 +585,9 @@ fn main() {
                 &pub_b64,
             );
         } else if f == "env" {
-            let envfile = env_file.as_deref().unwrap_or(".env");
+            let env_path = env_file.as_deref().unwrap_or(".env");
             handle_env_output(
-                envfile,
+                env_path,
                 backup,
                 args.backup_dir.as_deref(),
                 args.max_backups,
@@ -615,7 +598,7 @@ fn main() {
             );
         } else if f == "both" {
             let dir = out_dir.as_deref().unwrap_or("keys");
-            let envfile = env_file.as_deref().unwrap_or(".env");
+            let env_path = env_file.as_deref().unwrap_or(".env");
             handle_files_output(
                 dir,
                 args.versioned,
@@ -631,7 +614,7 @@ fn main() {
                 &pub_b64,
             );
             handle_env_output(
-                envfile,
+                env_path,
                 backup,
                 args.backup_dir.as_deref(),
                 args.max_backups,

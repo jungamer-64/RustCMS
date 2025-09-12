@@ -1,9 +1,9 @@
-//! Backfill script for api_key_lookup_hash
+//! Backfill script for `api_key_lookup_hash`
 //!
 //! Usage (with features):
-//!   cargo run --features "database auth" --bin backfill_api_key_lookup
+//!   cargo run --features "database auth" --bin `backfill_api_key_lookup`
 //!
-//! It scans api_keys rows where api_key_lookup_hash is empty string (""),
+//! It scans `api_keys` rows where `api_key_lookup_hash` is empty string (""),
 //! re-computes deterministic lookup hash from the *raw key cannot be recovered*.
 //! Because raw keys are not stored, true recomputation is impossible. This tool
 //! instead flags such rows so operators can rotate them. Optionally it can mark
@@ -11,7 +11,7 @@
 //!
 //! Strategy:
 //! 1. Find rows with empty lookup hash.
-//! 2. If --expire is passed, set expires_at = now() for those rows.
+//! 2. If --expire is passed, set `expires_at` = `now()` for those rows.
 //! 3. Output a JSON report listing affected key IDs and suggested action.
 //!
 //! Rationale: we cannot derive lookup hash post-hoc without the raw key. The
@@ -73,11 +73,14 @@ async fn main() -> anyhow::Result<()> {
         let rows: Vec<cms_backend::models::ApiKey> =
             state.db_list_api_keys_missing_lookup().await?;
         let scanned_count = rows.len();
-        let mut expired_marked = 0usize;
-        if args.expire && !args.dry_run {
+        let expired_marked = if args.expire && !args.dry_run {
             let now = Utc::now();
-            expired_marked = state.db_expire_api_keys_missing_lookup(now).await?;
-        }
+            state
+                .db_expire_api_keys_missing_lookup(now)
+                .await?
+        } else {
+            0usize
+        };
 
         let report = Report {
             scanned: scanned_count,

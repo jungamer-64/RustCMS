@@ -27,6 +27,14 @@ pub const HEADER_NAME: &str = "X-API-Key";
 // This module focuses only on auth flow + metric emission.
 
 #[allow(dead_code)]
+/// API キーを用いた認証レイヤ。
+///
+/// # Errors
+/// 次の条件でエラーを返します:
+/// - 認証ヘッダが欠落/不正な場合
+/// - API キーが不正・期限切れの場合
+/// - レートリミットによりブロックされた場合
+/// - 内部状態が不足している場合（AppState 不在など）
 pub async fn api_key_auth_layer(
     mut req: Request<Body>,
     next: Next,
@@ -43,19 +51,13 @@ pub async fn api_key_auth_layer(
         counter!("api_key_auth_attempts_total").increment(1);
     }
     // 1. ヘッダ取得
-    let header_val = match req.headers().get(HEADER_NAME) {
-        Some(v) => v,
-        None => {
-            record_fail("missing_header");
-            return Err((StatusCode::UNAUTHORIZED, "API key missing"));
-        }
+    let Some(header_val) = req.headers().get(HEADER_NAME) else {
+        record_fail("missing_header");
+        return Err((StatusCode::UNAUTHORIZED, "API key missing"));
     };
-    let raw = match header_val.to_str() {
-        Ok(s) => s,
-        Err(_) => {
-            record_fail("invalid_header_encoding");
-            return Err((StatusCode::BAD_REQUEST, "Invalid header"));
-        }
+    let Ok(raw) = header_val.to_str() else {
+        record_fail("invalid_header_encoding");
+        return Err((StatusCode::BAD_REQUEST, "Invalid header"));
     };
 
     if raw.len() < 10 || !raw.starts_with("ak_") {
@@ -78,7 +80,7 @@ pub async fn api_key_auth_layer(
         {
             counter!("api_key_auth_failure_total", "reason" => "rate_limited").increment(1);
             gauge!("api_key_rate_limit_tracked_keys")
-                .set(API_KEY_FAILURE_LIMITER.tracked_len() as f64);
+                .set(usize_to_f64(API_KEY_FAILURE_LIMITER.tracked_len()));
         }
         return Err((
             StatusCode::TOO_MANY_REQUESTS,
@@ -87,12 +89,9 @@ pub async fn api_key_auth_layer(
     }
     let api_key = match state.db_get_api_key_by_lookup_hash(&lookup_hash).await {
         Ok(k) => k,
-        Err(_) => match legacy_fallback_fetch(&state, raw).await {
-            Some(k) => k,
-            None => {
-                record_fail("not_found");
-                return Err((StatusCode::UNAUTHORIZED, "Invalid API key"));
-            }
+        Err(_) => if let Some(k) = legacy_fallback_fetch(&state, raw).await { k } else {
+            record_fail("not_found");
+            return Err((StatusCode::UNAUTHORIZED, "Invalid API key"));
         },
     };
 
@@ -121,7 +120,7 @@ pub async fn api_key_auth_layer(
         permissions: api_key.get_permissions(),
     };
     #[cfg(feature = "monitoring")]
-    gauge!("api_key_rate_limit_tracked_keys").set(API_KEY_FAILURE_LIMITER.tracked_len() as f64);
+    gauge!("api_key_rate_limit_tracked_keys").set(usize_to_f64(API_KEY_FAILURE_LIMITER.tracked_len()));
     #[cfg(feature = "monitoring")]
     counter!("api_key_auth_success_total").increment(1);
     debug!(api_key_id=%info.api_key_id, user_id=%info.user_id, perms=?info.permissions, "API key authenticated");
@@ -129,6 +128,10 @@ pub async fn api_key_auth_layer(
 
     Ok(next.run(req).await)
 }
+
+#[inline]
+#[allow(clippy::cast_precision_loss)]
+const fn usize_to_f64(n: usize) -> f64 { n as f64 }
 
 #[cfg(all(feature = "database", feature = "auth"))]
 async fn legacy_fallback_fetch(

@@ -113,7 +113,7 @@ mod api_types_tests {
         // Build empty ValidationErrors and inject a fake field error through serde roundtrip (simplified)
         let ve = ValidationErrors::new();
         let error = AppError::Validation(ve);
-        let msg = format!("{}", error);
+    let msg = format!("{error}");
         assert!(msg.contains("Validation error"));
     }
 }

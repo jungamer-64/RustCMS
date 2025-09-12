@@ -1,4 +1,4 @@
-//! Focused snapshot of only the AuthSuccessResponse schema to reduce diff noise when unrelated
+//! Focused snapshot of only the `AuthSuccessResponse` schema to reduce diff noise when unrelated
 //! endpoints evolve. Guards structural stability of unified auth response.
 use cms_backend::openapi::ApiDoc;
 use utoipa::OpenApi;

@@ -38,7 +38,7 @@ async fn auth_register_login_refresh_and_metrics() {
 
     // Randomize credentials to avoid unique constraint collisions
     let uid = uuid::Uuid::new_v4();
-    let email = format!("test+{}@example.com", uid);
+    let email = format!("test+{uid}@example.com");
     let username = format!("user_{}", uid.simple());
     let password = "P@ssw0rd!"; // strength not critical here
 

@@ -19,6 +19,7 @@ use std::env;
 #[deprecated(
     note = "Use Biscuit authentication with admin permission checking instead (will be removed in 3.0.0)"
 )]
+#[must_use]
 pub fn check_admin_token(req_token: &str) -> bool {
     runtime_admin_token_warn_once();
     env::var("ADMIN_TOKEN")
@@ -35,6 +36,7 @@ pub fn check_admin_token(req_token: &str) -> bool {
 #[deprecated(
     note = "Use Biscuit authentication with admin permission checking instead (will be removed in 3.0.0)"
 )]
+#[must_use]
 pub fn get_admin_token() -> Option<String> {
     runtime_admin_token_warn_once();
     env::var("ADMIN_TOKEN").ok()
@@ -121,7 +123,7 @@ mod tests {
 
         // Test with empty token
     unsafe { env::set_var("ADMIN_TOKEN", ""); }
-        assert_eq!(get_admin_token(), Some("".to_string()));
+    assert_eq!(get_admin_token(), Some(String::new()));
 
         // Restore original value
         match original {

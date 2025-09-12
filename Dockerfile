@@ -32,6 +32,7 @@ ARG BUILD_EXTRA_BINS=""           # space-separated additional bin names (option
 ARG TARGET=""                     # e.g. x86_64-unknown-linux-gnu (empty => default toolchain target)
 ARG USE_CHEF="true"               # set to false to disable cargo-chef cook optimization
 ARG PARALLEL_JOBS=""             # override cargo build -j; empty:auto
+ARG RUSTFLAGS="-C debuginfo=0 -C strip=symbols"  # allow override via build-arg
 
 WORKDIR /app
 
@@ -52,7 +53,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ENV CARGO_HOME=/usr/local/cargo \
     CARGO_TARGET_DIR=/usr/local/cargo/target \
     # Favor smaller code (already optimized via profile) and strip symbols (defensive)
-    RUSTFLAGS="-C debuginfo=0 -C strip=symbols" \
+    RUSTFLAGS=${RUSTFLAGS} \
     # Make git fetch deterministic and sometimes faster inside certain CI proxies
     CARGO_NET_GIT_FETCH_WITH_CLI=true \
     # Reproducible builds (override at build time if needed)

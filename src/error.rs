@@ -37,27 +37,27 @@ impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             #[cfg(feature = "database")]
-            AppError::Database(err) => write!(f, "Database error: {}", err),
+            Self::Database(err) => write!(f, "Database error: {err}"),
             #[cfg(feature = "cache")]
-            AppError::Redis(err) => write!(f, "Cache error: {}", err),
-            AppError::Validation(err) => write!(f, "Validation error: {}", err),
-            AppError::Authentication(msg) => write!(f, "Authentication error: {}", msg),
-            AppError::Authorization(msg) => write!(f, "Authorization error: {}", msg),
-            AppError::NotFound(msg) => write!(f, "Not found: {}", msg),
-            AppError::Conflict(msg) => write!(f, "Conflict: {}", msg),
-            AppError::RateLimit(msg) => write!(f, "Rate limit exceeded: {}", msg),
-            AppError::Internal(msg) => write!(f, "Internal error: {}", msg),
-            AppError::BadRequest(msg) => write!(f, "Bad request: {}", msg),
+            Self::Redis(err) => write!(f, "Cache error: {err}"),
+            Self::Validation(err) => write!(f, "Validation error: {err}"),
+            Self::Authentication(msg) => write!(f, "Authentication error: {msg}"),
+            Self::Authorization(msg) => write!(f, "Authorization error: {msg}"),
+            Self::NotFound(msg) => write!(f, "Not found: {msg}"),
+            Self::Conflict(msg) => write!(f, "Conflict: {msg}"),
+            Self::RateLimit(msg) => write!(f, "Rate limit exceeded: {msg}"),
+            Self::Internal(msg) => write!(f, "Internal error: {msg}"),
+            Self::BadRequest(msg) => write!(f, "Bad request: {msg}"),
             #[cfg(feature = "auth")]
-            AppError::Argon2(err) => write!(f, "Argon2 error: {}", err),
-            AppError::Biscuit(msg) => write!(f, "Biscuit auth error: {}", msg),
-            AppError::Search(msg) => write!(f, "Search error: {}", msg),
-            AppError::Media(msg) => write!(f, "Media error: {}", msg),
-            AppError::Config(msg) => write!(f, "Configuration error: {}", msg),
-            AppError::IO(err) => write!(f, "IO error: {}", err),
-            AppError::Serde(err) => write!(f, "Serialization error: {}", err),
+            Self::Argon2(err) => write!(f, "Argon2 error: {err}"),
+            Self::Biscuit(msg) => write!(f, "Biscuit auth error: {msg}"),
+            Self::Search(msg) => write!(f, "Search error: {msg}"),
+            Self::Media(msg) => write!(f, "Media error: {msg}"),
+            Self::Config(msg) => write!(f, "Configuration error: {msg}"),
+            Self::IO(err) => write!(f, "IO error: {err}"),
+            Self::Serde(err) => write!(f, "Serialization error: {err}"),
             #[cfg(feature = "search")]
-            AppError::Tantivy(err) => write!(f, "Search error: {}", err),
+            Self::Tantivy(err) => write!(f, "Search error: {err}"),
         }
     }
 }
@@ -68,8 +68,8 @@ impl std::error::Error for AppError {}
 impl From<diesel::result::Error> for AppError {
     fn from(err: diesel::result::Error) -> Self {
         match err {
-            diesel::result::Error::NotFound => AppError::NotFound("Resource not found".to_string()),
-            _ => AppError::Database(err),
+            diesel::result::Error::NotFound => Self::NotFound("Resource not found".to_string()),
+            _ => Self::Database(err),
         }
     }
 }
@@ -77,39 +77,39 @@ impl From<diesel::result::Error> for AppError {
 #[cfg(feature = "cache")]
 impl From<redis::RedisError> for AppError {
     fn from(err: redis::RedisError) -> Self {
-        AppError::Redis(err)
+        Self::Redis(err)
     }
 }
 
 #[cfg(feature = "auth")]
 impl From<argon2::Error> for AppError {
     fn from(err: argon2::Error) -> Self {
-        AppError::Argon2(err)
+        Self::Argon2(err)
     }
 }
 
 impl From<ValidationErrors> for AppError {
     fn from(err: ValidationErrors) -> Self {
-        AppError::Validation(err)
+        Self::Validation(err)
     }
 }
 
 impl From<std::io::Error> for AppError {
     fn from(err: std::io::Error) -> Self {
-        AppError::IO(err)
+        Self::IO(err)
     }
 }
 
 impl From<serde_json::Error> for AppError {
     fn from(err: serde_json::Error) -> Self {
-        AppError::Serde(err)
+        Self::Serde(err)
     }
 }
 
 #[cfg(feature = "search")]
 impl From<tantivy::TantivyError> for AppError {
     fn from(err: tantivy::TantivyError) -> Self {
-        AppError::Tantivy(err)
+        Self::Tantivy(err)
     }
 }
 
@@ -121,21 +121,21 @@ impl IntoResponse for AppError {
             Option<Vec<ValidationError>>,
         ) = match &self {
             #[cfg(feature = "database")]
-            AppError::Database(_) => (
+            Self::Database(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Database error occurred",
                 None,
             ),
             #[cfg(feature = "cache")]
-            AppError::Redis(_) => (
+            Self::Redis(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Cache error occurred",
                 None,
             ),
-            AppError::Validation(ve) => {
+            Self::Validation(ve) => {
                 let mut list = Vec::new();
-                for (field, errs) in ve.field_errors().iter() {
-                    for e in errs.iter() {
+                for (field, errs) in ve.field_errors() {
+                    for e in errs {
                         let message = e
                             .message
                             .clone()
@@ -148,40 +148,41 @@ impl IntoResponse for AppError {
                 }
                 (StatusCode::BAD_REQUEST, "Invalid input data", Some(list))
             }
-            AppError::Authentication(msg) => (StatusCode::UNAUTHORIZED, msg.as_str(), None),
-            AppError::Authorization(msg) => (StatusCode::FORBIDDEN, msg.as_str(), None),
-            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.as_str(), None),
-            AppError::Conflict(msg) => (StatusCode::CONFLICT, msg.as_str(), None),
-            AppError::RateLimit(msg) => (StatusCode::TOO_MANY_REQUESTS, msg.as_str(), None),
-            AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str(), None),
-            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.as_str(), None),
+            Self::Authentication(msg) => (StatusCode::UNAUTHORIZED, msg.as_str(), None),
+            Self::Authorization(msg) => (StatusCode::FORBIDDEN, msg.as_str(), None),
+            Self::NotFound(msg) => (StatusCode::NOT_FOUND, msg.as_str(), None),
+            Self::Conflict(msg) => (StatusCode::CONFLICT, msg.as_str(), None),
+            Self::RateLimit(msg) => (StatusCode::TOO_MANY_REQUESTS, msg.as_str(), None),
+            Self::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str(), None),
+            Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.as_str(), None),
             #[cfg(feature = "auth")]
-            AppError::Argon2(_) => (
+            Self::Argon2(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Password hashing error",
                 None,
             ),
-            AppError::Biscuit(msg) => (StatusCode::UNAUTHORIZED, msg.as_str(), None),
-            AppError::Search(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str(), None),
-            AppError::Media(msg) => (StatusCode::BAD_REQUEST, msg.as_str(), None),
-            AppError::Config(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str(), None),
-            AppError::IO(_) => (StatusCode::INTERNAL_SERVER_ERROR, "IO error occurred", None),
-            AppError::Serde(_) => (StatusCode::BAD_REQUEST, "Serialization error", None),
+            Self::Biscuit(msg) => (StatusCode::UNAUTHORIZED, msg.as_str(), None),
+            Self::Search(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str(), None),
+            Self::Media(msg) => (StatusCode::BAD_REQUEST, msg.as_str(), None),
+            Self::Config(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str(), None),
+            Self::IO(_) => (StatusCode::INTERNAL_SERVER_ERROR, "IO error occurred", None),
+            Self::Serde(_) => (StatusCode::BAD_REQUEST, "Serialization error", None),
             #[cfg(feature = "search")]
-            AppError::Tantivy(_) => (
+            Self::Tantivy(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Search service error",
                 None,
             ),
         };
-        let body = if let Some(details) = validation_details {
-            Json(ApiResponse::error_with_validation(
-                error_message.to_string(),
-                details,
-            ))
-        } else {
-            Json(ApiResponse::error(error_message.to_string()))
-        };
+        let body = validation_details.map_or_else(
+            || Json(ApiResponse::error(error_message.to_string())),
+            |details| {
+                Json(ApiResponse::error_with_validation(
+                    error_message.to_string(),
+                    details,
+                ))
+            },
+        );
         (status, body).into_response()
     }
 }

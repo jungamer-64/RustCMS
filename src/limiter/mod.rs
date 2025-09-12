@@ -29,6 +29,7 @@ pub struct FixedWindowLimiter {
 }
 
 impl FixedWindowLimiter {
+    #[must_use]
     pub fn new(max_requests: u32, window_secs: u64) -> Self {
         Self {
             max_requests,
@@ -55,16 +56,19 @@ impl FixedWindowLimiter {
             entry.1 = now;
         }
         entry.0 += 1;
-        entry.0 <= self.max_requests
+        let allowed = entry.0 <= self.max_requests;
+        // drop the lock before returning to tighten guard lifetime
+        drop(map);
+        allowed
     }
 
     pub fn tracked_len(&self) -> usize {
         self.entries.lock().len()
     }
-    pub fn window_secs(&self) -> u64 {
+    pub const fn window_secs(&self) -> u64 {
         self.window.as_secs()
     }
-    pub fn max_requests(&self) -> u32 {
+    pub const fn max_requests(&self) -> u32 {
         self.max_requests
     }
 }
@@ -112,14 +116,15 @@ pub mod adapters {
     use super::{GenericRateLimiter, RateLimitDecision};
     use crate::middleware::rate_limit_backend::get_rate_limiter;
 
-    /// APIキー失敗回数レート制限を GenericRateLimiter に適合させる薄いラッパ。
-    /// 既存 backend は record_failure() 呼び出しでカウンタを +1 し、閾値超過で true を返すため
-    /// check() 内で increment + 判定をまとめて行う。
+    /// APIキー失敗回数レート制限を `GenericRateLimiter` に適合させる薄いラッパ。
+    /// 既存 backend は `record_failure()` 呼び出しでカウンタを +1 し、閾値超過で true を返すため
+    /// `check()` 内で increment + 判定をまとめて行う。
     pub struct ApiKeyFailureLimiterAdapter {
         window_secs: u64,
     }
 
     impl ApiKeyFailureLimiterAdapter {
+        #[must_use]
         pub fn from_env() -> Self {
             let window = std::env::var("API_KEY_FAIL_WINDOW_SECS")
                 .ok()

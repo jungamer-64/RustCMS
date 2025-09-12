@@ -28,22 +28,18 @@ async fn main() -> Result<()> {
 
     // If delete_post provided, attempt deletion and exit
     if let Some(id_str) = args.delete_post {
-        match uuid::Uuid::parse_str(&id_str) {
-            Ok(uuid) => {
-                state.db_admin_delete_post(uuid).await?;
+        if let Ok(uuid) = uuid::Uuid::parse_str(&id_str) {
+            state.db_admin_delete_post(uuid).await?;
 
-                if args.json {
-                    println!("{}", json!({"deleted": true, "post_id": uuid }));
-                } else {
-                    println!("Deleted post id {}", uuid);
-                }
-                return Ok(());
+            if args.json {
+                println!("{}", json!({"deleted": true, "post_id": uuid }));
+            } else {
+                println!("Deleted post id {uuid}");
             }
-            Err(_) => {
-                eprintln!("Invalid UUID provided for --delete-post");
-                std::process::exit(1);
-            }
+            return Ok(());
         }
+        eprintln!("Invalid UUID provided for --delete-post");
+        std::process::exit(1);
     }
 
     // Count users
@@ -78,12 +74,12 @@ async fn main() -> Result<()> {
             json!({"users_count": users_count, "admin": admin, "posts_count": posts_count, "recent_posts": posts_json})
         );
     } else {
-        println!("Users count: {}", users_count);
+        println!("Users count: {users_count}");
         match admin_user {
             Some(u) => println!("Found admin user: {} <{}>", u.username, u.email),
             None => println!("No admin user found"),
         }
-        println!("Posts count: {}", posts_count);
+        println!("Posts count: {posts_count}");
 
         if recent.is_empty() {
             println!("No posts found.");

@@ -35,13 +35,13 @@ pub enum SearchError {
 
 impl From<SearchError> for crate::AppError {
     fn from(err: SearchError) -> Self {
-        crate::AppError::Internal(err.to_string())
+        Self::Internal(err.to_string())
     }
 }
 
 impl From<TantivyError> for SearchError {
     fn from(err: TantivyError) -> Self {
-        SearchError::Index(err.to_string())
+        Self::Index(err.to_string())
     }
 }
 
@@ -124,6 +124,10 @@ pub struct SearchSchema {
 
 impl SearchService {
     /// Create new search service
+    ///
+    /// # Errors
+    /// - Tantivy のリーダー/ライター初期化に失敗した場合。
+    #[allow(clippy::unused_async)]
     pub async fn new(config: SearchConfig) -> Result<Self> {
         // Create dummy schema fields for now
         let search_schema = SearchSchema {
@@ -156,24 +160,40 @@ impl SearchService {
     }
 
     /// Index a post
+    ///
+    /// # Errors
+    /// インデックス更新に失敗した場合にエラーを返します。
+    #[allow(clippy::unused_async)]
     pub async fn index_post(&self, _post: &Post) -> Result<()> {
         // Simplified implementation for now
         Ok(())
     }
 
     /// Index a user
+    ///
+    /// # Errors
+    /// インデックス更新に失敗した場合にエラーを返します。
+    #[allow(clippy::unused_async)]
     pub async fn index_user(&self, _user: &User) -> Result<()> {
         // Simplified implementation for now
         Ok(())
     }
 
     /// Remove document from index
+    ///
+    /// # Errors
+    /// インデックス更新に失敗した場合にエラーを返します。
+    #[allow(clippy::unused_async)]
     pub async fn remove_document(&self, _id: &str) -> Result<()> {
         // Simplified implementation for now
         Ok(())
     }
 
     /// Search documents
+    ///
+    /// # Errors
+    /// クエリ解析や検索実行に失敗した場合にエラーを返します。
+    #[allow(clippy::unused_async)]
     pub async fn search(
         &self,
         _request: SearchRequest,
@@ -188,12 +208,20 @@ impl SearchService {
     }
 
     /// Get search suggestions
+    ///
+    /// # Errors
+    /// 検索候補の生成に失敗した場合にエラーを返します。
+    #[allow(clippy::unused_async)]
     pub async fn suggest(&self, _prefix: &str, _limit: usize) -> Result<Vec<String>> {
         // Simplified implementation for now
         Ok(vec![])
     }
 
     /// Health check for search service
+    ///
+    /// # Errors
+    /// 内部状態のチェックに失敗した場合にエラーを返します。
+    #[allow(clippy::unused_async)]
     pub async fn health_check(&self) -> Result<()> {
         // Simple check - try to get a searcher
         let _searcher = self.reader.searcher();
@@ -201,20 +229,24 @@ impl SearchService {
     }
 
     /// Get search statistics
+    ///
+    /// # Errors
+    /// 統計情報の取得に失敗した場合にエラーを返します。
+    #[allow(clippy::unused_async)]
     pub async fn get_stats(&self) -> Result<SearchStats> {
         let searcher = self.reader.searcher();
-        let num_docs = searcher.num_docs() as usize;
+        let num_docs = usize::try_from(searcher.num_docs()).unwrap_or(usize::MAX);
 
         Ok(SearchStats {
             total_documents: num_docs,
             post_count: 0, // Would require more complex querying
             user_count: 0, // Would require more complex querying
-            index_size_bytes: self.get_index_size()?,
+            index_size_bytes: self.get_index_size(),
         })
     }
 
     /// Get index size in bytes
-    fn get_index_size(&self) -> Result<u64> {
+    fn get_index_size(&self) -> u64 {
         let mut total_size = 0;
         if let Ok(entries) = std::fs::read_dir(&self.config.index_path) {
             for entry in entries.flatten() {
@@ -223,7 +255,7 @@ impl SearchService {
                 }
             }
         }
-        Ok(total_size)
+        total_size
     }
 }
 

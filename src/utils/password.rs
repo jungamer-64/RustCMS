@@ -9,21 +9,31 @@ use argon2::password_hash::{SaltString, rand_core::OsRng};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 
 /// Hash a password using Argon2 (secure, recommended)
+///
+/// # Errors
+///
+/// Returns `AppError::Internal` when the Argon2 hasher fails to produce a password
+/// hash (for example due to RNG or parameter issues).
 pub fn hash_password(password: &str) -> Result<String> {
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
 
     let password_hash = argon2
         .hash_password(password.as_bytes(), &salt)
-        .map_err(|e| AppError::Internal(format!("Password hashing failed: {}", e)))?;
+        .map_err(|e| AppError::Internal(format!("Password hashing failed: {e}")))?;
 
     Ok(password_hash.to_string())
 }
 
 /// Verify a password against its hash
+///
+/// # Errors
+///
+/// Returns `AppError::Internal` if the given `hash` has an invalid Argon2 hash
+/// format and cannot be parsed.
 pub fn verify_password(password: &str, hash: &str) -> Result<bool> {
     let parsed_hash = PasswordHash::new(hash)
-        .map_err(|e| AppError::Internal(format!("Invalid password hash format: {}", e)))?;
+        .map_err(|e| AppError::Internal(format!("Invalid password hash format: {e}")))?;
 
     let argon2 = Argon2::default();
     Ok(argon2
@@ -126,9 +136,8 @@ mod tests {
             "Hash should be in Argon2 format"
         );
 
-        // Should contain proper sections separated by $
-        let parts: Vec<&str> = hash.split('$').collect();
-        assert!(parts.len() >= 5, "Argon2 hash should have at least 5 parts");
+    // Should contain proper sections separated by $
+    assert!(hash.split('$').count() >= 5, "Argon2 hash should have at least 5 parts");
     }
 
     #[test]

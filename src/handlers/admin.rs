@@ -13,6 +13,12 @@ use crate::utils::crud;
 use crate::utils::response_ext::{ApiOk, delete_with};
 use crate::{AppState, Result};
 
+/// 管理者向けに最近の投稿一覧を返します。
+///
+/// # Errors
+///
+/// - 認可に失敗した場合（管理者権限なし）
+/// - DB アクセスに失敗した場合
 pub async fn list_posts(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
@@ -32,6 +38,12 @@ pub struct CreatePostBody {
     pub published: Option<bool>,
 }
 
+/// 新規投稿を作成します。
+///
+/// # Errors
+///
+/// - 認可に失敗した場合（管理者権限なし）
+/// - バリデーションまたは DB 書き込みに失敗した場合
 pub async fn create_post(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
@@ -69,13 +81,21 @@ pub async fn create_post(
     Ok((status, api_ok))
 }
 
+/// 投稿を削除します。
+///
+/// # Errors
+/// - 権限不足（管理者権限なし）の場合。
+/// - DB 操作に失敗した場合。
 pub async fn delete_post(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<impl IntoResponse> {
     require_admin_permission(&auth)?;
-    let fut = async move { state.db_admin_delete_post(id).await.map(|_| ()) };
+    let fut = async move {
+        state.db_admin_delete_post(id).await?;
+        Ok::<(), crate::AppError>(())
+    };
     // Reuse delete_with for consistent JSON payload (admin previously returned 204)
     delete_with(fut, "Post deleted successfully").await
 }

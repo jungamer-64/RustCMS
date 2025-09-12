@@ -81,6 +81,11 @@ pub struct SuggestQuery {
 }
 
 /// Search endpoint
+/// 検索エンドポイント。
+///
+/// # Errors
+/// - 検索バックエンドの実行に失敗した場合。
+/// - キャッシュの取得・保存時に失敗した場合。
 #[utoipa::path(
     get,
     path = "/api/v1/search",
@@ -164,6 +169,10 @@ pub async fn search(
 }
 
 /// Search suggestions endpoint
+///
+/// # Errors
+/// - サジェスト取得で検索バックエンドが失敗した場合。
+/// - キャッシュの取得・保存時に失敗した場合。
 #[utoipa::path(
     get,
     path = "/api/v1/search/suggest",
@@ -218,6 +227,10 @@ pub async fn suggest(
 }
 
 /// Search statistics endpoint
+///
+/// # Errors
+/// - 統計情報の取得で検索バックエンドが失敗した場合。
+/// - キャッシュの取得・保存時に失敗した場合。
 #[utoipa::path(
     get,
     path = "/api/v1/search/stats",
@@ -228,7 +241,7 @@ pub async fn suggest(
                 summary = "統計例",
                 value = json!({
                     "success": true,
-                    "data": {"index_size": 12345, "documents": 42},
+                    "data": {"index_size": 12_345, "documents": 42},
                     "message": null,
                     "error": null,
                     "validation_errors": null
@@ -241,7 +254,7 @@ pub async fn suggest(
 pub async fn search_stats(State(state): State<AppState>) -> Result<impl IntoResponse> {
     // Try cache first
     let cache_key = crate::utils::cache_key::CacheKeyBuilder::new("search:stats").build();
-    let stats = crate::utils::cache_helpers::cache_or_compute(
+    let index_stats = crate::utils::cache_helpers::cache_or_compute(
         state.clone(),
         &cache_key,
         crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
@@ -258,10 +271,13 @@ pub async fn search_stats(State(state): State<AppState>) -> Result<impl IntoResp
     )
     .await?;
 
-    Ok(ApiOk(stats))
+    Ok(ApiOk(index_stats))
 }
 
 /// Reindex all content
+///
+/// # Errors
+/// - 現状、この関数は失敗しません（プレースホルダーの固定レスポンスを返します）。
 #[utoipa::path(
     post,
     path = "/api/v1/search/reindex",
@@ -301,6 +317,9 @@ pub async fn reindex(State(_state): State<AppState>) -> Result<impl IntoResponse
 }
 
 /// Search index health check
+///
+/// # Errors
+/// - 内部のヘルスチェック呼び出しが失敗した場合にエラーを返します。
 #[utoipa::path(
     get,
     path = "/api/v1/search/health",

@@ -40,8 +40,8 @@ async fn main() -> Result<()> {
         email: "admin@example.com".to_string(),
         password: "admin123".to_string(),
         role: UserRole::Admin,
-        first_name: Some("".to_string()),
-        last_name: Some("".to_string()),
+    first_name: Some(String::new()),
+    last_name: Some(String::new()),
     };
 
     let created_admin = state.db_create_user(admin_user).await?;

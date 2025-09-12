@@ -1,8 +1,8 @@
-//! Dump the OpenAPI spec as JSON.
+//! Dump the `OpenAPI` spec as JSON.
 //! Usage:
-//!   cargo run --bin dump_openapi > openapi.json
-//!   OPENAPI_OUT=./openapi-full.json cargo run --features "auth database search cache" --bin dump_openapi
-//!   cargo run --bin dump_openapi ./openapi.json
+//!   cargo run --bin `dump_openapi` > openapi.json
+//!   OPENAPI_OUT=./openapi-full.json cargo run --features "auth database search cache" --bin `dump_openapi`
+//!   cargo run --bin `dump_openapi` ./openapi.json
 
 use cms_backend::openapi::ApiDoc;
 use std::{env, fs::File, io::Write, path::Path};

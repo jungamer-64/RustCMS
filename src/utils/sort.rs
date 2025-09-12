@@ -3,13 +3,14 @@
 //! Convention:
 //! - input: Some("field") => ASC
 //! - input: Some("-field") => DESC
-//! - input: None or unknown field => default_col with default_desc
+//! - input: None or unknown field => `default_col` with `default_desc`
 
 /// Parse sort string into (column, desc) tuple.
-/// - input: optional string like "created_at" or "-created_at"
-/// - default_col: used when input is None or not in allowed
-/// - default_desc: true for DESC, false for ASC
-/// - allowed: whitelist of acceptable column names (lowercase)
+/// - `input`: optional string like `created_at` or `-created_at`
+/// - `default_col`: used when input is None or not in allowed
+/// - `default_desc`: true for DESC, false for ASC
+/// - `allowed`: whitelist of acceptable column names (lowercase)
+#[must_use]
 pub fn parse_sort(
     input: Option<String>,
     default_col: &str,
@@ -21,14 +22,12 @@ pub fn parse_sort(
         _ => return (default_col.to_string(), default_desc),
     };
 
-    let (raw_col, desc) = if let Some(rest) = s.strip_prefix('-') {
-        (rest.trim(), true)
-    } else {
-        (s.as_str(), false)
-    };
+    let (raw_col, desc) = s
+        .strip_prefix('-')
+        .map_or((s.as_str(), false), |rest| (rest.trim(), true));
 
     let col = raw_col.to_lowercase();
-    if allowed.iter().any(|a| *a == col) {
+    if allowed.contains(&col.as_str()) {
         (col, desc)
     } else {
         (default_col.to_string(), default_desc)

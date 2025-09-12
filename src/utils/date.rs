@@ -8,16 +8,25 @@ pub const DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 pub const ISO_DATETIME_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%.3fZ";
 
 /// 現在のUTC時刻を取得
+#[must_use]
 pub fn now_utc() -> DateTime<Utc> {
     Utc::now()
 }
 
 /// 文字列から日付を解析
+///
+/// # Errors
+///
+/// `date_str` が `YYYY-MM-DD` 形式に合致しない場合、`chrono::ParseError` を返します。
 pub fn parse_date(date_str: &str) -> Result<NaiveDate, chrono::ParseError> {
     NaiveDate::parse_from_str(date_str, DATE_FORMAT)
 }
 
 /// 文字列から日付時刻を解析
+///
+/// # Errors
+///
+/// `datetime_str` が `YYYY-MM-DD HH:MM:SS` 形式に合致しない場合、`chrono::ParseError` を返します。
 pub fn parse_datetime(datetime_str: &str) -> Result<DateTime<Utc>, chrono::ParseError> {
     let naive = NaiveDateTime::parse_from_str(datetime_str, DATETIME_FORMAT)?;
     // Use recommended constructor instead of deprecated DateTime::from_utc
@@ -25,26 +34,34 @@ pub fn parse_datetime(datetime_str: &str) -> Result<DateTime<Utc>, chrono::Parse
 }
 
 /// ISO 8601形式から日付時刻を解析
+///
+/// # Errors
+///
+/// ISO8601/RFC3339 形式でない場合、`chrono::ParseError` を返します。
 pub fn parse_iso_datetime(iso_str: &str) -> Result<DateTime<Utc>, chrono::ParseError> {
     DateTime::parse_from_rfc3339(iso_str).map(|dt| dt.with_timezone(&Utc))
 }
 
 /// 日付を文字列にフォーマット
+#[must_use]
 pub fn format_date(date: &NaiveDate) -> String {
     date.format(DATE_FORMAT).to_string()
 }
 
 /// 日付時刻を文字列にフォーマット
+#[must_use]
 pub fn format_datetime(datetime: &DateTime<Utc>) -> String {
     datetime.format(DATETIME_FORMAT).to_string()
 }
 
 /// 日付時刻をISO 8601形式にフォーマット
+#[must_use]
 pub fn format_iso_datetime(datetime: &DateTime<Utc>) -> String {
     datetime.format(ISO_DATETIME_FORMAT).to_string()
 }
 
 /// 人間が読みやすい相対時間を生成
+#[must_use]
 pub fn humanize_duration(datetime: &DateTime<Utc>) -> String {
     let now = Utc::now();
     let duration = now.signed_duration_since(*datetime);
@@ -52,17 +69,17 @@ pub fn humanize_duration(datetime: &DateTime<Utc>) -> String {
     if duration.num_seconds() < 60 {
         "just now".to_string()
     } else if duration.num_minutes() < 60 {
-        format!("{} minutes ago", duration.num_minutes())
+    format!("{} minutes ago", duration.num_minutes())
     } else if duration.num_hours() < 24 {
-        format!("{} hours ago", duration.num_hours())
+    format!("{} hours ago", duration.num_hours())
     } else if duration.num_days() < 7 {
-        format!("{} days ago", duration.num_days())
+    format!("{} days ago", duration.num_days())
     } else if duration.num_days() < 30 {
-        format!("{} weeks ago", duration.num_days() / 7)
+    format!("{} weeks ago", duration.num_days() / 7)
     } else if duration.num_days() < 365 {
-        format!("{} months ago", duration.num_days() / 30)
+    format!("{} months ago", duration.num_days() / 30)
     } else {
-        format!("{} years ago", duration.num_days() / 365)
+    format!("{} years ago", duration.num_days() / 365)
     }
 }
 
@@ -74,10 +91,17 @@ pub struct DateRange {
 }
 
 impl DateRange {
-    pub fn new(start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
+    #[must_use]
+    pub const fn new(start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
         Self { start, end }
     }
 
+    /// 本日（00:00:00 〜 23:59:59）の範囲を返す
+    ///
+    /// # Panics
+    ///
+    /// 日時の生成に失敗した場合にパニックします（`and_hms_opt(...).unwrap()`）。
+    #[must_use]
     pub fn today() -> Self {
         let now = Utc::now();
         let start = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
@@ -89,10 +113,16 @@ impl DateRange {
         }
     }
 
+    /// 今週（月曜始まり、00:00:00 〜 日曜 23:59:59）の範囲を返す
+    ///
+    /// # Panics
+    ///
+    /// 日時の生成に失敗した場合にパニックします（`and_hms_opt(...).unwrap()`）。
+    #[must_use]
     pub fn this_week() -> Self {
         let now = Utc::now();
         let days_since_monday = now.weekday().num_days_from_monday();
-        let start_of_week = now.date_naive() - Duration::days(days_since_monday as i64);
+        let start_of_week = now.date_naive() - Duration::days(i64::from(days_since_monday));
         let end_of_week = start_of_week + Duration::days(6);
 
         Self {
@@ -101,6 +131,12 @@ impl DateRange {
         }
     }
 
+    /// 今月（1日 00:00:00 〜 月末 23:59:59）の範囲を返す
+    ///
+    /// # Panics
+    ///
+    /// 日時の生成に失敗した場合にパニックします（`*_opt(...).unwrap()`）。
+    #[must_use]
     pub fn this_month() -> Self {
         let now = Utc::now();
         let start_of_month = NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap();
@@ -116,6 +152,8 @@ impl DateRange {
         }
     }
 
+    /// 直近 `n` 日間の範囲を返す
+    #[must_use]
     pub fn last_n_days(n: i64) -> Self {
         let now = Utc::now();
         let start = now - Duration::days(n);
@@ -123,16 +161,19 @@ impl DateRange {
         Self { start, end: now }
     }
 
+    #[must_use]
     pub fn contains(&self, datetime: &DateTime<Utc>) -> bool {
         datetime >= &self.start && datetime <= &self.end
     }
 
+    #[must_use]
     pub fn duration(&self) -> Duration {
         self.end.signed_duration_since(self.start)
     }
 }
 
 /// 営業日の計算
+#[must_use]
 pub fn add_business_days(date: NaiveDate, days: i32) -> NaiveDate {
     let mut current = date;
     let mut remaining = days.abs();
@@ -151,6 +192,7 @@ pub fn add_business_days(date: NaiveDate, days: i32) -> NaiveDate {
 }
 
 /// 年齢計算
+#[must_use]
 pub fn calculate_age(birth_date: NaiveDate) -> i32 {
     let today = Utc::now().date_naive();
     let mut age = today.year() - birth_date.year();
@@ -165,6 +207,11 @@ pub fn calculate_age(birth_date: NaiveDate) -> i32 {
 }
 
 /// タイムゾーン変換ヘルパー
+///
+/// # Panics
+///
+/// `offset_hours` が有効範囲外の場合、内部で `unwrap` が発生します。
+#[must_use]
 pub fn to_local_timezone(
     datetime: DateTime<Utc>,
     offset_hours: i32,

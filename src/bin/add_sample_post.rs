@@ -11,7 +11,7 @@ async fn main() {
     let cfg = match Config::from_env() {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("Failed to load config: {}", e);
+            eprintln!("Failed to load config: {e}");
             std::process::exit(1);
         }
     };
@@ -19,7 +19,7 @@ async fn main() {
     let db = match Database::new(&cfg.database).await {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("Failed to init database: {}", e);
+            eprintln!("Failed to init database: {e}");
             std::process::exit(1);
         }
     };
@@ -40,12 +40,12 @@ async fn main() {
         status: Some(PostStatus::Published),
     };
 
-    match db.create_post(req).await {
+    match db.create_post(req) {
         Ok(post) => {
             println!("Inserted sample post: {} (id={})", post.title, post.id);
         }
         Err(e) => {
-            eprintln!("Failed to insert sample post: {}", e);
+            eprintln!("Failed to insert sample post: {e}");
             std::process::exit(1);
         }
     }

@@ -1,7 +1,12 @@
 use crate::models::pagination::Paginated;
 
-/// Generic helper to fetch items and total count, returning Paginated<T>.
+/// Generic helper to fetch items and total count, returning `Paginated<T>`.
 /// Keeps handlers small and consistent.
+///
+/// # Errors
+///
+/// Propagates errors from `fetch_items` and `count_total` closures when either
+/// of those asynchronous operations fail.
 pub async fn fetch_paginated<T, FI, FC, FutI, FutC>(
     page: u32,
     limit: u32,
@@ -19,8 +24,14 @@ where
     Ok(Paginated::new(items, total, page, limit))
 }
 
-/// Cached variant that combines cache lookup + fetch_paginated in one place.
+/// Cached variant that combines cache lookup + `fetch_paginated` in one place.
 /// This reduces duplication across handlers that follow the same pattern.
+///
+/// # Errors
+///
+/// Returns any error produced by the provided `fetch_items`/`count_total`
+/// closures or by the underlying cache layer when computing or deserializing
+/// the cached `Paginated<T>` value.
 pub async fn fetch_paginated_cached<T, FI, FC, FutI, FutC>(
     state: crate::AppState,
     cache_key: String,
@@ -51,7 +62,12 @@ where
 /// Convenience wrapper for handlers that follow the common pattern:
 /// - build a cache key outside
 /// - wrap filters into an Arc to clone into closures
-/// - call fetch_paginated_cached with the provided closures that use those filters
+/// - call `fetch_paginated_cached` with the provided closures that use those filters
+///
+/// # Errors
+///
+/// Same as [`fetch_paginated_cached`]: errors from the item/count builders or
+/// the cache layer are propagated.
 #[allow(clippy::too_many_arguments)]
 pub async fn fetch_paginated_cached_with_filters<T, FI, FC, FutI, FutC, Filt>(
     state: crate::AppState,
@@ -89,6 +105,11 @@ where
 
 /// Variant where the item fetch returns raw models `M` and a separate mapper converts them to `T`.
 /// This removes repetitive `iter().map(...).collect()` boilerplate in handlers.
+///
+/// # Errors
+///
+/// Propagates errors from `fetch_models` and `count_total`, as well as any
+/// cache compute/serialize/deserialize failures.
 #[allow(clippy::too_many_arguments)]
 pub async fn fetch_paginated_cached_mapped<T, M, FI, FC, FutI, FutC, Map>(
     state: crate::AppState,

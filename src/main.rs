@@ -1,7 +1,7 @@
 //! Unified CMS server entrypoint - integrates functionality from cms-lightweight, cms-simple, and cms-unified
 //!
 //! This server supports both production mode (with database) and development mode (in-memory).
-//! It serves as the main unified entry point for the RustCMS backend.
+//! It serves as the main unified entry point for the `RustCMS` backend.
 
 use axum::Router as AxumRouter;
 use std::net::SocketAddr;
@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Compute address from config before moving state
     let addr: SocketAddr =
-        format!("{}:{}", state.config.server.host, state.config.server.port).parse()?;
+    format!("{}:{}", state.config.server.host, state.config.server.port).parse()?;
 
     // Build router and attach state (state is moved into router)
     let router: AxumRouter = create_router().with_state(state);

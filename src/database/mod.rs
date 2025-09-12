@@ -129,7 +129,7 @@ fn map_diesel_result<T>(
             diesel::result::Error::NotFound => {
                 Err(crate::AppError::NotFound(not_found_msg.to_string()))
             }
-            other => Err(crate::AppError::Internal(format!("{}: {}", ctx, other))),
+            other => Err(crate::AppError::Internal(format!("{ctx}: {other}"))),
         },
     }
 }
@@ -147,7 +147,7 @@ fn map_internal_err<T, E: std::fmt::Display>(
     res: std::result::Result<T, E>,
     ctx: &str,
 ) -> Result<T> {
-    res.map_err(|e| crate::AppError::Internal(format!("{}: {}", ctx, e)))
+    res.map_err(|e| crate::AppError::Internal(format!("{ctx}: {e}")))
 }
 
 // Data holder for post update fields to keep update_post lean and testable
@@ -169,34 +169,31 @@ struct PostUpdateData {
 fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpdateData {
     let title = req
         .title
-        .as_ref()
-        .cloned()
+        .clone()
         .unwrap_or_else(|| existing.title.clone());
     let slug = req
         .slug
-        .as_ref()
-        .cloned()
+        .clone()
         .unwrap_or_else(|| existing.slug.clone());
     let content = req
         .content
-        .as_ref()
-        .cloned()
+        .clone()
         .unwrap_or_else(|| existing.content.clone());
-    let excerpt = merge_opt_option(&req.excerpt, &existing.excerpt);
-    let tags = merge_opt(&req.tags, &existing.tags);
-    let categories = match &req.category {
-        Some(cat) => vec![cat.trim().to_lowercase()],
-        None => existing.categories.clone(),
-    };
-    let meta_title = merge_opt_option(&req.meta_title, &existing.meta_title);
-    let meta_description = merge_opt_option(&req.meta_description, &existing.meta_description);
+    let excerpt = merge_opt_option(req.excerpt.as_ref(), existing.excerpt.as_ref());
+    let tags = merge_opt(req.tags.as_ref(), &existing.tags);
+    let categories = req
+        .category
+        .as_ref()
+        .map_or_else(|| existing.categories.clone(), |cat| vec![cat.trim().to_lowercase()]);
+    let meta_title = merge_opt_option(req.meta_title.as_ref(), existing.meta_title.as_ref());
+    let meta_description =
+        merge_opt_option(req.meta_description.as_ref(), existing.meta_description.as_ref());
 
     // status / published_at handling
-    let mut status = if let Some(st) = &req.status {
-        st.to_string()
-    } else {
-        existing.status.clone()
-    };
+    let mut status = req
+        .status
+        .as_ref()
+        .map_or_else(|| existing.status.clone(), ToString::to_string);
     let mut published_at = if req.published_at.is_some() {
         req.published_at
     } else {
@@ -230,12 +227,12 @@ fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpd
     }
 }
 
-fn merge_opt<T: Clone>(candidate: &Option<T>, current: &T) -> T {
-    candidate.clone().unwrap_or_else(|| current.clone())
+fn merge_opt<T: Clone>(candidate: Option<&T>, current: &T) -> T {
+    candidate.cloned().unwrap_or_else(|| current.clone())
 }
 
-fn merge_opt_option<T: Clone>(candidate: &Option<T>, current: &Option<T>) -> Option<T> {
-    candidate.clone().or_else(|| current.clone())
+fn merge_opt_option<T: Clone>(candidate: Option<&T>, current: Option<&T>) -> Option<T> {
+    candidate.cloned().or_else(|| current.cloned())
 }
 
 // Diesel 2.x の embed_migrations: Cargo.toml からの相対パスでディレクトリ配下の
@@ -251,6 +248,12 @@ pub struct Database {
 }
 
 impl Database {
+    #[allow(clippy::unused_async)]
+    /// Create a new Database instance backed by a connection pool.
+    ///
+    /// # Errors
+    /// Returns an error if the pool cannot be created or if running migrations fails
+    /// (when enabled). The error is wrapped in `crate::AppError`.
     pub async fn new(config: &DatabaseConfig) -> Result<Self> {
         let pool = DatabasePool::new(&config.url, config.max_connections)?;
 
@@ -272,14 +275,25 @@ impl Database {
         f(&mut conn)
     }
 
-    pub fn pool(&self) -> &DatabasePool {
+    #[must_use]
+    pub const fn pool(&self) -> &DatabasePool {
         &self.pool
     }
 
+    /// プールから接続を取得します。
+    ///
+    /// # Errors
+    ///
+    /// 接続の取得に失敗した場合にエラーを返します。
     pub fn get_connection(&self) -> Result<PooledConnection> {
         self.pool.get()
     }
 
+    /// データベースのヘルスチェックを実行します。
+    ///
+    /// # Errors
+    ///
+    /// チェック用クエリの実行に失敗した場合にエラーを返します。
     pub async fn health_check(&self) -> Result<serde_json::Value> {
         self.pool.health_check().await?;
         Ok(serde_json::json!({
@@ -289,6 +303,12 @@ impl Database {
     }
 
     // User CRUD operations
+    #[allow(clippy::unused_async)]
+    /// ユーザーを作成します。
+    ///
+    /// # Errors
+    ///
+    /// 入力検証や保存処理に失敗した場合にエラーを返します。
     pub async fn create_user(&self, request: CreateUserRequest) -> Result<User> {
         // Build user with hashed password (this returns crate::AppError on failure)
         let user = User::new_with_password(
@@ -297,7 +317,7 @@ impl Database {
             &request.password,
             request.first_name,
             request.last_name,
-            request.role,
+            &request.role,
         )?;
         self.with_conn(|conn| {
             let created: User = User::create(conn, &user)?;
@@ -306,6 +326,12 @@ impl Database {
     }
 
     /// List users helper used by admin CLI (stub)
+    #[allow(clippy::unused_async)]
+    /// 管理用: ユーザー一覧を返します（スタブ）。
+    ///
+    /// # Errors
+    ///
+    /// 内部処理失敗時にエラーを返します。
     pub async fn list_users(
         &self,
         _role: Option<&str>,
@@ -316,20 +342,38 @@ impl Database {
     }
 
     /// Get user by username helper used by admin CLI (stub)
+    #[allow(clippy::unused_async)]
+    /// ユーザー名でユーザーを取得します。
+    ///
+    /// # Errors
+    ///
+    /// 見つからない場合や取得に失敗した場合にエラーを返します。
     pub async fn get_user_by_username(&self, username_str: &str) -> Result<User> {
         // Propagate model-level AppError (preserves NotFound vs other AppError variants)
         self.with_conn(|conn| User::find_by_username(conn, username_str))
     }
 
-    pub async fn get_user_by_id(&self, _id: Uuid) -> Result<User> {
+    #[allow(clippy::unused_async)]
+    /// IDでユーザーを取得します。
+    ///
+    /// # Errors
+    ///
+    /// 見つからない場合や取得に失敗した場合にエラーを返します。
+    pub async fn get_user_by_id(&self, id: Uuid) -> Result<User> {
         // Propagate model-level AppError so NotFound is preserved
-        self.with_conn(|conn| User::find_by_id(conn, _id))
+        self.with_conn(|conn| User::find_by_id(conn, id))
     }
 
     /// Find a user by email
+    #[allow(clippy::unused_async)]
+    /// メールアドレスでユーザーを取得します。
+    ///
+    /// # Errors
+    ///
+    /// 見つからない場合や取得に失敗した場合にエラーを返します。
     pub async fn get_user_by_email(&self, email: &str) -> Result<User> {
         self.with_conn(|conn| {
-            let user = self.run_query(
+            let user = Self::run_query(
                 || crate::models::User::find_by_email(conn, email),
                 "DB error finding user by email",
             )?;
@@ -338,35 +382,46 @@ impl Database {
     }
 
     /// Update user's last login timestamp
-    pub async fn update_last_login(&self, id: Uuid) -> Result<()> {
+    /// 最終ログイン時刻を更新します。
+    ///
+    /// # Errors
+    ///
+    /// 更新処理に失敗した場合にエラーを返します。
+    pub fn update_last_login(&self, id: Uuid) -> Result<()> {
         self.with_conn(|conn| {
-            self.run_query(
+            Self::run_query(
                 || crate::models::User::update_last_login(conn, id),
                 "DB error updating last_login",
             )
         })
     }
 
-    pub async fn get_users(
+    /// ユーザー一覧を取得します（フィルタ/ソート対応）。
+    ///
+    /// # Errors
+    ///
+    /// 取得処理に失敗した場合にエラーを返します。
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn get_users(
         &self,
-        _page: u32,
-        _limit: u32,
-        _role: Option<String>,
-        _active: Option<bool>,
-        _sort: Option<String>,
+        page: u32,
+        per_page: u32,
+        role: Option<String>,
+        active: Option<bool>,
+        sort: Option<String>,
     ) -> Result<Vec<User>> {
         use crate::database::schema::users::dsl as users_dsl;
         use diesel::prelude::*;
 
-        let (_page_n, limit, offset) = Self::paged_params(_page, _limit);
+    let (_, limit, offset) = Self::paged_params(page, per_page);
 
         // Build and execute inside with_conn to centralize connection logic
         self.with_conn(|conn| {
             let mut query = users_dsl::users.into_boxed();
-            apply_user_filters!(query, _role, _active);
-            apply_user_sort!(query, _sort);
+            apply_user_filters!(query, role, active);
+            apply_user_sort!(query, sort);
 
-            let results = self.run_query(
+            let results = Self::run_query(
                 || query.offset(offset).limit(limit).load::<User>(conn),
                 "Failed to list users",
             )?;
@@ -374,45 +429,66 @@ impl Database {
         })
     }
 
-    pub async fn update_user(&self, id: Uuid, request: UpdateUserRequest) -> Result<User> {
+    /// ユーザー情報を更新します。
+    ///
+    /// # Errors
+    ///
+    /// 更新対象が見つからない、または更新に失敗した場合にエラーを返します。
+    pub fn update_user(&self, id: Uuid, request: &UpdateUserRequest) -> Result<User> {
         self.with_conn(|conn| {
             // Let the model return AppError (NotFound, etc.) propagate directly.
-            User::update(conn, id, &request)
+            User::update(conn, id, request)
         })
     }
 
-    pub async fn count_users(&self) -> Result<usize> {
+    /// ユーザー数を返します。
+    ///
+    /// # Errors
+    ///
+    /// 集計に失敗した場合にエラーを返します。
+    pub fn count_users(&self) -> Result<usize> {
         // Reuse the filtered counter to avoid duplicated query logic
-        self.count_users_filtered(None, None).await
+        self.count_users_filtered(None, None)
     }
 
     /// Count users with optional filters (for accurate pagination totals)
-    pub async fn count_users_filtered(
+    /// 条件付きのユーザー数を返します。
+    ///
+    /// # Errors
+    ///
+    /// 集計に失敗した場合にエラーを返します。
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn count_users_filtered(
         &self,
-        _role: Option<String>,
-        _active: Option<bool>,
+        role: Option<String>,
+        active: Option<bool>,
     ) -> Result<usize> {
         use crate::database::schema::users::dsl as users_dsl;
         use diesel::prelude::*;
         self.with_conn(|conn| {
             let mut query = users_dsl::users.into_boxed();
-            apply_user_filters!(query, _role, _active);
-            let total: i64 = self.count_query(
+            apply_user_filters!(query, role, active);
+            let total: i64 = Self::count_query(
                 || query.count().get_result(conn),
                 "Failed to count users (filtered)",
             )?;
-            Ok(total as usize)
+            usize::try_from(total).map_err(|_| crate::AppError::Internal("users count overflow".into()))
         })
     }
 
     // Post CRUD operations
-    pub async fn create_post(&self, request: CreatePostRequest) -> Result<Post> {
+    /// 投稿を作成します。
+    ///
+    /// # Errors
+    ///
+    /// 入力検証や保存処理に失敗した場合にエラーを返します。
+    pub fn create_post(&self, request: CreatePostRequest) -> Result<Post> {
         use diesel::prelude::*;
         // Try to choose an author: prefer a user with role = 'admin', otherwise use the first user
         use crate::database::schema::posts::dsl as posts_dsl;
         use crate::database::schema::users::dsl as users_dsl;
         self.with_conn(|conn| {
-            let author = self.run_query(
+            let author = Self::run_query(
                 || {
                     users_dsl::users
                         .filter(users_dsl::role.eq("admin"))
@@ -423,7 +499,7 @@ impl Database {
             )?;
             let author_id = author.id;
             let new_post = request.into_new_post(author_id);
-            let inserted: Post = self.run_query(
+            let inserted: Post = Self::run_query(
                 || {
                     diesel::insert_into(posts_dsl::posts)
                         .values(&new_post)
@@ -435,12 +511,17 @@ impl Database {
         })
     }
 
-    pub async fn get_post_by_id(&self, _id: Uuid) -> Result<Post> {
+    /// 投稿IDで投稿を取得します。
+    ///
+    /// # Errors
+    ///
+    /// 見つからない場合や取得に失敗した場合にエラーを返します。
+    pub fn get_post_by_id(&self, id: Uuid) -> Result<Post> {
         use crate::database::schema::posts::dsl as posts_dsl;
         use diesel::prelude::*;
         self.with_conn(|conn| {
-            let post = self.get_one_query(
-                || posts_dsl::posts.find(_id).first::<Post>(conn),
+            let post = Self::get_one_query(
+                || posts_dsl::posts.find(id).first::<Post>(conn),
                 "Post not found",
                 "Failed to fetch post",
             )?;
@@ -448,29 +529,35 @@ impl Database {
         })
     }
 
-    pub async fn get_posts(
+    /// 投稿一覧を取得します（フィルタ/ソート対応）。
+    ///
+    /// # Errors
+    ///
+    /// 取得処理に失敗した場合にエラーを返します。
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn get_posts(
         &self,
-        _page: u32,
-        _limit: u32,
-        _status: Option<String>,
-        _author: Option<Uuid>,
-        _tag: Option<String>,
-        _sort: Option<String>,
+        page: u32,
+        per_page: u32,
+        status: Option<String>,
+        author: Option<Uuid>,
+        tag: Option<String>,
+        sort: Option<String>,
     ) -> Result<Vec<Post>> {
         use diesel::prelude::*;
         // no raw SQL needed
         use crate::database::schema::posts::dsl as posts_dsl;
 
         // Pagination guards
-        let (_page_n, limit, offset) = Self::paged_params(_page, _limit);
+    let (_, limit, offset) = Self::paged_params(page, per_page);
 
         self.with_conn(|conn| {
             let mut query = posts_dsl::posts.into_boxed();
-            apply_post_filters!(query, _status, _author, _tag);
+            apply_post_filters!(query, status, author, tag);
 
-            apply_post_sort!(query, _sort);
+            apply_post_sort!(query, sort);
 
-            let results = self.run_query(
+            let results = Self::run_query(
                 || query.offset(offset).limit(limit).load::<Post>(conn),
                 "Failed to list posts",
             )?;
@@ -478,17 +565,22 @@ impl Database {
         })
     }
 
-    pub async fn update_post(&self, _id: Uuid, _request: UpdatePostRequest) -> Result<Post> {
+    /// 投稿を更新します。
+    ///
+    /// # Errors
+    ///
+    /// 更新対象が見つからない、または更新に失敗した場合にエラーを返します。
+    pub fn update_post(&self, id: Uuid, request: &UpdatePostRequest) -> Result<Post> {
         // Step 1 load + compute
-        let (changes, updated_at) = self.prepare_post_update(_id, &_request).await?;
+    let (changes, updated_at) = self.prepare_post_update(id, request)?;
         // Step 2 persist
-        let updated = self.persist_post_update(_id, &changes).await?;
+        let updated = self.persist_post_update(id, &changes)?;
         // Step 3 (optional future: trigger search index update / events) - placeholder uses updated_at to avoid unused warning
         let _ = updated_at; // reserved for future instrumentation
         Ok(updated)
     }
 
-    async fn prepare_post_update(
+    fn prepare_post_update(
         &self,
         id: Uuid,
         req: &UpdatePostRequest,
@@ -497,23 +589,23 @@ impl Database {
         use diesel::prelude::*;
         // fetch existing inside connection scope
         self.with_conn(|conn| {
-            let existing = self.get_one_query(
+            let existing = Self::get_one_query(
                 || posts_dsl::posts.find(id).first::<Post>(conn),
                 "Post not found",
                 "Failed to fetch post",
             )?;
             let mut data = compute_post_update_data(&existing, req);
-            data = Self::build_post_changes(existing, data);
+            data = Self::build_post_changes(&existing, data);
             let ts = chrono::Utc::now().naive_utc();
             Ok((data, ts))
         })
     }
 
-    async fn persist_post_update(&self, id: Uuid, changes: &PostUpdateData) -> Result<Post> {
+    fn persist_post_update(&self, id: Uuid, changes: &PostUpdateData) -> Result<Post> {
         use crate::database::schema::posts::dsl as posts_dsl;
         use diesel::prelude::*;
         self.with_conn(|conn| {
-            let updated = self.run_query(
+            let updated = Self::run_query(
                 || {
                     diesel::update(posts_dsl::posts.find(id))
                         .set((
@@ -537,7 +629,7 @@ impl Database {
         })
     }
 
-    fn build_post_changes(existing: Post, mut data: PostUpdateData) -> PostUpdateData {
+    fn build_post_changes(existing: &Post, mut data: PostUpdateData) -> PostUpdateData {
         // status/publish_at normalization kept here to shrink complexity in caller
         if data.status == "published"
             && existing.published_at.is_none()
@@ -553,52 +645,73 @@ impl Database {
 
     // (helper removed; original in-function sorting logic retained to avoid type privacy complications)
 
-    pub async fn delete_post(&self, _id: Uuid) -> Result<()> {
+    /// 投稿を削除します。
+    ///
+    /// # Errors
+    ///
+    /// 該当する投稿が見つからない場合や削除に失敗した場合にエラーを返します。
+    pub fn delete_post(&self, id: Uuid) -> Result<()> {
         use crate::database::schema::posts::dsl as posts_dsl;
         use diesel::prelude::*;
         // Use helper to execute and ensure at least one row affected
         self.with_conn(|conn| {
-            self.execute_and_ensure(
-                || diesel::delete(posts_dsl::posts.find(_id)).execute(conn),
+            Self::execute_and_ensure(
+                || diesel::delete(posts_dsl::posts.find(id)).execute(conn),
                 "Failed to delete post",
                 "Post not found",
             )
         })
     }
 
-    pub async fn count_posts(&self, _tag: Option<&str>) -> Result<usize> {
+    /// 投稿数を返します（任意のタグでフィルタ可）。
+    ///
+    /// # Errors
+    ///
+    /// 集計に失敗した場合にエラーを返します。
+    pub fn count_posts(&self, tag: Option<&str>) -> Result<usize> {
         // Delegate to the filtered counter to avoid duplication
-        self.count_posts_filtered(None, None, _tag.map(|t| t.to_string()))
-            .await
+        self.count_posts_filtered(None, None, tag.map(str::to_string))
     }
 
     /// Count posts with optional filters to match listing totals
-    pub async fn count_posts_filtered(
+    /// 条件付きの投稿数を返します（リストAPIと一致するフィルタ）。
+    ///
+    /// # Errors
+    ///
+    /// 集計に失敗した場合にエラーを返します。
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn count_posts_filtered(
         &self,
-        _status: Option<String>,
-        _author: Option<Uuid>,
-        _tag: Option<String>,
+        status: Option<String>,
+        author: Option<Uuid>,
+        tag: Option<String>,
     ) -> Result<usize> {
         use crate::database::schema::posts::dsl as posts_dsl;
         use diesel::prelude::*;
         self.with_conn(|conn| {
             let mut query = posts_dsl::posts.into_boxed();
-            apply_post_filters!(query, _status, _author, _tag);
-            let total: i64 = self.count_query(
+            apply_post_filters!(query, status, author, tag);
+            let total: i64 = Self::count_query(
                 || query.count().get_result(conn),
                 "Failed to count posts (filtered)",
             )?;
-            Ok(total as usize)
+            usize::try_from(total)
+                .map_err(|_| crate::AppError::Internal("posts count overflow".into()))
         })
     }
 
-    pub async fn count_posts_by_author(&self, author: Uuid) -> Result<usize> {
+    /// 著者別の投稿数を返します。
+    ///
+    /// # Errors
+    ///
+    /// 集計に失敗した場合にエラーを返します。
+    pub fn count_posts_by_author(&self, author: Uuid) -> Result<usize> {
         // Delegate to the filtered counter to avoid duplication
-        self.count_posts_filtered(None, Some(author), None).await
+        self.count_posts_filtered(None, Some(author), None)
     }
 
     // Helper to run a diesel execute call and ensure affected > 0, mapping errors consistently.
-    fn execute_and_ensure<F, E>(&self, f: F, ctx: &str, not_found_msg: &str) -> Result<()>
+    fn execute_and_ensure<F, E>(f: F, ctx: &str, not_found_msg: &str) -> Result<()>
     where
         F: FnOnce() -> std::result::Result<usize, E>,
         E: std::fmt::Display,
@@ -609,7 +722,7 @@ impl Database {
     }
 
     // Helper to run count/get_result style queries returning i64, mapping errors consistently.
-    fn count_query<F, E>(&self, f: F, ctx: &str) -> Result<i64>
+    fn count_query<F, E>(f: F, ctx: &str) -> Result<i64>
     where
         F: FnOnce() -> std::result::Result<i64, E>,
         E: std::fmt::Display,
@@ -619,7 +732,7 @@ impl Database {
     }
 
     // Generic helper to run a closure returning Result<T, E> and map errors consistently.
-    fn run_query<T, F, E>(&self, f: F, ctx: &str) -> Result<T>
+    fn run_query<T, F, E>(f: F, ctx: &str) -> Result<T>
     where
         F: FnOnce() -> std::result::Result<T, E>,
         E: std::fmt::Display,
@@ -630,7 +743,7 @@ impl Database {
 
     // Helper to run a diesel first() query that returns Result<T, diesel::result::Error>
     // and map NotFound/other errors consistently.
-    fn get_one_query<F, T>(&self, f: F, not_found_msg: &str, ctx: &str) -> Result<T>
+    fn get_one_query<F, T>(f: F, not_found_msg: &str, ctx: &str) -> Result<T>
     where
         F: FnOnce() -> std::result::Result<T, diesel::result::Error>,
     {
@@ -638,21 +751,29 @@ impl Database {
     }
 
     // Helper to compute page, limit, offset from user-provided values.
-    fn paged_params(page_in: u32, limit_in: u32) -> (i64, i64, i64) {
-        let page = if page_in == 0 { 1 } else { page_in } as i64;
-        let limit = match limit_in {
+    #[allow(clippy::cast_lossless)]
+    const fn paged_params(page_in: u32, limit_in: u32) -> (i64, i64, i64) {
+        let page_u32 = if page_in == 0 { 1 } else { page_in };
+        let page = page_u32 as i64;
+        let lim_u32 = match limit_in {
             0 => 10,
             n if n > 100 => 100,
             n => n,
-        } as i64;
+        };
+        let limit = lim_u32 as i64;
         let offset = (page - 1) * limit;
         (page, limit, offset)
     }
 
     /// Delete a user by ID
-    pub async fn delete_user(&self, id: Uuid) -> Result<()> {
+    /// 指定 ID のユーザーを削除します。
+    ///
+    /// # Errors
+    ///
+    /// 対象ユーザーが見つからない、または削除に失敗した場合にエラーを返します。
+    pub fn delete_user(&self, id: Uuid) -> Result<()> {
         self.with_conn(|conn| {
-            self.execute_and_ensure(
+            Self::execute_and_ensure(
                 || User::delete(conn, id),
                 "Failed to delete user",
                 "User not found",
@@ -661,12 +782,17 @@ impl Database {
     }
 
     /// Reset user password helper used by admin CLI
-    pub async fn reset_user_password(&self, id: Uuid, new_password: &str) -> Result<()> {
+    /// 管理者 CLI 用のユーザーパスワードリセット
+    ///
+    /// # Errors
+    ///
+    /// パスワードハッシュ化や更新クエリが失敗した場合にエラーを返します。
+    pub fn reset_user_password(&self, id: Uuid, new_password: &str) -> Result<()> {
         use crate::database::schema::users::dsl as users_dsl;
         use diesel::prelude::*;
         let hash = crate::utils::password::hash_password(new_password)?;
         self.with_conn(|conn| {
-            self.execute_and_ensure(
+            Self::execute_and_ensure(
                 || {
                     diesel::update(users_dsl::users.find(id))
                         .set((
@@ -688,5 +814,87 @@ impl Database {
         map_internal_err(conn.run_pending_migrations(MIGRATIONS), "Migration error")?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    #[test]
+    fn test_paged_params_defaults_and_limits() {
+        // page 0 -> treated as 1, limit 0 -> default 10
+        let (p, l, o) = Database::paged_params(0, 0);
+        assert_eq!(p, 1);
+        assert_eq!(l, 10);
+        assert_eq!(o, 0);
+
+        // large limit clipped to 100
+        let (_p2, l2, _o2) = Database::paged_params(2, 1000);
+        assert_eq!(l2, 100);
+    }
+
+    #[test]
+    fn test_merge_opt_and_option() {
+        let current = "current".to_string();
+        let candidate_some = Some("cand".to_string());
+        let candidate_none: Option<String> = None;
+    assert_eq!(merge_opt(candidate_some.as_ref(), &current), "cand".to_string());
+    assert_eq!(merge_opt(candidate_none.as_ref(), &current), current);
+
+        let cur_opt: Option<String> = Some("cur".to_string());
+        let cand_opt_some = Some("new".to_string());
+        let cand_opt_none: Option<String> = None;
+    assert_eq!(merge_opt_option(cand_opt_some.as_ref(), cur_opt.as_ref()), Some("new".to_string()));
+    assert_eq!(merge_opt_option(cand_opt_none.as_ref(), cur_opt.as_ref()), Some("cur".to_string()));
+    }
+
+    #[test]
+    fn test_compute_post_update_and_build_changes() {
+        let author = Uuid::new_v4();
+        let existing = Post {
+            id: Uuid::new_v4(),
+            title: "Old".to_string(),
+            slug: "old".to_string(),
+            content: "old content".to_string(),
+            excerpt: None,
+            author_id: author,
+            status: "draft".to_string(),
+            featured_image_id: None,
+            tags: vec!["rust".to_string()],
+            categories: vec!["tech".to_string()],
+            meta_title: None,
+            meta_description: None,
+            published_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let req = crate::models::post::UpdatePostRequest {
+            title: Some("New".to_string()),
+            content: None,
+            excerpt: Some("ex".to_string()),
+            slug: None,
+            published: Some(true),
+            tags: Some(vec!["rust".to_string(), "programming".to_string()]),
+            category: Some("Programming".to_string()),
+            featured_image: None,
+            meta_title: None,
+            meta_description: None,
+            published_at: None,
+            status: None,
+        };
+
+        let data = compute_post_update_data(&existing, &req);
+        // ensure title was updated and tags merged
+        assert_eq!(data.title, "New".to_string());
+        assert!(data.tags.contains(&"programming".to_string()));
+
+        // build_post_changes will set published_at when status published and existing none
+        let changed = Database::build_post_changes(&existing, data);
+        assert_eq!(changed.status, "published".to_string());
+        assert!(changed.published_at.is_some());
     }
 }

@@ -52,7 +52,7 @@ mod api_key_adapter_tests {
         assert_eq!(adapter.check("k1"), RateLimitDecision::Allowed);
         match adapter.check("k1") {
             RateLimitDecision::Blocked { .. } => {}
-            _ => panic!("expected blocked"),
+            RateLimitDecision::Allowed => panic!("expected blocked"),
         }
         // Clear and ensure it allows again
         adapter.clear("k1");

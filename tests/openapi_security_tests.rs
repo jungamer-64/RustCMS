@@ -1,4 +1,4 @@
-//! OpenAPI の security スキーム適用を検証するテスト
+//! `OpenAPI` の security スキーム適用を検証するテスト
 use axum::{body::to_bytes, response::IntoResponse};
 use cms_backend::handlers; // lib ターゲット (crate 名は Cargo.toml の package 名に依存)
 use hyper::StatusCode;
@@ -170,15 +170,13 @@ async fn api_key_management_endpoints_have_dual_security() {
                 }
                 assert!(
                     has_bearer && has_biscuit,
-                    "{} {} should allow both Bearer and Biscuit",
-                    method,
-                    path
+                    "{method} {path} should allow both Bearer and Biscuit",
                 );
             } else {
-                panic!("operation {} {} missing", method, path);
+                panic!("operation {method} {path} missing");
             }
         } else {
-            panic!("path {} missing", path);
+            panic!("path {path} missing");
         }
     }
 }

@@ -18,10 +18,10 @@ pub enum FileError {
 impl std::fmt::Display for FileError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FileError::IoError(e) => write!(f, "IO error: {}", e),
-            FileError::InvalidFileType => write!(f, "Invalid file type"),
-            FileError::FileTooLarge => write!(f, "File too large"),
-            FileError::InvalidPath => write!(f, "Invalid file path"),
+            Self::IoError(e) => write!(f, "IO error: {e}"),
+            Self::InvalidFileType => write!(f, "Invalid file type"),
+            Self::FileTooLarge => write!(f, "File too large"),
+            Self::InvalidPath => write!(f, "Invalid file path"),
         }
     }
 }
@@ -30,7 +30,7 @@ impl std::error::Error for FileError {}
 
 impl From<io::Error> for FileError {
     fn from(err: io::Error) -> Self {
-        FileError::IoError(err)
+        Self::IoError(err)
     }
 }
 
@@ -59,10 +59,14 @@ pub fn get_file_extension(filename: &str) -> Option<String> {
     Path::new(filename)
         .extension()
         .and_then(|ext| ext.to_str())
-        .map(|ext| ext.to_lowercase())
+    .map(str::to_lowercase)
 }
 
 /// ファイルタイプを検証
+///
+/// # Errors
+///
+/// `filename` の拡張子が `allowed_extensions` に含まれない場合、`InvalidFileType` を返します。
 pub fn validate_file_type(filename: &str, allowed_extensions: &[&str]) -> Result<(), FileError> {
     match get_file_extension(filename) {
         Some(ext) if allowed_extensions.contains(&ext.as_str()) => Ok(()),
@@ -71,15 +75,22 @@ pub fn validate_file_type(filename: &str, allowed_extensions: &[&str]) -> Result
 }
 
 /// ファイルサイズを検証
-pub fn validate_file_size(size: u64, max_size: u64) -> Result<(), FileError> {
+///
+/// # Errors
+///
+/// `size` が `max_size` を超える場合、`FileTooLarge` を返します。
+pub const fn validate_file_size(size: u64, max_size: u64) -> Result<(), FileError> {
     if size > max_size {
-        Err(FileError::FileTooLarge)
-    } else {
-        Ok(())
+        return Err(FileError::FileTooLarge);
     }
+    Ok(())
 }
 
 /// ファイルのハッシュを計算
+///
+/// # Errors
+///
+/// ファイルの読み取りに失敗した場合、`IoError` を返します。
 pub fn calculate_file_hash(file_path: &Path) -> Result<String, FileError> {
     let mut file = File::open(file_path)?;
     let mut hasher = Sha256::new();
@@ -97,6 +108,10 @@ pub fn calculate_file_hash(file_path: &Path) -> Result<String, FileError> {
 }
 
 /// 非同期でファイルのハッシュを計算
+///
+/// # Errors
+///
+/// ファイルの読み取りに失敗した場合、`IoError` を返します。
 pub async fn calculate_file_hash_async(file_path: &Path) -> Result<String, FileError> {
     let mut file = async_fs::File::open(file_path).await?;
     let mut hasher = Sha256::new();
@@ -114,6 +129,7 @@ pub async fn calculate_file_hash_async(file_path: &Path) -> Result<String, FileE
 }
 
 /// 安全なファイル名を生成
+#[must_use]
 pub fn generate_safe_filename(original_name: &str) -> String {
     let uuid = Uuid::new_v4();
     let extension = get_file_extension(original_name).unwrap_or_default();
@@ -121,11 +137,15 @@ pub fn generate_safe_filename(original_name: &str) -> String {
     if extension.is_empty() {
         uuid.to_string()
     } else {
-        format!("{}.{}", uuid, extension)
+        format!("{uuid}.{extension}")
     }
 }
 
 /// ディレクトリパスを作成
+///
+/// # Errors
+///
+/// ディレクトリ作成に失敗した場合、`IoError` を返します。
 pub fn ensure_directory_exists(path: &Path) -> Result<(), FileError> {
     if !path.exists() {
         fs::create_dir_all(path)?;
@@ -134,6 +154,10 @@ pub fn ensure_directory_exists(path: &Path) -> Result<(), FileError> {
 }
 
 /// 非同期でディレクトリパスを作成
+///
+/// # Errors
+///
+/// ディレクトリ作成に失敗した場合、`IoError` を返します。
 pub async fn ensure_directory_exists_async(path: &Path) -> Result<(), FileError> {
     if !path.exists() {
         async_fs::create_dir_all(path).await?;
@@ -142,6 +166,10 @@ pub async fn ensure_directory_exists_async(path: &Path) -> Result<(), FileError>
 }
 
 /// ファイルを移動
+///
+/// # Errors
+///
+/// 移動元/先の存在や権限不足などで失敗した場合、`IoError` を返します。
 pub fn move_file(from: &Path, to: &Path) -> Result<(), FileError> {
     if let Some(parent) = to.parent() {
         ensure_directory_exists(parent)?;
@@ -151,6 +179,10 @@ pub fn move_file(from: &Path, to: &Path) -> Result<(), FileError> {
 }
 
 /// 非同期でファイルを移動
+///
+/// # Errors
+///
+/// 移動元/先の存在や権限不足などで失敗した場合、`IoError` を返します。
 pub async fn move_file_async(from: &Path, to: &Path) -> Result<(), FileError> {
     if let Some(parent) = to.parent() {
         ensure_directory_exists_async(parent).await?;
@@ -160,6 +192,10 @@ pub async fn move_file_async(from: &Path, to: &Path) -> Result<(), FileError> {
 }
 
 /// ファイルをコピー
+///
+/// # Errors
+///
+/// コピー時の入出力に失敗した場合、`IoError` を返します。
 pub fn copy_file(from: &Path, to: &Path) -> Result<u64, FileError> {
     if let Some(parent) = to.parent() {
         ensure_directory_exists(parent)?;
@@ -169,6 +205,10 @@ pub fn copy_file(from: &Path, to: &Path) -> Result<u64, FileError> {
 }
 
 /// 非同期でファイルをコピー
+///
+/// # Errors
+///
+/// コピー時の入出力に失敗した場合、`IoError` を返します。
 pub async fn copy_file_async(from: &Path, to: &Path) -> Result<u64, FileError> {
     if let Some(parent) = to.parent() {
         ensure_directory_exists_async(parent).await?;
@@ -178,6 +218,10 @@ pub async fn copy_file_async(from: &Path, to: &Path) -> Result<u64, FileError> {
 }
 
 /// ファイルを削除
+///
+/// # Errors
+///
+/// 削除対象が存在しない、または権限不足などで失敗した場合、`IoError` を返します。
 pub fn delete_file(path: &Path) -> Result<(), FileError> {
     if path.exists() {
         fs::remove_file(path)?;
@@ -186,6 +230,10 @@ pub fn delete_file(path: &Path) -> Result<(), FileError> {
 }
 
 /// 非同期でファイルを削除
+///
+/// # Errors
+///
+/// 削除対象が存在しない、または権限不足などで失敗した場合、`IoError` を返します。
 pub async fn delete_file_async(path: &Path) -> Result<(), FileError> {
     if path.exists() {
         async_fs::remove_file(path).await?;
@@ -194,6 +242,10 @@ pub async fn delete_file_async(path: &Path) -> Result<(), FileError> {
 }
 
 /// ファイル情報を取得
+///
+/// # Errors
+///
+/// メタデータ取得やハッシュ計算に失敗した場合、`IoError` を返します。
 pub fn get_file_info(path: &Path) -> Result<FileInfo, FileError> {
     let metadata = fs::metadata(path)?;
     build_file_info_from_parts(path, metadata.len(), || {
@@ -202,6 +254,10 @@ pub fn get_file_info(path: &Path) -> Result<FileInfo, FileError> {
 }
 
 /// 非同期でファイル情報を取得
+///
+/// # Errors
+///
+/// メタデータの取得やハッシュ計算に失敗した場合、`FileError` を返します。
 pub async fn get_file_info_async(path: &Path) -> Result<FileInfo, FileError> {
     let metadata = async_fs::metadata(path).await?;
     // Adapt sync builder by deferring only the hash as async
@@ -221,7 +277,7 @@ pub async fn get_file_info_async(path: &Path) -> Result<FileInfo, FileError> {
     })
 }
 
-/// Internal helper: assemble FileInfo given a path, size and a hash supplier.
+/// Internal helper: assemble `FileInfo` given a path, size and a hash supplier.
 fn build_file_info_from_parts<F>(path: &Path, size: u64, hash_fn: F) -> Result<FileInfo, FileError>
 where
     F: FnOnce() -> Result<String, FileError>,
@@ -243,6 +299,7 @@ where
 }
 
 /// 拡張子からMIMEタイプを取得
+#[must_use]
 pub fn get_mime_type(extension: &str) -> String {
     match extension.to_lowercase().as_str() {
         "jpg" | "jpeg" => "image/jpeg",
@@ -263,24 +320,33 @@ pub fn get_mime_type(extension: &str) -> String {
 }
 
 /// ファイルサイズを人間が読みやすい形式に変換
+#[must_use]
 pub fn format_file_size(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
-    let mut size = bytes as f64;
+    // Avoid precision loss by operating on integers and formatting at the end
+    let mut value = bytes;
     let mut unit_index = 0;
 
-    while size >= 1024.0 && unit_index < UNITS.len() - 1 {
-        size /= 1024.0;
+    while value >= 1024 && unit_index < UNITS.len() - 1 {
+        value /= 1024;
         unit_index += 1;
     }
 
     if unit_index == 0 {
         format!("{} {}", bytes, UNITS[unit_index])
     } else {
-        format!("{:.2} {}", size, UNITS[unit_index])
+        // Compute two decimal places using integer arithmetic to avoid precision loss
+        let pow = 1024u64.pow(u32::try_from(unit_index).unwrap_or(0));
+        let whole = bytes / pow;
+        let rem = bytes % pow;
+        // Scale remainder to hundredths
+        let hundredths = (rem * 100 + (pow / 20)) / pow; // round to nearest
+        format!("{}.{}{:02} {}", whole, if hundredths < 10 { "0" } else { "" }, hundredths, UNITS[unit_index])
     }
 }
 
 /// アップロード用のパスを生成
+#[must_use]
 pub fn generate_upload_path(base_dir: &Path, category: &str, filename: &str) -> PathBuf {
     let safe_filename = generate_safe_filename(filename);
     let date = chrono::Utc::now();
@@ -290,7 +356,7 @@ pub fn generate_upload_path(base_dir: &Path, category: &str, filename: &str) -> 
     base_dir
         .join(category)
         .join(year.to_string())
-        .join(format!("{:02}", month))
+    .join(format!("{month:02}"))
         .join(safe_filename)
 }
 
@@ -322,7 +388,9 @@ mod tests {
     #[test]
     fn test_generate_safe_filename() {
         let safe_name = generate_safe_filename("test file.jpg");
-        assert!(safe_name.ends_with(".jpg"));
+        assert!(std::path::Path::new(&safe_name)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("jpg")));
         assert!(!safe_name.contains(' '));
     }
 
@@ -336,7 +404,7 @@ mod tests {
     #[test]
     fn test_format_file_size() {
         assert_eq!(format_file_size(1024), "1.00 KB");
-        assert_eq!(format_file_size(1048576), "1.00 MB");
+    assert_eq!(format_file_size(1_048_576), "1.00 MB");
         assert_eq!(format_file_size(500), "500 B");
     }
 

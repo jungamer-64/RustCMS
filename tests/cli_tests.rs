@@ -17,8 +17,7 @@ fn help_shows_commands() {
             || stdout.to_lowercase().contains("commands");
         assert!(
             ok,
-            "Unexpected help output:\nSTDOUT: {}\nSTDERR: {}",
-            stdout, stderr
+            "Unexpected help output:\nSTDOUT: {stdout}\nSTDERR: {stderr}"
         );
     } else {
         // In CI the command may fail due to missing config; accept that or any non-empty output
@@ -28,8 +27,7 @@ fn help_shows_commands() {
             || !stderr.trim().is_empty();
         assert!(
             ok,
-            "Unexpected help failure:\nSTDOUT: {}\nSTDERR: {}",
-            stdout, stderr
+            "Unexpected help failure:\nSTDOUT: {stdout}\nSTDERR: {stderr}"
         );
     }
 }
@@ -52,7 +50,6 @@ fn migrate_allows_no_seed_flag() {
 
     assert!(
         ok,
-        "Unexpected migrate output:\nSTDOUT: {}\nSTDERR: {}",
-        stdout, stderr
+        "Unexpected migrate output:\nSTDOUT: {stdout}\nSTDERR: {stderr}"
     );
 }

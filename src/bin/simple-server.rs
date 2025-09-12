@@ -13,7 +13,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/", get(root));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3001));
-    println!("🚀 Simple server starting on http://{}", addr);
+    println!("🚀 Simple server starting on http://{addr}");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;

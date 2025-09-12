@@ -2,6 +2,7 @@ use crate::AppError;
 use std::collections::HashMap;
 use validator::ValidationErrors;
 
+#[must_use]
 pub fn format_validation_errors(errors: &ValidationErrors) -> HashMap<String, Vec<String>> {
     let mut formatted = HashMap::new();
 
@@ -11,7 +12,7 @@ pub fn format_validation_errors(errors: &ValidationErrors) -> HashMap<String, Ve
             if let Some(message) = &error.message {
                 messages.push(message.to_string());
             } else {
-                messages.push(format!("Invalid value for field '{}'", field));
+                messages.push(format!("Invalid value for field '{field}'"));
             }
         }
         formatted.insert(field.to_string(), messages);
@@ -21,11 +22,14 @@ pub fn format_validation_errors(errors: &ValidationErrors) -> HashMap<String, Ve
 }
 
 /// Simple email validation
+#[must_use]
 pub fn validate_email(email: &str) -> bool {
     email.contains('@') && email.contains('.') && email.len() > 5
 }
 
 /// ユーザー入力バリデーション
+/// # Errors
+/// Returns [`AppError::BadRequest`] when email format is invalid or password is too short.
 pub fn validate_user_input(email: &str, password: Option<&str>) -> Result<(), AppError> {
     if !validate_email(email) {
         return Err(AppError::BadRequest("Invalid email format".to_string()));

@@ -14,7 +14,12 @@ use axum::{
 use serde_json::json;
 
 /// CSRF protection middleware
-/// 对状态更改操作强制执行 CSRF 保护
+/// # Errors
+///
+/// Returns an error response when the request fails CSRF validation, such as:
+/// - missing or invalid CSRF headers/tokens
+/// - token mismatch between header and cookie
+/// - malformed header values that cannot be parsed
 pub async fn csrf_protection_middleware(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -68,7 +73,6 @@ pub async fn csrf_protection_middleware(
 }
 
 /// Endpoint to generate CSRF tokens for clients
-/// 为客户端生成 CSRF 令牌的端点
 pub async fn get_csrf_token(State(state): State<AppState>) -> impl IntoResponse {
     let token = state.csrf.generate_token().await;
 

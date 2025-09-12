@@ -4,12 +4,12 @@
 //! for large-scale production environments supporting 10,000+ concurrent users:
 //!
 //! ## 🏢 Enterprise Architecture
-//! - **PostgreSQL + Diesel ORM**: Type-safe database operations with connection pooling
+//! - **`PostgreSQL` + Diesel ORM**: Type-safe database operations with connection pooling
 //! - **Tantivy**: Lightning-fast full-text search with advanced indexing (Pure Rust)
-//! - **biscuit-auth + WebAuthn**: Zero-trust security with passwordless authentication
+//! - **biscuit-auth + `WebAuthn`**: Zero-trust security with passwordless authentication
 //! - **Redis**: Distributed caching and session management for horizontal scaling
 //! - **rustls**: Pure Rust TLS implementation for maximum security and performance
-//! - **OpenAPI 3.0**: Comprehensive API documentation with interactive explorer
+//! - **`OpenAPI` 3.0**: Comprehensive API documentation with interactive explorer
 //!
 //! ## 🚀 Production Features
 //! - **5,000+ RPS**: High-throughput request handling with async Rust
@@ -18,6 +18,12 @@
 //! - **Advanced Security**: Rate limiting, CORS, security headers, audit logging
 //! - **Real-time Monitoring**: Prometheus metrics, OpenTelemetry tracing
 //! - **Zero-downtime Deployments**: Graceful shutdown and health checks
+
+// NOTE: Some transitive Windows crates (windows-sys, windows-targets, etc.) appear in multiple
+// minor versions due to upstream constraints across our dependency graph. Unifying them is not
+// feasible without forking/upgrading several crates and is not a correctness issue on Linux.
+// We allow this lint at the crate level to keep strict Clippy useful without blocking builds.
+#![allow(clippy::multiple_crate_versions)]
 
 use axum::response::{IntoResponse, Json};
 use serde_json::json;
@@ -58,6 +64,7 @@ pub use config::Config;
 pub use error::{AppError, Result};
 
 /// Build information endpoint
+#[must_use]
 pub fn build_info() -> impl IntoResponse {
     Json(json!({
         "name": env!("CARGO_PKG_NAME"),
