@@ -336,6 +336,45 @@ jobs:
       - name: Run cargo-deny (advisories/licenses)
         run: cargo deny check advisories bans licenses sources sources --hide-inclusion-graph
 
+  secrets-scan:
+    name: Security / gitleaks
+    runs-on: ubuntu-latest
+    needs: cargo-deny
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks detect
+        run: |
+          if ! command -v gitleaks >/dev/null 2>&1; then
+            echo 'Installing gitleaks'; curl -sSLf https://github.com/zricethezav/gitleaks/releases/latest/download/gitleaks-linux-amd64 -o gitleaks && chmod +x gitleaks && sudo mv gitleaks /usr/local/bin/gitleaks || true
+          fi
+          set -o pipefail
+          # Run gitleaks and write exit code to file
+          gitleaks detect --source . --report-format json --report-path gitleaks-report.json | tee gitleaks-raw.log
+          echo $? > gitleaks-exitcode.txt || true
+      - name: Upload gitleaks artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: |
+            gitleaks-report.json
+            gitleaks-raw.log
+            gitleaks-exitcode.txt
+      - name: Fail on leaks
+        run: |
+          EC=$(cat gitleaks-exitcode.txt || echo 0)
+          if [ "$EC" != "0" ]; then
+            echo "gitleaks detected leaks (exit code=$EC). Failing CI.";
+            cat gitleaks-report.json || true;
+            exit 1
+          else
+            echo "No leaks detected by gitleaks.";
+          fi
+
   audit:
     name: Security / cargo-audit
     runs-on: ubuntu-latest
