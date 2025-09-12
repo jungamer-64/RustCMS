@@ -4,6 +4,46 @@
 target/
 
 # Note: For applications it's recommended to commit Cargo.lock so CI and reproducible
+# Security scanner outputs
+security/
+*.gitleaks*
+gitleaks-report.json
+gitleaks-raw.log
+gitleaks-exitcode.txt
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+.env.*
+.secrets
+secret-*
+
+# Private keys and certificates
+*.pem
+*.key
+*.crt
+*.p12
+
+# IDE / Editor
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+**/target/
+**/dist/
+
+# Misc temporary files
+*.log
+*.tmp
+*.swp
+.cache/
 # builds use the same resolved dependency graph. Do NOT ignore Cargo.lock here.
 
 # Environment files (local secrets)
