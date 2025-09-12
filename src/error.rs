@@ -134,8 +134,8 @@ impl IntoResponse for AppError {
             ),
             Self::Validation(ve) => {
                 let mut list = Vec::new();
-                for (field, errs) in ve.field_errors().iter() {
-                    for e in errs.iter() {
+                for (field, errs) in ve.field_errors() {
+                    for e in errs {
                         let message = e
                             .message
                             .clone()
@@ -174,14 +174,15 @@ impl IntoResponse for AppError {
                 None,
             ),
         };
-        let body = if let Some(details) = validation_details {
-            Json(ApiResponse::error_with_validation(
-                error_message.to_string(),
-                details,
-            ))
-        } else {
-            Json(ApiResponse::error(error_message.to_string()))
-        };
+        let body = validation_details.map_or_else(
+            || Json(ApiResponse::error(error_message.to_string())),
+            |details| {
+                Json(ApiResponse::error_with_validation(
+                    error_message.to_string(),
+                    details,
+                ))
+            },
+        );
         (status, body).into_response()
     }
 }
