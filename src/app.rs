@@ -764,6 +764,11 @@ impl AppState {
 
     // --- Search service wrappers to record search metrics centrally ---
     #[cfg(feature = "search")]
+    /// 検索を実行します。
+    ///
+    /// # Errors
+    ///
+    /// 検索バックエンドへの問い合わせに失敗した場合にエラーを返します。
     pub async fn search_execute(
         &self,
         req: crate::search::SearchRequest,
@@ -772,17 +777,32 @@ impl AppState {
     }
 
     #[cfg(feature = "search")]
+    /// サジェストを取得します。
+    ///
+    /// # Errors
+    ///
+    /// 検索バックエンドからの応答取得に失敗した場合にエラーを返します。
     pub async fn search_suggest(&self, prefix: &str, limit: usize) -> crate::Result<Vec<String>> {
         timed_op!(self, "search", self.search.suggest(prefix, limit))
     }
 
     #[cfg(feature = "search")]
+    /// 検索統計情報を取得します。
+    ///
+    /// # Errors
+    ///
+    /// 統計取得時にバックエンド呼び出しが失敗した場合にエラーを返します。
     pub async fn search_get_stats(&self) -> crate::Result<crate::search::SearchStats> {
         timed_op!(self, "search", self.search.get_stats())
     }
 
     // --- Auth service wrappers to record auth metrics centrally ---
     #[cfg(feature = "auth")]
+    /// ユーザーを作成します。
+    ///
+    /// # Errors
+    ///
+    /// 入力検証や保存処理、外部サービス連携に失敗した場合にエラーを返します。
     pub async fn auth_create_user(
         &self,
         request: crate::models::CreateUserRequest,
@@ -791,6 +811,11 @@ impl AppState {
     }
 
     #[cfg(feature = "auth")]
+    /// ユーザー認証を実行します。
+    ///
+    /// # Errors
+    ///
+    /// 資格情報が不正、または内部処理に失敗した場合にエラーを返します。
     pub async fn auth_authenticate(
         &self,
         request: crate::auth::LoginRequest,
@@ -799,11 +824,21 @@ impl AppState {
     }
 
     #[cfg(feature = "auth")]
+    /// セッションを作成します。
+    ///
+    /// # Errors
+    ///
+    /// セッション発行時の保存や暗号化処理に失敗した場合にエラーを返します。
     pub async fn auth_create_session(&self, user_id: uuid::Uuid) -> crate::Result<String> {
         timed_op!(self, "auth", self.auth.create_session(user_id, self))
     }
 
     #[cfg(feature = "auth")]
+    /// `AuthResponse` を生成します。
+    ///
+    /// # Errors
+    ///
+    /// トークン生成やユーザー情報組み立てに失敗した場合にエラーを返します。
     pub async fn auth_build_auth_response(
         &self,
         user: crate::models::User,
@@ -820,6 +855,10 @@ impl AppState {
     /// Use this in handlers instead of manually converting `AuthResponse`.
     /// NOTE: Keeps backward compatibility because the underlying creation path is unchanged.
     #[cfg(feature = "auth")]
+    ///
+    /// # Errors
+    ///
+    /// 内部の `auth_build_auth_response` が失敗した場合にエラーを返します。
     pub async fn auth_build_success_response(
         &self,
         user: crate::models::User,
@@ -830,6 +869,11 @@ impl AppState {
     }
 
     #[cfg(feature = "auth")]
+    /// アクセストークンをリフレッシュします。
+    ///
+    /// # Errors
+    ///
+    /// リフレッシュトークンが不正、または内部の検証/保存処理に失敗した場合にエラーを返します。
     pub async fn auth_refresh_access_token(
         &self,
         refresh_token: &str,
@@ -840,8 +884,12 @@ impl AppState {
         timed_op!(self, "auth", self.auth.refresh_access_token(refresh_token))
     }
 
-    /// Convenience wrapper: refresh using a refresh token and return unified AuthSuccessResponse directly.
+    /// Convenience wrapper: refresh using a refresh token and return unified `AuthSuccessResponse` directly.
     #[cfg(feature = "auth")]
+    ///
+    /// # Errors
+    ///
+    /// 内部の `auth_refresh_access_token` が失敗した場合にエラーを返します。
     pub async fn auth_refresh_success_response(
         &self,
         refresh_token: &str,
@@ -850,13 +898,22 @@ impl AppState {
         Ok(crate::utils::auth_response::AuthSuccessResponse::from_parts(&tokens, user))
     }
 
-    /// Validate a token using the AuthService; returns the authenticated user on success and records an auth attempt
+    /// Validate a token using the `AuthService`; returns the authenticated user on success and records an auth attempt
     #[cfg(feature = "auth")]
+    ///
+    /// # Errors
+    ///
+    /// トークンが不正、または検証過程で失敗した場合にエラーを返します。
     pub async fn auth_validate_token(&self, token: &str) -> crate::Result<crate::models::User> {
         timed_op!(self, "auth", self.auth.validate_token(self, token))
     }
 
     #[cfg(feature = "auth")]
+    /// ビスケットトークンを検証します。
+    ///
+    /// # Errors
+    ///
+    /// ビスケットトークンの検証に失敗した場合にエラーを返します。
     pub async fn auth_verify_biscuit(
         &self,
         token: &str,
@@ -864,8 +921,12 @@ impl AppState {
         timed_op!(self, "auth", self.auth.verify_biscuit(self, token))
     }
 
-    /// Health check wrapper for AuthService that records timing
+    /// Health check wrapper for `AuthService` that records timing
     #[cfg(feature = "auth")]
+    ///
+    /// # Errors
+    ///
+    /// 健康チェックの内部処理で失敗した場合にエラーを返します。
     pub async fn auth_health_check(&self) -> crate::Result<crate::app::ServiceHealth> {
         // auth の内部 DB 呼び出しを個別にカウントする必要があれば AuthService 側で timed 化する想定
         Ok(self.check_auth_health().await)
@@ -873,6 +934,11 @@ impl AppState {
 
     // --- Database wrapper helpers that record metrics centrally on AppState ---
     #[cfg(feature = "database")]
+    /// ユーザーを作成します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や保存処理に失敗した場合にエラーを返します。
     pub async fn db_create_user(
         &self,
         req: crate::models::CreateUserRequest,
@@ -881,16 +947,31 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// ユーザーIDでユーザーを取得します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や取得クエリに失敗した場合にエラーを返します。
     pub async fn db_get_user_by_id(&self, id: uuid::Uuid) -> crate::Result<crate::models::User> {
         timed_op!(self, "db", self.database.get_user_by_id(id))
     }
 
     #[cfg(feature = "database")]
+    /// メールアドレスでユーザーを取得します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や取得クエリに失敗した場合にエラーを返します。
     pub async fn db_get_user_by_email(&self, email: &str) -> crate::Result<crate::models::User> {
         timed_op!(self, "db", self.database.get_user_by_email(email))
     }
 
     #[cfg(feature = "database")]
+    /// ユーザー一覧を取得します（フィルタ/ソート対応）。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や取得クエリに失敗した場合にエラーを返します。
     pub async fn db_get_users(
         &self,
         page: u32,
@@ -905,12 +986,22 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// 最終ログイン時刻を更新します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や更新クエリに失敗した場合にエラーを返します。
     pub async fn db_update_last_login(&self, id: uuid::Uuid) -> crate::Result<()> {
         timed_op!(self, "db", async { self.database.update_last_login(id) })
     }
 
     // Additional user helpers used by handlers/CLI
     #[cfg(feature = "database")]
+    /// ユーザー名でユーザーを取得します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や取得クエリに失敗した場合にエラーを返します。
     pub async fn db_get_user_by_username(
         &self,
         username: &str,
@@ -919,18 +1010,28 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// ユーザー情報を更新します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や更新クエリに失敗した場合にエラーを返します。
     pub async fn db_update_user(
         &self,
         id: uuid::Uuid,
         request: crate::models::UpdateUserRequest,
     ) -> crate::Result<crate::models::User> {
-    let user = timed_op!(self, "db", async { self.database.update_user(id, request) })?;
+    let user = timed_op!(self, "db", async { self.database.update_user(id, &request) })?;
         #[cfg(feature = "cache")]
         self.invalidate_user_caches(id).await;
         Ok(user)
     }
 
     #[cfg(feature = "database")]
+    /// ユーザーを削除します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や削除クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_delete_user(&self, id: uuid::Uuid) -> crate::Result<()> {
     timed_op!(self, "db", async { self.database.delete_user(id) })?;
         #[cfg(feature = "cache")]
@@ -939,6 +1040,11 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// ユーザーパスワードをリセットします。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や更新処理に失敗した場合にエラーを返します。
     pub async fn db_reset_user_password(
         &self,
         id: uuid::Uuid,
@@ -952,11 +1058,21 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// ユーザー数を返します。
+    ///
+    /// # Errors
+    ///
+    /// 集計クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_count_users(&self) -> crate::Result<usize> {
     timed_op!(self, "db", async { self.database.count_users() })
     }
 
     #[cfg(feature = "database")]
+    /// 条件付きのユーザー数を返します。
+    ///
+    /// # Errors
+    ///
+    /// 集計クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_count_users_filtered(
         &self,
         role: Option<String>,
@@ -966,6 +1082,11 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// 投稿を作成します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や保存処理に失敗した場合にエラーを返します。
     pub async fn db_create_post(
         &self,
         req: crate::models::CreatePostRequest,
@@ -974,11 +1095,21 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// 投稿IDで投稿を取得します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や取得クエリに失敗した場合にエラーを返します。
     pub async fn db_get_post_by_id(&self, id: uuid::Uuid) -> crate::Result<crate::models::Post> {
     timed_op!(self, "db", async { self.database.get_post_by_id(id) })
     }
 
     #[cfg(feature = "database")]
+    /// 投稿一覧を取得します（フィルタ/ソート対応）。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や取得クエリに失敗した場合にエラーを返します。
     pub async fn db_get_posts(
         &self,
         page: u32,
@@ -997,6 +1128,11 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// 投稿を更新します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や更新クエリに失敗した場合にエラーを返します。
     pub async fn db_update_post(
         &self,
         id: uuid::Uuid,
