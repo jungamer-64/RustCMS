@@ -246,6 +246,71 @@ jobs:
             echo "All counts zero - running strict removal gate";
           bash scripts/deprecation-strict-check.sh
 
+  integration-tests:
+    name: Integration Tests (Postgres)
+    runs-on: ubuntu-latest
+    needs: test
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: rustcms_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
+        with:
+          toolchain: stable
+          components: clippy
+      - name: Wait for DB
+        run: sleep 10
+      - name: Ensure BISCUIT keys (secrets preferred, else generate)
+        run: |
+          set -euo pipefail
+          if [ -n "${BISCUIT_PRIVATE_KEY_B64:-}" ] && [ -n "${BISCUIT_PUBLIC_KEY_B64:-}" ]; then
+            echo "BISCUIT keys present via secrets; skipping generation"
+            exit 0
+          fi
+          echo "No BISCUIT secrets found; generating ephemeral keys"
+          cargo build --bin gen_biscuit_keys --quiet
+          OUT=$(./target/debug/gen_biscuit_keys)
+          echo "$OUT"
+          PRIV=$(echo "$OUT" | sed -n 's/^BISCUIT_PRIVATE_KEY_B64=\(.*\)$/\1/p')
+          PUB=$(echo "$OUT" | sed -n 's/^BISCUIT_PUBLIC_KEY_B64=\(.*\)$/\1/p')
+          if [ -z "${PRIV:-}" ] || [ -z "${PUB:-}" ]; then
+            echo "Failed to generate biscuit keys" >&2; exit 1
+          fi
+          echo "BISCUIT_PRIVATE_KEY_B64=$PRIV" >> "$GITHUB_ENV"
+          echo "BISCUIT_PUBLIC_KEY_B64=$PUB" >> "$GITHUB_ENV"
+      - name: Run DB migrations for integration
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          cargo build --bin cms-migrate --quiet || true
+          if [ -x ./target/debug/cms-migrate ]; then
+            ./target/debug/cms-migrate migrate --no-seed
+          else
+            echo "cms-migrate binary not found; skipping migrations";
+          fi
+      - name: Run integration tests
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          echo "Using BISCUIT_PRIVATE_KEY_B64=${BISCUIT_PRIVATE_KEY_B64:-<none>}"
+          echo "Using BISCUIT_PUBLIC_KEY_B64=${BISCUIT_PUBLIC_KEY_B64:-<none>}"
+          cargo test --tests --color always
+
   # ---------------- Security Jobs (integrated from security.yml) ----------------
   cargo-deny:
     name: Security / cargo-deny
