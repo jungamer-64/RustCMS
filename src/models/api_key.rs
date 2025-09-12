@@ -250,7 +250,7 @@ impl ApiKey {
             .map(|arr| {
                 arr.iter()
                     .filter_map(|v| v.as_str())
-                    .map(|s| s.to_string())
+                    .map(str::to_string)
                     .collect()
             })
             .unwrap_or_default()
