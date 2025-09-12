@@ -36,7 +36,7 @@ path = "src/bin/admin.rs"
 axum = { version = "0.8", features = ["multipart", "ws", "macros", "form"] }
 axum-extra = { version = "0.10", features = ["typed-header", "cookie", "query", "form"] }
 hyper = { version = "1.6", features = ["full"] }
-hyper-rustls = { version = "0.27", features = ["http2"], default-features = false }
+hyper-rustls = { version = "0.27", default-features = false, features = ["http2", "ring", "webpki-roots"] }
 tower = { version = "0.5", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "fs", "limit", "timeout", "request-id", "auth", "sensitive-headers", "compression-gzip", "normalize-path"], default-features = false }
 
@@ -77,7 +77,7 @@ redis = { version = "0.32.5", features = ["tokio-rustls-comp", "cluster", "strea
 aes-gcm = "0.10"
 hmac = "0.12"
 ring = "0.17"
-rustls = { version = "0.23", features = ["ring"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 rustls-pemfile = "2.0"
 rustls-webpki = "0.103"
 sha2 = "0.10"
@@ -120,7 +120,11 @@ garde = { version = "0.22", features = ["derive"] }
 validator = { version = "0.20", features = ["derive", "unic"] }
 
 # ===== MEDIA PROCESSING (Production) =====
-image = { version = "0.25", features = ["jpeg", "png", "webp", "avif"], default-features = false }
+# NOTE: Temporarily removing the `avif` feature to avoid pulling in the
+# `ravif`/`rav1e` -> `paste` transitive chain (RUSTSEC-2024-0436). If AVIF
+# support is required, we'll evaluate alternate crates or a maintained upstream
+# that doesn't depend on `paste`.
+image = { version = "0.25", features = ["jpeg", "png", "webp"], default-features = false }
 mime = "0.3"
 mime_guess = "2.0"
 tempfile = "3.8"
