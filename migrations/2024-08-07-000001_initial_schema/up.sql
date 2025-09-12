@@ -264,7 +264,11 @@ DROP TRIGGER IF EXISTS update_webhooks_updated_at ON webhooks;
 CREATE TRIGGER update_webhooks_updated_at BEFORE UPDATE ON webhooks
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Insert default admin user (password: admin123)
+-- Insert default admin user
+-- NOTE: For security, do NOT include plaintext passwords in repository comments or code.
+-- If a default password is required for local testing, document it in developer setup docs
+-- and ensure it's different from production credentials. Rotate or remove defaults before
+-- deploying to production.
 INSERT INTO users (
     id,
     username,
