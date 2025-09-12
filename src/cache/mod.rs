@@ -170,6 +170,7 @@ impl CacheService {
                 if let Some(expires_at) = entry.expires_at {
                     if Instant::now() > expires_at {
                         memory_cache.remove(&full_key);
+                        drop(memory_cache);
                     } else {
                         // Cache hit: clone data and increment hit counter under lock
                         entry.hits += 1;
@@ -428,6 +429,7 @@ impl CacheService {
     }
 
     #[inline]
+    #[allow(dead_code)]
     async fn decode_and_record_memory_hit<T: DeserializeOwned>(
         &self,
         entry: &mut CacheEntry<Vec<u8>>,
