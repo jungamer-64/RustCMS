@@ -1,7 +1,17 @@
 use std::time::Duration;
 
 /// Cache-or-compute helper that hides cache feature flag branching.
-/// If cache feature is disabled, simply computes and returns the value.
+///
+/// If the `cache` feature is enabled it will first attempt to read from cache,
+/// otherwise it computes the value and stores it with the provided TTL.
+/// When the `cache` feature is disabled, it simply computes and returns the value.
+///
+/// # Errors
+///
+/// Returns an error if the `compute` future returns an error. Cache get/set
+/// failures are ignored on set (best-effort) but a successful cache hit is
+/// required to deserialize into `T`; deserialization failures will propagate
+/// as an error from the underlying cache client.
 pub async fn cache_or_compute<T, F, Fut>(
     state: crate::AppState,
     key: &str,

@@ -35,7 +35,7 @@ pub fn print_env_summary() {
     println!("cargo run --bin cms-simple");
 }
 
-/// Build a minimal docs-only Router that doesn't require AppState
+/// Build a minimal docs-only Router that doesn't require `AppState`
 fn docs_router() -> Router {
     use crate::handlers;
     Router::new()
@@ -44,12 +44,15 @@ fn docs_router() -> Router {
 }
 
 /// Run a lightweight docs server on the given address.
+///
+/// # Errors
+///
+/// バインド時にソケットの確保に失敗した場合や、サーバー実行中に内部エラーが発生した場合にエラーを返します。
 pub async fn run_docs_server(addr: SocketAddr) -> crate::Result<()> {
     let app = docs_router();
 
     println!(
-        "Docs server running on http://{} (endpoints: /api/docs, /api/docs/openapi.json)",
-        addr
+        "Docs server running on http://{addr} (endpoints: /api/docs, /api/docs/openapi.json)"
     );
 
     let listener = tokio::net::TcpListener::bind(addr)

@@ -450,6 +450,9 @@ impl AppState {
     }
 
     /// Perform comprehensive health check of all services
+    ///
+    /// # Errors
+    /// 現在この関数自体はエラーを返しません（各サービスの失敗は `ServiceHealth` の `status`/`error` に反映されます）。
     pub async fn health_check(&self) -> Result<HealthStatus> {
         let start_time = Instant::now();
 
@@ -1228,6 +1231,11 @@ impl AppState {
 
     // --- Admin-specific DB helpers (to avoid direct Diesel in handlers) ---
     #[cfg(feature = "database")]
+    /// 管理者用: 最近の投稿一覧を取得します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得やクエリ実行に失敗した場合、エラーを返します。
     pub async fn db_admin_list_recent_posts(
         &self,
         limit: i64,
@@ -1433,6 +1441,11 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// 保留中のマイグレーション名の一覧を返します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得やマイグレーション情報の取得に失敗した場合、エラーを返します。
     pub async fn db_list_pending_migrations(
         &self,
         migrations: diesel_migrations::EmbeddedMigrations,
