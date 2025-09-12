@@ -35,13 +35,13 @@ pub enum SearchError {
 
 impl From<SearchError> for crate::AppError {
     fn from(err: SearchError) -> Self {
-        crate::AppError::Internal(err.to_string())
+        Self::Internal(err.to_string())
     }
 }
 
 impl From<TantivyError> for SearchError {
     fn from(err: TantivyError) -> Self {
-        SearchError::Index(err.to_string())
+        Self::Index(err.to_string())
     }
 }
 
@@ -124,6 +124,9 @@ pub struct SearchSchema {
 
 impl SearchService {
     /// Create new search service
+    ///
+    /// # Errors
+    /// - Tantivy のリーダー/ライター初期化に失敗した場合。
     #[allow(clippy::unused_async)]
     pub async fn new(config: SearchConfig) -> Result<Self> {
         // Create dummy schema fields for now
