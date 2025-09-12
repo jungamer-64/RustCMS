@@ -2,6 +2,10 @@
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Initialize comprehensive telemetry for enterprise monitoring
+///
+/// # Errors
+///
+/// 初期化過程（環境変数の解析やロガー構築）でエラーが発生した場合にエラーを返します。
 pub fn init_telemetry() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize OpenTelemetry tracer for distributed tracing
     // (Temporarily disabled Jaeger pipeline — reintroduce after dependency stabilization)
@@ -26,26 +30,24 @@ pub fn init_telemetry() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize Prometheus metrics registry
     #[cfg(feature = "monitoring")]
-    init_metrics()?;
+    init_metrics();
 
     Ok(())
 }
 
 #[cfg(feature = "monitoring")]
-fn init_metrics() -> Result<(), Box<dyn std::error::Error>> {
+fn init_metrics() {
     // For now, keep metrics initialization minimal to avoid hard dependency on
     // optional monitoring crates during consolidation. This is a safe noop that
     // preserves the feature gate and can be expanded later to initialize a
     // Prometheus recorder + HTTP endpoint when we wire the optional crates.
-    Ok(())
 }
 
 #[cfg(feature = "monitoring")]
 /// Gracefully shutdown telemetry systems
-pub fn shutdown_telemetry() {
+pub const fn shutdown_telemetry() {
     // No-op: opentelemetry global shutdown API surface changed between
     // versions; avoid calling unavailable helper to remain compatible.
     // If explicit tracer shutdown is required, expand here with the
     // appropriate opentelemetry SDK calls.
-    let _ = ();
 }
