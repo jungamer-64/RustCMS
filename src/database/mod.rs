@@ -129,7 +129,7 @@ fn map_diesel_result<T>(
             diesel::result::Error::NotFound => {
                 Err(crate::AppError::NotFound(not_found_msg.to_string()))
             }
-            other => Err(crate::AppError::Internal(format!("{}: {}", ctx, other))),
+            other => Err(crate::AppError::Internal(format!("{ctx}: {other}"))),
         },
     }
 }
@@ -147,7 +147,7 @@ fn map_internal_err<T, E: std::fmt::Display>(
     res: std::result::Result<T, E>,
     ctx: &str,
 ) -> Result<T> {
-    res.map_err(|e| crate::AppError::Internal(format!("{ctx}: {e}", ctx = ctx, e = e)))
+    res.map_err(|e| crate::AppError::Internal(format!("{ctx}: {e}")))
 }
 
 // Data holder for post update fields to keep update_post lean and testable
@@ -231,7 +231,8 @@ fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpd
 }
 
 fn merge_opt<T: Clone>(candidate: &Option<T>, current: &T) -> T {
-    candidate.clone().unwrap_or_else(|| current.clone())
+    // Use as_ref().cloned() to avoid cloning the Option itself and only clone the inner value when present.
+    candidate.as_ref().cloned().unwrap_or_else(|| current.clone())
 }
 
 fn merge_opt_option<T: Clone>(candidate: &Option<T>, current: &Option<T>) -> Option<T> {
