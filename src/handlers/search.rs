@@ -241,7 +241,7 @@ pub async fn suggest(
 pub async fn search_stats(State(state): State<AppState>) -> Result<impl IntoResponse> {
     // Try cache first
     let cache_key = crate::utils::cache_key::CacheKeyBuilder::new("search:stats").build();
-    let stats = crate::utils::cache_helpers::cache_or_compute(
+    let index_stats = crate::utils::cache_helpers::cache_or_compute(
         state.clone(),
         &cache_key,
         crate::utils::cache_ttl::CACHE_TTL_DEFAULT,
@@ -258,7 +258,7 @@ pub async fn search_stats(State(state): State<AppState>) -> Result<impl IntoResp
     )
     .await?;
 
-    Ok(ApiOk(stats))
+    Ok(ApiOk(index_stats))
 }
 
 /// Reindex all content
@@ -301,6 +301,9 @@ pub async fn reindex(State(_state): State<AppState>) -> Result<impl IntoResponse
 }
 
 /// Search index health check
+///
+/// # Errors
+/// - 内部のヘルスチェック呼び出しが失敗した場合にエラーを返します。
 #[utoipa::path(
     get,
     path = "/api/v1/search/health",
