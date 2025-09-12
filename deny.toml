@@ -1,26 +1,33 @@
-# cargo-deny configuration
-# 参考: https://embarkstudios.github.io/cargo-deny/
+# cargo-deny configuration (minimal, compatible with current cargo-deny schema)
+# Reference: https://embarkstudios.github.io/cargo-deny/
 
 [advisories]
+# Minimal advisories configuration - rely on defaults and keep an explicit
+# ignore list for any RUSTSEC IDs you intentionally accept. See:
+# https://embarkstudios.github.io/cargo-deny/checks/advisories/cfg.html
 ignore = [
-  # 例: "RUSTSEC-0000-0000"
+  # "RUSTSEC-0000-0000",
 ]
-# yanked/crate 更新の警告をビルド失敗にしない (初期段階)
-deny = ["unmaintained", "unsound", "malicious"]
 
 [bans]
+# Control multiple versions / wildcard bans
 multiple-versions = "warn"
 wildcards = "deny"
-
-denied = []
+# Deny list (empty for now)
+deny = []
 
 [sources]
 unknown-registry = "deny"
 unknown-git = "warn"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 
+# Licenses: default deny, explicit allow-list
+# Project policy: only allow a small set of permissive licenses; everything
+# else (including GPL-family licenses) is denied by default. Use `exceptions`
+# to temporarily allow specific crate versions with a rationale.
 [licenses]
-# 明示的に許可するライセンス
+# Explicitly allow these licenses (SPDX identifiers)
+# Allowed licenses (SPDX identifiers)
 allow = [
   "MIT",
   "Apache-2.0",
@@ -30,16 +37,18 @@ allow = [
   "ISC",
   "Zlib",
   "Unicode-DFS-2016",
-  "CC0-1.0"
+  "CC0-1.0",
 ]
-# GPL/LGPL 系は初期段階で警告に (将来ポリシー強化時に deny へ)
-warn = ["GPL-2.0", "GPL-3.0", "LGPL-2.1", "LGPL-3.0", "AGPL-3.0"]
+# Note: copyleft policy and auto-allow keys are removed in newer cargo-deny.
+# We will enforce GPL-family exclusions via explicit bans if any GPL-licensed
+# crates are detected.
+# Confidence threshold for automatic license detection
+confidence-threshold = 0.8
+# Use exceptions to document temporary allowances
+exceptions = [
+  # { allow = ["GPL-3.0"], crate = "some-crate", version = "=1.2.3", rationale = "Temporary exception - awaiting upstream" }
+]
 
-# 例: 一時的に無視 (期限付コメントを書く)
-# exceptions = [
-#   { name = "some-crate", version = "=1.2.3", rationale = "Awaiting upstream fix (#123)", license = "GPL-3.0" }
-# ]
-
-[sources.allow-org]
-# GitHub org のみ許可したい場合はここに追記
+# Optional: restrict allowed orgs for git sources (uncomment and set if desired)
+#[sources.allow-org]
 # github = ["jungamer-64"]

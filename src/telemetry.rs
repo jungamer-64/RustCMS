@@ -1,3 +1,8 @@
+//! テレメトリ初期化（簡易版）
+//!
+//! 依存関係の整備が完了するまで、ログ出力と環境フィルタに絞った構成です。
+//! 将来的にトレーシングのエクスポータやメトリクスHTTPエンドポイントを再導入します。
+//! （詳細は `docs/FEATURES_JA.md` の monitoring セクションを参照）
 // telemetry temporarily minimized; re-expand later
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 

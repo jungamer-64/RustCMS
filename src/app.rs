@@ -1,11 +1,14 @@
-//! Application State and Service Management
+//! アプリケーション状態とサービス管理
 //!
-//! Centralized application state containing all services for the CMS:
-//! - Database connections with pooling
-//! - Authentication service with biscuit-auth + `WebAuthn`
-//! - Cache service with Redis + in-memory layers
-//! - Search service with Tantivy full-text search
-//! - Health monitoring and metrics collection
+//! 本モジュールは CMS の中核状態 `AppState` とその周辺(メトリクス/ヘルスチェック/初期化)を提供します。
+//! - データベース接続（接続プール）
+//! - 認証サービス（biscuit-auth + `WebAuthn`）
+//! - キャッシュサービス（Redis + メモリ）
+//! - 検索サービス（Tantivy 全文検索）
+//! - ヘルス監視とメトリクス収集
+//!
+//! Feature フラグによりサービスの有効/無効が決まります。無効な場合はヘルスチェックが
+//! `not_configured` を返すなど、挙動が変化します。詳細は `docs/FEATURES_JA.md` を参照してください。
 
 use crate::limiter::FixedWindowLimiter;
 use crate::{Result, config::Config};
@@ -314,23 +317,22 @@ pub struct ServiceHealth {
 }
 
 impl AppState {
-    /// Create application state from environment configuration
+    /// 環境設定からアプリケーション状態を生成
     ///
-    /// # Errors
-    /// 設定の読み込みや各サービスの初期化に失敗した場合はエラーを返します。
+    /// 概要: 環境変数や設定ファイルから `Config` を組み立て、`from_config` に委譲します。
+    ///
+    /// エラー: 設定の読み込みや、後続の各サービス初期化に失敗した場合。
+    ///
     pub async fn from_env() -> Result<Self> {
         // Load configuration and delegate to from_config
         let config = Config::from_env()?;
         Self::from_config(config).await
     }
 
-    /// Create application state from a provided `Config` (useful for central init)
+    /// 与えられた `Config` からアプリケーション状態を生成（集中初期化用）
     ///
-    /// # Panics
-    /// 有効化された feature に対するサービスが初期化されていない場合は panic します（`AppStateBuilder::build` 内）。
-    ///
-    /// # Errors
-    /// 各サービス（DB/キャッシュ/検索/認証）の初期化に失敗した場合、エラーを返します。
+    /// Panic: 有効な feature に対応するサービスが初期化されていない場合（`AppStateBuilder::build`）。
+    /// Errors: DB/キャッシュ/検索/認証の初期化に失敗した場合。
     // Allow cognitive complexity: feature-gated initialization requires branching and is clearer consolidated here.
     #[allow(clippy::cognitive_complexity)]
     pub async fn from_config(config: Config) -> Result<Self> {

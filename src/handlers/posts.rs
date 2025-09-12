@@ -1,6 +1,10 @@
 //! Post Handlers
 //!
 //! Handles CRUD operations for blog posts and content management
+//!
+//! - ``paginate_posts``: 共通のページング + キャッシュ付き取得ヘルパ
+//! - ``get_posts_by_tag``: タグでの一覧取得（キャッシュキーの構築も含む）
+//! - ``create/update/delete/publish``: それぞれ DB と検索（有効時）を連携
 
 use axum::{
     extract::{Path, Query, State},
@@ -82,6 +86,7 @@ pub(crate) async fn paginate_posts(
     cache_key: String,
 ) -> Result<Paginated<PostDto>> {
     use std::sync::Arc;
+    // 取得条件を共有クロージャにクローン渡し（非同期キャプチャのため）
     let filters = Arc::new((status.clone(), author, tag.clone(), sort.clone()));
     let response: Paginated<PostDto> = crate::utils::paginate::fetch_paginated_cached_mapped(
         state.clone(),
@@ -92,6 +97,7 @@ pub(crate) async fn paginate_posts(
         {
             let state = state.clone();
             let f = filters.clone();
+            // データ列挙クロージャ
             move || async move {
                 let (status, author, tag, sort) = (*f).clone();
                 state
@@ -102,6 +108,7 @@ pub(crate) async fn paginate_posts(
         {
             let state = state.clone();
             let f = filters.clone();
+            // 総件数取得クロージャ
             move || async move {
                 let (status, author, tag, _) = (*f).clone();
                 state.db_count_posts_filtered(status, author, tag).await

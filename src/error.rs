@@ -1,3 +1,9 @@
+//! アプリケーション共通エラーとHTTPレスポンスへのマッピング
+//!
+//! 本モジュールはドメイン横断のエラー型 `AppError` を定義し、`IntoResponse` 実装で
+//! HTTPステータス/エラーメッセージ/バリデーション詳細へマッピングします。各層からは
+//! `?` 演算子で `AppError` に合流させることで、ルータ/ハンドラから一貫した姿で返却できます。
+//! Feature に応じて DB/Cache/Search 等の依存エラーを包含します。
 use crate::utils::api_types::{ApiResponse, ValidationError};
 use axum::{
     Json,

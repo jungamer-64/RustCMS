@@ -1,7 +1,13 @@
-//! `OpenAPI` Documentation - Simplified for compilation
+//! `OpenAPI` ドキュメント生成（簡易版）
 //!
-//! Temporary simplified `OpenAPI` configuration to resolve compilation issues
-//! Full API documentation will be restored after fixing dependencies
+//! 依存の安定化まで、一時的に最小限の `utoipa` 宣言でコンパイルを成立させています。
+//! `SecurityAddon` で Bearer（Biscuit）認証スキームを動的に追加します。
+//!
+//! Feature によるスキーマ差分:
+//! - `legacy-auth-flat` 有効: 歴史的 `LoginResponse` を含めるバリアントを使用。
+//! - 無効: `LoginResponse` を含めず、統一スキーマ（`AuthSuccessResponse`）のみを前提とします。
+//!
+//! 将来的に依存問題が解消され次第、フルスキーマに戻します（`docs/FEATURES_JA.md` 参照）。
 
 #![allow(clippy::needless_for_each)]
 

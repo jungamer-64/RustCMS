@@ -1,7 +1,14 @@
-//! Unified CMS server entrypoint - integrates functionality from cms-lightweight, cms-simple, and cms-unified
+//! 統合CMSサーバーのエントリポイント
 //!
-//! This server supports both production mode (with database) and development mode (in-memory).
-//! It serves as the main unified entry point for the `RustCMS` backend.
+//! cms-lightweight / cms-simple / cms-unified の機能を統合した単一バイナリです。
+//! - 本番モード: データベース有効。安定運用向け設定で起動します。
+//! - 開発モード: インメモリで軽量起動（featureや設定により挙動が変わります）。
+//!
+//! 起動フローの概略:
+//! 1. 設定の読み込み（環境変数や設定ファイル）
+//! 2. 依存サービスの初期化（DB/認証/キャッシュ/検索など、featureに応じて）
+//! 3. ルータの構築と状態(AppState)の注入
+//! 4. HTTPサーバーの待受開始
 
 use axum::Router as AxumRouter;
 use std::net::SocketAddr;
@@ -9,7 +16,7 @@ use tracing::info;
 
 use cms_backend::routes::create_router;
 
-/// Unified CMS server entrypoint
+/// Unified CMS server entrypoint（統合CMSサーバー起動）
 ///
 /// Integrates functionality from:
 /// - cms-lightweight: Initialization and config loading
@@ -20,6 +27,11 @@ use cms_backend::routes::create_router;
 /// unified entry point that can operate in different modes.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 概要: アプリケーション状態を初期化し、アドレスへバインドしてHTTPサーバーを起動します。
+    // 入力: 環境変数/設定ファイル（bind host/port、有効化featureに依存）
+    // 返り値: 起動成功で Ok(())、初期化やバインドに失敗すると Err
+    // 副作用: DB接続/キャッシュ接続/検索インデックス準備などの外部IO
+    // 注意: 非同期ランタイム上でブロッキング処理を避けること。
     // Initialize full AppState using shared helper
     let state = cms_backend::utils::init::init_app_state().await?;
 

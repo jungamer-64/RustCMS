@@ -1,3 +1,15 @@
+//! API キー管理ハンドラ
+//!
+//! このモジュールは認証済みユーザー向けの API キー発行/一覧/失効 API を提供します。
+//! - ``create_api_key``: 新しいキーを発行し、ハッシュは保存、生成直後の生キーを一度だけ返す
+//! - ``list_api_keys``: 所有するキーの一覧を返す（失効済み含む/除外は要件に応じて）
+//! - ``revoke_api_key``: 自分のキーを失効させる（所有者チェックあり）
+//!
+//! セキュリティ:
+//! - 発行時の raw key はレスポンスで一度だけ表示し、それ以降は保存されません（DB には Argon2 ハッシュのみ）
+//! - 失効は所有者のみ実行可能で、`db_revoke_api_key_owned` が権限を検証します
+//! - 下流のミドルウェアでの API キー認証（`X-API-Key`）と併用される想定です
+
 use axum::{
     Extension, Json,
     extract::{Path, State},
@@ -41,6 +53,7 @@ pub async fn create_api_key(
     Extension(auth): Extension<crate::auth::AuthContext>,
     Json(payload): Json<CreateApiKeyPayload>,
 ) -> Result<(axum::http::StatusCode, ApiOk<CreatedApiKeyResponse>)> {
+    // DB レイヤでキー作成と Argon2 ハッシュ保存を行い、生キーは戻り値でのみ受領
     let (api_key, raw) = state
         .db_create_api_key(payload.name, auth.user_id, payload.permissions)
         .await?;
@@ -68,6 +81,7 @@ pub async fn list_api_keys(
     State(state): State<AppState>,
     Extension(auth): Extension<crate::auth::AuthContext>,
 ) -> Result<ApiOk<Vec<crate::models::ApiKeyResponse>>> {
+    // 自分のキーのみを一覧取得
     let keys = state.db_list_api_keys(auth.user_id, false).await?;
     Ok(ApiOk(keys))
 }
@@ -99,6 +113,7 @@ pub async fn revoke_api_key(
     Extension(auth): Extension<crate::auth::AuthContext>,
     Path(id): Path<Uuid>,
 ) -> Result<impl axum::response::IntoResponse> {
+    // 所有者検証込みでの失効（DB レイヤで所有者チェック）
     let fut = async move {
         state
             .db_revoke_api_key_owned(id, auth.user_id)

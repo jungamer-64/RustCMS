@@ -1,6 +1,25 @@
 //! Authentication Handlers
 //!
-//! Handles user authentication, registration, and session management
+//! ユーザーの登録/認証/トークン再発行など、認可前提のパブリック API を提供します。
+//! 各ハンドラは `AppState` のラッパ経由で DB/キャッシュ/トークン発行を行い、
+//! 共通のメトリクスやロギング、エラー整形を集中管理します。
+//!
+//! 小さな契約（コントラクト）:
+//! - 入力: `axum` によって JSON ボディが `serde` で検証/デシリアライズされる。
+//! - 出力: 成功時は `ApiOk(T)` ラッパで JSON を返す。エラー時は `AppError` に集約され HTTP ステータスへ変換。
+//! - セキュリティ: 認証済みが必要なエンドポイントは `BearerAuth` 等のセキュリティ定義と、実際のミドルウェア検証を前提にする。
+//! - トークン: 成功時の認証系レスポンスは「統一トークン表現」を返す（`tokens.access_token` など）。
+//!   互換性のため `feature = "legacy-auth-flat"` 有効時のみ旧フラットフィールドを併記する。
+//!
+//! トークンのライフサイクル概要:
+//! - `login`/`register` でアクセストークン・リフレッシュトークンを発行。
+//! - `refresh` でリフレッシュトークンを検証し、成功時に両トークンを回転（ローテーション）する。
+//! - `logout` はトークン失効のためのフック（実装によりブラックリストやセッション無効化を行う）。
+//!
+//! フィーチャーフラグ:
+//! - `legacy-auth-flat`: 旧 `LoginResponse`/フラットなトークンフィールドの互換提供。
+//! - `monitoring`: レガシー経路など特定イベントのカウンタを発火。
+//! - `search`: 登録時にユーザーを検索インデックスに反映（失敗しても本体処理は継続）。
 
 use axum::{
     extract::State,
@@ -90,6 +109,9 @@ impl From<AuthSuccessResponse> for LoginResponse {
 /// Register a new user
 /// 新規ユーザーを登録します。
 ///
+/// - デフォルトのロールは `Subscriber`。
+/// - 必要に応じてメール検証や追加プロファイル設定は上位層で実施してください。
+///
 /// # Errors
 /// - 入力の検証に失敗した場合。
 /// - 既存ユーザーとの一意制約に違反した場合。
@@ -128,7 +150,7 @@ pub async fn register(
     State(state): State<AppState>,
     Json(request): Json<RegisterRequest>,
 ) -> Result<impl IntoResponse> {
-    // Create user request
+    // Create user request (入力値は事前に axum/serde で検証済み)
     let create_request = CreateUserRequest {
         username: request.username,
         email: request.email,
@@ -138,23 +160,26 @@ pub async fn register(
         role: crate::models::UserRole::Subscriber, // Default role
     };
 
-    // Create user through AppState auth wrapper (records auth & DB metrics centrally)
+    // AppState の auth ラッパを利用してユーザー作成（認証/DB メトリクスを一元的に記録）
     let user = state.auth_create_user(create_request).await?;
 
-    // Index user for search (optional feature)
+    // 検索統合が有効な場合、ユーザーを検索インデックスに登録（失敗しても本処理は継続）
     #[cfg(feature = "search")]
     if let Err(e) = state.search.index_user(&user).await {
         // Log error but don't fail the registration
         eprintln!("Failed to index user for search: {e}");
     }
 
-    // Build full unified auth success response via new convenience wrapper
+    // 新しい統一レスポンスの生成（旧フラット形式は feature ベースで互換提供）
     let unified = state.auth_build_success_response(user, false).await?;
     Ok((StatusCode::CREATED, ApiOk(unified)))
 }
 
 /// Login user
 /// 認証を行います。
+///
+/// - `remember_me` が `true` の場合は長めの有効期限を採用する設定（実装側のポリシーに依存）。
+/// - レート制限や CAPTCHA 等の追加防御はミドルウェア/フロントで行ってください。
 ///
 /// # Errors
 /// - 資格情報が不正な場合。
@@ -206,6 +231,10 @@ pub async fn login(
 /// Logout user
 /// 認証セッションを無効化します。
 ///
+/// 現在はダミーの応答を返します。トークンの失効（ブラックリスト、セッション破棄）
+/// を行う場合は `Authorization` ヘッダからベアラートークンを抽出し、
+/// 認証サービス側で無効化してください。
+///
 /// # Errors
 /// - 認証情報が欠如/無効な場合。
 /// - 内部エラーが発生した場合。
@@ -239,6 +268,9 @@ pub async fn logout(
 
 /// Get current user profile
 /// 現在のユーザープロファイルを取得します（ダミー実装）。
+///
+/// 実運用では、検証済みのアクセストークンからユーザー ID を取得し、
+/// DB もしくはキャッシュからプロファイルを引いて返却します。
 ///
 /// # Errors
 /// - 未認証の場合。
@@ -306,6 +338,9 @@ pub struct RefreshRequest {
     )
 )]
 /// Refresh access/refresh tokens.
+///
+/// リフレッシュトークンの検証に成功した場合、アクセストークンとリフレッシュトークンの
+/// 両方をローテーションして返します。検証に失敗したトークンは再利用できません。
 ///
 /// # Errors
 /// - 無効または期限切れのリフレッシュトークン（401）。

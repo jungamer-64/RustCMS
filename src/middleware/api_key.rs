@@ -1,3 +1,27 @@
+//! API Key 認証ミドルウェア
+//!
+//! このモジュールはリクエストヘッダ `X-API-Key` による API キー認証を行います。
+//! 主な処理の流れは次の通りです:
+//!
+//! 1) ヘッダ `X-API-Key` を取得・検証（接頭辞 `ak_`、最低長）
+//! 2) アダプタベースの失敗回数レートリミットを確認（ブロックなら 429）
+//! 3) 生キーから決定的な `lookup_hash` を導出し、DB で検索
+//!    - 新旧互換のため、必要ならレガシー経路で lookup をバックフィル
+//! 4) Argon2 ハッシュ照合で生キーを検証、期限切れをチェック
+//! 5) 成功時は `last_used` の更新を試行し、失敗カウンタをクリア
+//! 6) 検証済み情報（キーID/ユーザーID/権限）を request extensions に格納
+//!
+//! feature フラグ:
+//! - `auth`: 認証と失敗レートリミットのアダプタを有効化
+//! - `monitoring`: メトリクス（成功/失敗カウンタや追跡キー数ゲージ）を発行
+//! - `database`: レガシー lookup バックフィルのための DB アクセスを有効化
+//!
+//! セキュリティ補足:
+//! - 生キーはヘッダで搬送されるため HTTPS 前提です。
+//! - DB 保持は Argon2 ハッシュで行われ、照合時のみ生キーを利用します。
+//! - ブルートフォース抑止のため、キーごとの失敗回数に基づくレートリミットを適用します。
+//! - 検証済みの権限は `ApiKeyAuthInfo.permissions` に格納されます。下流ハンドラは用途に応じてチェックしてください。
+
 #[cfg(feature = "auth")]
 use crate::limiter::adapters::ApiKeyFailureLimiterAdapter;
 use crate::limiter::{GenericRateLimiter, RateLimitDecision};
@@ -13,14 +37,21 @@ use tracing::{debug, warn};
 static API_KEY_FAILURE_LIMITER: Lazy<ApiKeyFailureLimiterAdapter> =
     Lazy::new(ApiKeyFailureLimiterAdapter::from_env);
 
-/// 抽出結果を request extensions に格納するキー
+/// 抽出結果を request extensions に格納する型。
+///
+/// 下流ハンドラは `req.extensions().get::<ApiKeyAuthInfo>()` で参照し、
+/// キーの所有者や権限を元にアクセス制御を行えます。
 #[derive(Clone, Debug)]
 pub struct ApiKeyAuthInfo {
+    /// 検証済み API キーの識別子
     pub api_key_id: uuid::Uuid,
+    /// キー所有者のユーザー ID
     pub user_id: uuid::Uuid,
+    /// キーに付与された権限のリスト（例: "read:posts"）
     pub permissions: Vec<String>,
 }
 
+/// API キーを受け取る HTTP リクエストヘッダ名
 pub const HEADER_NAME: &str = "X-API-Key";
 
 // NOTE: Actual rate limit configuration & state is handled by `rate_limit_backend::GLOBAL_RATE_LIMITER`.
@@ -35,6 +66,9 @@ pub const HEADER_NAME: &str = "X-API-Key";
 /// - API キーが不正・期限切れの場合
 /// - レートリミットによりブロックされた場合
 /// - 内部状態が不足している場合（AppState 不在など）
+///
+/// # Returns
+/// 成功時は検証済み情報を extensions に格納し、次のミドルウェア/ハンドラへフォワードします。
 pub async fn api_key_auth_layer(
     mut req: Request<Body>,
     next: Next,
@@ -131,9 +165,13 @@ pub async fn api_key_auth_layer(
 
 #[inline]
 #[allow(clippy::cast_precision_loss)]
+/// `usize` をメトリクス用に `f64` へ変換します（ゲージ値設定のため）。
 const fn usize_to_f64(n: usize) -> f64 { n as f64 }
 
 #[cfg(all(feature = "database", feature = "auth"))]
+/// 既存データに `lookup_hash` が未設定なレガシーキーのためのフォールバック検索。
+///
+/// 生キーから直接検出し、成功時には集中化された `AppState` のラッパでバックフィルします。
 async fn legacy_fallback_fetch(
     state: &crate::AppState,
     raw: &str,
@@ -146,6 +184,7 @@ async fn legacy_fallback_fetch(
 }
 
 #[cfg(not(all(feature = "database", feature = "auth")))]
+/// database/auth いずれかが無効なビルドでは、フォールバックは常に無効。
 async fn legacy_fallback_fetch(
     _state: &crate::AppState,
     _raw: &str,
