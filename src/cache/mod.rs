@@ -34,7 +34,7 @@ pub enum CacheError {
 
 impl From<CacheError> for crate::AppError {
     fn from(err: CacheError) -> Self {
-        crate::AppError::Internal(err.to_string())
+        Self::Internal(err.to_string())
     }
 }
 
@@ -113,7 +113,8 @@ impl CacheService {
         // Set in Redis (multiplexed)
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         if let Some(ttl) = ttl {
-            let _: () = conn.set_ex(&full_key, &serialized, ttl.as_secs()).await?;
+            let secs = ttl.as_secs();
+            let _: () = conn.set_ex(&full_key, &serialized, secs).await?;
         } else {
             let _: () = conn.set(&full_key, &serialized).await?;
         }
@@ -160,6 +161,8 @@ impl CacheService {
     let full_key = format!("{prefix}{key}");
 
         // Try memory cache first
+        let mut bytes: Option<Vec<u8>> = None;
+        #[allow(clippy::significant_drop_tightening)]
         {
             let mut memory_cache = self.memory_cache.write().await;
             if let Some(entry) = memory_cache.get_mut(&full_key) {
@@ -167,23 +170,24 @@ impl CacheService {
                 if let Some(expires_at) = entry.expires_at {
                     if Instant::now() > expires_at {
                         memory_cache.remove(&full_key);
-                        // Update stats
-                        self.record_memory_miss().await;
                     } else {
-                        // Cache hit
-                        let value: T = self.decode_and_record_memory_hit(entry).await?;
-                        return Ok(Some(value));
+                        // Cache hit: clone data and increment hit counter under lock
+                        entry.hits += 1;
+                        bytes = Some(entry.value.clone());
                     }
                 } else {
                     // No expiration, cache hit
-                    let value: T = self.decode_and_record_memory_hit(entry).await?;
-                    return Ok(Some(value));
+                    entry.hits += 1;
+                    bytes = Some(entry.value.clone());
                 }
-            } else {
-                // Memory cache miss
-                self.record_memory_miss().await;
             }
         }
+        if let Some(bytes) = bytes {
+            let value: T = serde_json::from_slice(&bytes)?;
+            self.record_memory_hit().await;
+            return Ok(Some(value));
+        }
+        self.record_memory_miss().await;
 
         // Try Redis cache
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
@@ -259,16 +263,20 @@ impl CacheService {
     /// # Errors
     /// - Redis との通信に失敗した場合。
     pub async fn expire(&self, key: &str, ttl: Duration) -> Result<()> {
-    let full_key = format!("{}{key}", self.config.key_prefix);
+        let full_key = format!("{}{key}", self.config.key_prefix);
 
         // Set TTL in Redis
-        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
-        let _: () = conn.expire(&full_key, ttl.as_secs() as i64).await?;
+    let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+    let secs = ttl.as_secs();
+    let secs_i64 = i64::try_from(secs).map_err(|_| CacheError::InvalidTtl(secs))?;
+    let _: () = conn.expire(&full_key, secs_i64).await?;
 
         // Update memory cache entry
-        let mut memory_cache = self.memory_cache.write().await;
-        if let Some(entry) = memory_cache.get_mut(&full_key) {
-            entry.expires_at = Some(Instant::now() + ttl);
+        {
+            let mut memory_cache = self.memory_cache.write().await;
+            if let Some(entry) = memory_cache.get_mut(&full_key) {
+                entry.expires_at = Some(Instant::now() + ttl);
+            }
         }
 
         Ok(())
@@ -297,23 +305,36 @@ impl CacheService {
 
     /// Get cache statistics
     pub async fn get_stats(&self) -> CacheStats {
-        let stats = self.stats.read().await;
+        // Read stats under short-lived lock
+        let (redis_hits, redis_misses, memory_hits, memory_misses, total_operations) = {
+            let stats = self.stats.read().await;
+            (
+                stats.redis_hits,
+                stats.redis_misses,
+                stats.memory_hits,
+                stats.memory_misses,
+                stats.total_operations,
+            )
+        };
         let cache_size = self.memory_cache.read().await.len();
 
-        let total_hits = stats.redis_hits + stats.memory_hits;
-        let total_misses = stats.redis_misses + stats.memory_misses;
-        let hit_ratio = if total_hits + total_misses > 0 {
-            total_hits as f64 / (total_hits + total_misses) as f64
+        let total_hits = redis_hits + memory_hits;
+        let total_misses = redis_misses + memory_misses;
+        let denom = total_hits + total_misses;
+        // f64 precision is acceptable for ratio in [0,1]; convert explicitly
+        #[allow(clippy::cast_precision_loss)]
+        let hit_ratio = if denom > 0 {
+            (total_hits as f64) / (denom as f64)
         } else {
             0.0
         };
 
         CacheStats {
-            redis_hits: stats.redis_hits,
-            redis_misses: stats.redis_misses,
-            memory_hits: stats.memory_hits,
-            memory_misses: stats.memory_misses,
-            total_operations: stats.total_operations,
+            redis_hits,
+            redis_misses,
+            memory_hits,
+            memory_misses,
+            total_operations,
             cache_size,
             hit_ratio,
         }
@@ -344,7 +365,8 @@ impl CacheService {
         for (key, entry) in memory_cache.iter() {
             // Score based on hits and age (lower is more likely to be evicted)
             let age_seconds = entry.created_at.elapsed().as_secs_f64();
-            let score = entry.hits as f64 / (age_seconds + 1.0);
+            #[allow(clippy::cast_precision_loss)]
+            let score = (entry.hits as f64) / (age_seconds + 1.0);
 
             if score < min_score {
                 min_score = score;
@@ -399,15 +421,24 @@ impl CacheService {
     }
 
     #[inline]
+    async fn record_memory_hit(&self) {
+        let mut stats = self.stats.write().await;
+        stats.memory_hits += 1;
+        stats.total_operations += 1;
+    }
+
+    #[inline]
     async fn decode_and_record_memory_hit<T: DeserializeOwned>(
         &self,
         entry: &mut CacheEntry<Vec<u8>>,
     ) -> Result<T> {
         entry.hits += 1;
         let value: T = serde_json::from_slice(&entry.value)?;
-        let mut stats = self.stats.write().await;
-        stats.memory_hits += 1;
-        stats.total_operations += 1;
+        {
+            let mut stats = self.stats.write().await;
+            stats.memory_hits += 1;
+            stats.total_operations += 1;
+        }
         Ok(value)
     }
 }
@@ -430,22 +461,27 @@ impl Default for CacheStats {
 pub struct CacheKey;
 
 impl CacheKey {
+    #[must_use]
     pub fn user(id: &str) -> String {
         format!("user:{id}")
     }
 
+    #[must_use]
     pub fn post(id: &str) -> String {
         format!("post:{id}")
     }
 
+    #[must_use]
     pub fn session(id: &str) -> String {
         format!("session:{id}")
     }
 
+    #[must_use]
     pub fn search_results(query: &str, page: u32) -> String {
         format!("search:{query}:{page}")
     }
 
+    #[must_use]
     pub fn api_response(endpoint: &str, params: &str) -> String {
         format!("api:{endpoint}:{params}")
     }
