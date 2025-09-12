@@ -182,21 +182,22 @@ fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpd
         .as_ref()
         .cloned()
         .unwrap_or_else(|| existing.content.clone());
-    let excerpt = merge_opt_option(&req.excerpt, &existing.excerpt);
-    let tags = merge_opt(&req.tags, &existing.tags);
-    let categories = match &req.category {
-        Some(cat) => vec![cat.trim().to_lowercase()],
-        None => existing.categories.clone(),
-    };
-    let meta_title = merge_opt_option(&req.meta_title, &existing.meta_title);
-    let meta_description = merge_opt_option(&req.meta_description, &existing.meta_description);
+    let excerpt = merge_opt_option(req.excerpt.as_ref(), existing.excerpt.as_ref());
+    let tags = merge_opt(req.tags.as_ref(), &existing.tags);
+    let categories = req
+        .category
+        .as_ref()
+        .map(|cat| vec![cat.trim().to_lowercase()])
+        .unwrap_or_else(|| existing.categories.clone());
+    let meta_title = merge_opt_option(req.meta_title.as_ref(), existing.meta_title.as_ref());
+    let meta_description =
+        merge_opt_option(req.meta_description.as_ref(), existing.meta_description.as_ref());
 
     // status / published_at handling
-    let mut status = if let Some(st) = &req.status {
-        st.to_string()
-    } else {
-        existing.status.clone()
-    };
+    let mut status = req
+        .status
+        .as_ref()
+        .map_or_else(|| existing.status.clone(), |st| st.to_string());
     let mut published_at = if req.published_at.is_some() {
         req.published_at
     } else {
@@ -230,13 +231,12 @@ fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpd
     }
 }
 
-fn merge_opt<T: Clone>(candidate: &Option<T>, current: &T) -> T {
-    // Use as_ref().cloned() to avoid cloning the Option itself and only clone the inner value when present.
-    candidate.as_ref().cloned().unwrap_or_else(|| current.clone())
+fn merge_opt<T: Clone>(candidate: Option<&T>, current: &T) -> T {
+    candidate.cloned().unwrap_or_else(|| current.clone())
 }
 
-fn merge_opt_option<T: Clone>(candidate: &Option<T>, current: &Option<T>) -> Option<T> {
-    candidate.clone().or_else(|| current.clone())
+fn merge_opt_option<T: Clone>(candidate: Option<&T>, current: Option<&T>) -> Option<T> {
+    candidate.cloned().or_else(|| current.cloned())
 }
 
 // Diesel 2.x の embed_migrations: Cargo.toml からの相対パスでディレクトリ配下の
@@ -253,6 +253,11 @@ pub struct Database {
 
 impl Database {
     #[allow(clippy::unused_async)]
+    /// Create a new Database instance backed by a connection pool.
+    ///
+    /// # Errors
+    /// Returns an error if the pool cannot be created or if running migrations fails
+    /// (when enabled). The error is wrapped in `crate::AppError`.
     pub async fn new(config: &DatabaseConfig) -> Result<Self> {
         let pool = DatabasePool::new(&config.url, config.max_connections)?;
 
@@ -274,6 +279,7 @@ impl Database {
         f(&mut conn)
     }
 
+    #[must_use]
     pub fn pool(&self) -> &DatabasePool {
         &self.pool
     }
@@ -721,14 +727,14 @@ mod tests {
         let current = "current".to_string();
         let candidate_some = Some("cand".to_string());
         let candidate_none: Option<String> = None;
-        assert_eq!(merge_opt(&candidate_some, &current), "cand".to_string());
-        assert_eq!(merge_opt(&candidate_none, &current), current);
+    assert_eq!(merge_opt(candidate_some.as_ref(), &current), "cand".to_string());
+    assert_eq!(merge_opt(candidate_none.as_ref(), &current), current);
 
         let cur_opt: Option<String> = Some("cur".to_string());
         let cand_opt_some = Some("new".to_string());
         let cand_opt_none: Option<String> = None;
-        assert_eq!(merge_opt_option(&cand_opt_some, &cur_opt), Some("new".to_string()));
-        assert_eq!(merge_opt_option(&cand_opt_none, &cur_opt), Some("cur".to_string()));
+    assert_eq!(merge_opt_option(cand_opt_some.as_ref(), cur_opt.as_ref()), Some("new".to_string()));
+    assert_eq!(merge_opt_option(cand_opt_none.as_ref(), cur_opt.as_ref()), Some("cur".to_string()));
     }
 
     #[test]
