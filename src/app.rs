@@ -998,21 +998,41 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// 投稿を削除します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や削除クエリの実行に失敗した場合、または対象の投稿が見つからない場合にエラーを返します。
     pub async fn db_delete_post(&self, id: uuid::Uuid) -> crate::Result<()> {
     timed_op!(self, "db", async { self.database.delete_post(id) })
     }
 
     #[cfg(feature = "database")]
+    /// 投稿数を返します（任意のタグでフィルター）。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や集計クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_count_posts(&self, tag: Option<&str>) -> crate::Result<usize> {
     timed_op!(self, "db", async { self.database.count_posts(tag) })
     }
 
     #[cfg(feature = "database")]
+    /// 指定ユーザーの投稿数を返します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や集計クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_count_posts_by_author(&self, author_id: uuid::Uuid) -> crate::Result<usize> {
     timed_op!(self, "db", async { self.database.count_posts_by_author(author_id) })
     }
 
     #[cfg(feature = "database")]
+    /// ステータス/著者/タグでフィルターした投稿数を返します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や集計クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_count_posts_filtered(
         &self,
         status: Option<String>,
@@ -1030,6 +1050,13 @@ impl AppState {
     // NOTE: 他の DB ラッパは timed_db! macro を直接使えるが、ここは一部で in-place クロージャを
     // 使っており都度 start/elapsed を書いていたため共通化。
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// 新しい API キーを作成します。
+    ///
+    /// # Errors
+    ///
+    /// - 入力値の検証に失敗した場合（名前や権限が不正など）。
+    /// - データベース接続の取得に失敗した場合。
+    /// - 生成した API キーの保存に失敗した場合。
     pub async fn db_create_api_key(
         &self,
         name: String,
@@ -1046,6 +1073,12 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// API キー ID から API キーを取得します。
+    ///
+    /// # Errors
+    ///
+    /// - データベース接続の取得に失敗した場合。
+    /// - 該当する API キーが存在しない、または取得時にエラーが発生した場合。
     pub async fn db_get_api_key(
         &self,
         id: uuid::Uuid,
@@ -1059,13 +1092,19 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
-    pub async fn db_delete_api_key(&self, _id: uuid::Uuid) -> crate::Result<()> {
+    /// API キーを削除します。
+    ///
+    /// # Errors
+    ///
+    /// - データベース接続の取得や削除クエリの実行に失敗した場合。
+    /// - 指定した ID の API キーが存在しない場合は NotFound エラーを返します。
+    pub async fn db_delete_api_key(&self, key_id: uuid::Uuid) -> crate::Result<()> {
         use crate::database::schema::api_keys::dsl::*;
         use diesel::prelude::*;
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
             let affected =
-                diesel::delete(api_keys.filter(crate::database::schema::api_keys::dsl::id.eq(_id)))
+                diesel::delete(api_keys.filter(crate::database::schema::api_keys::dsl::id.eq(key_id)))
                     .execute(&mut conn)?;
             if affected == 0 {
                 return Err(crate::AppError::NotFound("api key not found".into()));
@@ -1075,6 +1114,13 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// 既存の API キーを新しい API キーにローテーションし、旧キーを失効させます。
+    ///
+    /// # Errors
+    ///
+    /// - 元の API キー取得に失敗した場合（存在しない等）。
+    /// - 新しい API キー生成・保存に失敗した場合。
+    /// - 旧キーの失効更新（expires_at の更新）でエラーが発生した場合。
     pub async fn db_rotate_api_key(
         &self,
         id: uuid::Uuid,
@@ -1083,8 +1129,8 @@ impl AppState {
     ) -> crate::Result<(crate::models::ApiKeyResponse, String)> {
         // Fetch existing
         let existing = self.db_get_api_key_model(id).await?;
-        let name = new_name.unwrap_or(existing.name.clone());
-        let perms = new_permissions.unwrap_or(existing.get_permissions());
+        let name = new_name.unwrap_or_else(|| existing.name.clone());
+        let perms = new_permissions.unwrap_or_else(|| existing.get_permissions());
         // Create replacement (same user)
         let (new_model_resp, raw) = self
             .db_create_api_key(name, existing.user_id, perms)
@@ -1104,6 +1150,12 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// API キーを失効（削除）させます。
+    ///
+    /// # Errors
+    ///
+    /// - データベース接続の取得や削除処理に失敗した場合。
+    /// - 指定 ID の API キーが存在しない場合には NotFound 等のエラーが返る可能性があります。
     pub async fn db_revoke_api_key(&self, id: uuid::Uuid) -> crate::Result<()> {
         use crate::models::ApiKey;
         timed_op!(self, "db", async {
@@ -1114,6 +1166,13 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// 所有者チェック込みで API キーを削除します。
+    ///
+    /// # Errors
+    ///
+    /// - DB 接続/削除クエリ実行に失敗した場合。
+    /// - 指定 ID が存在するが所有者が一致しない場合は Authorization エラー。
+    /// - 指定 ID が存在しない場合は NotFound エラー。
     pub async fn db_revoke_api_key_owned(
         &self,
         key_id: uuid::Uuid,
@@ -1144,6 +1203,11 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// API キーの最終使用時刻を更新します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続や更新処理に失敗した場合にエラーを返します。
     pub async fn db_touch_api_key(&self, id: uuid::Uuid) -> crate::Result<()> {
         use crate::models::ApiKey;
         timed_op!(self, "db", async {
@@ -1154,6 +1218,11 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// ユーザーの API キー一覧を返します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や取得クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_list_api_keys(
         &self,
         user_id: uuid::Uuid,
@@ -1168,6 +1237,11 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// lookup ハッシュで API キーを取得します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続や取得クエリに失敗した場合にエラーを返します。
     pub async fn db_get_api_key_by_lookup_hash(
         &self,
         lookup: &str,
@@ -1182,6 +1256,11 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// API キー ID から API キーのモデルを取得します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続や取得クエリに失敗した場合にエラーを返します。
     pub async fn db_get_api_key_model(
         &self,
         id: uuid::Uuid,
@@ -1194,8 +1273,13 @@ impl AppState {
         })
     }
 
-    /// Backfill api_key_lookup_hash for legacy rows (where it's an empty string), using a raw API key.
-    /// Returns Some(ApiKey) if a matching legacy key was found and updated; None otherwise.
+    /// Backfill `api_key_lookup_hash` for legacy rows (where it's an empty string), using a raw API key.
+    /// Returns `Some(ApiKey)` if a matching legacy key was found and updated; `None` otherwise.
+    ///
+    /// # Errors
+    ///
+    /// - データベース接続や取得/更新クエリの実行に失敗した場合。
+    /// - ハッシュ計算や検証処理で問題が発生した場合。
     #[cfg(all(feature = "database", feature = "auth"))]
     pub async fn db_backfill_api_key_lookup_for_raw(
         &self,
@@ -1241,22 +1325,21 @@ impl AppState {
         limit: i64,
     ) -> crate::Result<Vec<crate::utils::common_types::PostSummary>> {
         use diesel::prelude::*;
+        #[derive(diesel::QueryableByName)]
+        struct Row {
+            #[diesel(sql_type = diesel::sql_types::Uuid)]
+            id: uuid::Uuid,
+            #[diesel(sql_type = diesel::sql_types::Text)]
+            title: String,
+            #[diesel(sql_type = diesel::sql_types::Uuid)]
+            author_id: uuid::Uuid,
+            #[diesel(sql_type = diesel::sql_types::Text)]
+            status: String,
+            #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+            created_at: chrono::DateTime<chrono::Utc>,
+        }
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
-
-            #[derive(diesel::QueryableByName)]
-            struct Row {
-                #[diesel(sql_type = diesel::sql_types::Uuid)]
-                id: uuid::Uuid,
-                #[diesel(sql_type = diesel::sql_types::Text)]
-                title: String,
-                #[diesel(sql_type = diesel::sql_types::Uuid)]
-                author_id: uuid::Uuid,
-                #[diesel(sql_type = diesel::sql_types::Text)]
-                status: String,
-                #[diesel(sql_type = diesel::sql_types::Timestamptz)]
-                created_at: chrono::DateTime<chrono::Utc>,
-            }
 
             let rows: Vec<Row> = diesel::sql_query(
                 "SELECT id, title, author_id, status, created_at FROM posts ORDER BY created_at DESC LIMIT $1",
@@ -1281,6 +1364,11 @@ impl AppState {
 
     // --- API Key maintenance helpers (legacy lookup_hash backfill visibility/ops) ---
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// lookup ハッシュが未設定の API キー一覧を返します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続や取得クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_list_api_keys_missing_lookup(
         &self,
     ) -> crate::Result<Vec<crate::models::ApiKey>> {
@@ -1296,6 +1384,11 @@ impl AppState {
     }
 
     #[cfg(all(feature = "database", feature = "auth"))]
+    /// lookup ハッシュ未設定の API キーを一括で失効させます。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続や更新クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_expire_api_keys_missing_lookup(
         &self,
         now: chrono::DateTime<chrono::Utc>,
@@ -1313,6 +1406,11 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// 管理者用: 指定投稿を削除します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や削除クエリの実行に失敗、または該当投稿が存在しない場合にエラーを返します。
     pub async fn db_admin_delete_post(&self, post_id: uuid::Uuid) -> crate::Result<()> {
         use crate::database::schema::posts::dsl as posts_dsl;
         use diesel::prelude::*;
@@ -1328,6 +1426,11 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// 管理者用: ユーザー数を返します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や集計クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_admin_users_count(&self) -> crate::Result<i64> {
         use crate::database::schema::users::dsl as users_dsl;
         use diesel::prelude::*;
@@ -1339,6 +1442,11 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// 管理者用: 投稿数を返します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や集計クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_admin_posts_count(&self) -> crate::Result<i64> {
         use crate::database::schema::posts::dsl as posts_dsl;
         use diesel::prelude::*;
@@ -1350,6 +1458,11 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// 管理者用: admin ユーザーを検索します。
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や検索クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_admin_find_admin_user(&self) -> crate::Result<Option<crate::models::User>> {
         use crate::database::schema::users::dsl as users_dsl;
         use diesel::prelude::*;
@@ -1364,6 +1477,10 @@ impl AppState {
     }
 
     /// Execute a raw SQL statement and return affected rows
+    ///
+    /// # Errors
+    ///
+    /// データベース接続の取得や SQL 実行に失敗した場合にエラーを返します。
     #[cfg(feature = "database")]
     pub async fn db_execute_sql(&self, sql: &str) -> crate::Result<usize> {
         use diesel::prelude::*;
@@ -1375,7 +1492,11 @@ impl AppState {
         })
     }
 
-    /// Fetch applied migration versions from schema_migrations or __diesel_schema_migrations
+    /// Fetch applied migration versions from `schema_migrations` or `__diesel_schema_migrations`
+    ///
+    /// # Errors
+    ///
+    /// データベース接続やクエリ実行/フォールバック時の処理に失敗した場合にエラーを返します。
     #[cfg(feature = "database")]
     pub async fn db_fetch_applied_migrations(&self) -> crate::Result<Vec<String>> {
         use diesel::prelude::*;
@@ -1401,7 +1522,11 @@ impl AppState {
         })
     }
 
-    /// Ensure schema_migrations exists and copy rows from legacy table
+    /// Ensure `schema_migrations` exists and copy rows from legacy table
+    ///
+    /// # Errors
+    ///
+    /// SQL 実行に失敗した場合にエラーを返します。
     #[cfg(feature = "database")]
     pub async fn db_ensure_schema_migrations_compat(&self) -> crate::Result<()> {
         let create_sql = "CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());";
@@ -1413,6 +1538,11 @@ impl AppState {
 
     // --- Diesel migrations helpers to avoid direct conn in bins ---
     #[cfg(feature = "database")]
+    /// 保留中のマイグレーションを適用します。
+    ///
+    /// # Errors
+    ///
+    /// DB 接続の取得やマイグレーション適用処理に失敗した場合にエラーを返します。
     pub async fn db_run_pending_migrations(
         &self,
         migrations: diesel_migrations::EmbeddedMigrations,
@@ -1427,6 +1557,11 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
+    /// 直前のマイグレーションをロールバックします。
+    ///
+    /// # Errors
+    ///
+    /// DB 接続の取得やロールバック処理に失敗した場合にエラーを返します。
     pub async fn db_revert_last_migration(
         &self,
         migrations: diesel_migrations::EmbeddedMigrations,
