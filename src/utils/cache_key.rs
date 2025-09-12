@@ -1,8 +1,18 @@
-//! Cache key builder utility to avoid ad-hoc format! duplication.
+//! Cache key builder utility to avoid ad-hoc `format!` duplication.
+//!
 //! Produces colon separated stable keys: namespace + labeled segments.
-//! Example: CacheKeyBuilder::new("posts")
-//!   .kv("page", 1).kv("limit", 20).kv_opt("status", None)
-//!   .build() => "posts:page:1:limit:20:status:all".
+//!
+//! Example:
+//!
+//! ```rust
+//! # use cms_backend::utils::cache_key::CacheKeyBuilder;
+//! let key = CacheKeyBuilder::new("posts")
+//!   .kv("page", 1)
+//!   .kv("limit", 20)
+//!   .kv_opt("status", None)
+//!   .build();
+//! assert_eq!(key, "posts:page:1:limit:20:status:all");
+//! ```
 
 pub struct CacheKeyBuilder {
     base: String,
@@ -19,15 +29,16 @@ pub const CACHE_PREFIX_USERS: &str = "users:"; // list queries start with this
 pub const CACHE_PREFIX_USER_POSTS: &str = "user_posts:user:"; // + {uuid}:...
 
 /// Convenience helper to build a simple entity id based cache key.
-/// Example: entity_id_key("post", uuid) => "post:id:{uuid}"
+/// Example: `entity_id_key("post", uuid) => "post:id:{uuid}"`
 pub fn entity_id_key(prefix: &str, id: impl std::fmt::Display) -> String {
     // use shorthand inlined format args (Rust 1.58+)
-    format!("{}:id:{}", prefix, id)
+    format!("{prefix}:id:{id}")
 }
 
-/// Enum describing list style cache keys we standardize on. This avoids a
-/// proliferation of small one-off wrapper functions like build_posts_cache_key
-/// or build_users_cache_key. Handlers can format through `to_cache_key`.
+/// Enum describing list-style cache keys we standardize on.
+///
+/// This avoids a proliferation of small one-off wrapper functions like `build_posts_cache_key`
+/// or `build_users_cache_key`. Handlers can format through `to_cache_key`.
 pub enum ListCacheKey<'a> {
     Posts {
         page: u32,
@@ -46,7 +57,8 @@ pub enum ListCacheKey<'a> {
     },
 }
 
-impl<'a> ListCacheKey<'a> {
+impl ListCacheKey<'_> {
+    #[must_use]
     pub fn to_cache_key(&self) -> String {
         match self {
             ListCacheKey::Posts {
@@ -95,29 +107,31 @@ impl CacheKeyBuilder {
             used_labels: std::collections::HashSet::new(),
         }
     }
-    fn push_kv(&mut self, key: &str, val: String) {
+    fn push_kv(&mut self, key: &str, val: &str) {
         // Enforce uniqueness of labels to prevent accidental overwrites like .kv("page",1).kv("page",2)
         // Keep label uniqueness check; include the key in the debug message as positional arg.
         debug_assert!(
             !self.used_labels.contains(key),
-            "duplicate cache key segment label detected: {}",
-            key
+            "duplicate cache key segment label detected: {key}"
         );
         self.used_labels.insert(key.to_string());
         // use inlined formatting shorthand
-    self.segs.push(format!("{}:{}", key, val));
+    self.segs.push(format!("{key}:{val}"));
     }
+    #[must_use]
     pub fn kv(mut self, key: &str, value: impl std::fmt::Display) -> Self {
-        self.push_kv(key, value.to_string());
+        self.push_kv(key, &value.to_string());
         self
     }
+    #[must_use]
     pub fn kv_opt<T: std::fmt::Display>(mut self, key: &str, opt: Option<T>) -> Self {
         match opt {
-            Some(v) => self.push_kv(key, v.to_string()),
-            None => self.push_kv(key, "all".to_string()),
+            Some(v) => self.push_kv(key, &v.to_string()),
+            None => self.push_kv(key, "all"),
         }
         self
     }
+    #[must_use]
     pub fn build(self) -> String {
         if self.segs.is_empty() {
             self.base
@@ -125,7 +139,7 @@ impl CacheKeyBuilder {
             // assign to locals so we can use the inlined format shorthand
             let base = self.base;
             let segs = self.segs.join(":");
-            format!("{}:{}", base, segs)
+            format!("{base}:{segs}")
         }
     }
 }
