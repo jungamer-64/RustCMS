@@ -17,12 +17,16 @@ pub enum PostStatus {
 }
 
 impl PostStatus {
+    /// 文字列から `PostStatus` をパースする
+    ///
+    /// # Errors
+    /// 不正なステータス文字列が与えられた場合、`AppError::BadRequest` を返します。
     pub fn parse_str(s: &str) -> Result<Self> {
         match s {
-            "draft" => Ok(PostStatus::Draft),
-            "published" => Ok(PostStatus::Published),
-            "archived" => Ok(PostStatus::Archived),
-            _ => Err(AppError::BadRequest(format!("Invalid post status: {}", s))),
+            "draft" => Ok(Self::Draft),
+            "published" => Ok(Self::Published),
+            "archived" => Ok(Self::Archived),
+            _ => Err(AppError::BadRequest(format!("Invalid post status: {s}"))),
         }
     }
 }
@@ -36,9 +40,9 @@ impl Default for PostStatus {
 impl std::fmt::Display for PostStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PostStatus::Draft => write!(f, "draft"),
-            PostStatus::Published => write!(f, "published"),
-            PostStatus::Archived => write!(f, "archived"),
+            Self::Draft => write!(f, "draft"),
+            Self::Published => write!(f, "published"),
+            Self::Archived => write!(f, "archived"),
         }
     }
 }
@@ -281,65 +285,78 @@ impl From<Post> for PostSummary {
     }
 }
 
-fn default_page() -> usize {
+const fn default_page() -> usize {
     1
 }
 
-fn default_limit() -> usize {
+const fn default_limit() -> usize {
     20
 }
 
 impl Post {
     /// Generate excerpt from content if not provided
+    #[must_use]
     pub fn generate_excerpt(&self, length: usize) -> String {
-        if let Some(excerpt) = &self.excerpt {
-            excerpt.clone()
-        } else {
-            let content_text = crate::utils::text::strip_html(&self.content);
-            if content_text.len() <= length {
-                content_text
-            } else {
-                format!("{}...", &content_text[..length])
-            }
-        }
+        self.excerpt.as_ref().map_or_else(
+            || {
+                let content_text = crate::utils::text::strip_html(&self.content);
+                if content_text.len() <= length {
+                    content_text
+                } else {
+                    format!("{}...", &content_text[..length])
+                }
+            },
+            |excerpt| excerpt.clone(),
+        )
     }
 
     /// Check if post is published and publication date has passed
+    #[must_use]
     pub fn is_publicly_visible(&self) -> bool {
         self.status == "published"
-            && match self.published_at {
-                None => true,
-                Some(pub_date) => pub_date <= Utc::now(),
-            }
+            && self
+                .published_at
+                .map_or(true, |pub_date| pub_date <= Utc::now())
     }
 
     /// Check if post is published
+    #[must_use]
     pub fn is_published(&self) -> bool {
         self.status == "published"
     }
 
     /// Get reading time estimate in minutes
+    #[must_use]
     pub fn reading_time(&self) -> u32 {
         let word_count = self.content.split_whitespace().count();
-        ((word_count as f32 / 200.0).ceil() as u32).max(1) // Assuming 200 words per minute
+        // 200 words per minute, round up without floating point to avoid cast lints
+        let wc_u32 = u32::try_from(word_count).unwrap_or(u32::MAX);
+        let minutes = wc_u32.saturating_add(199) / 200; // ceil division
+        minutes.max(1)
     }
 
     /// Get post status enum for compatibility
+    ///
+    /// # Errors
+    /// 不正なステータス文字列の場合は `AppError::BadRequest` を返します。
     pub fn get_status(&self) -> Result<PostStatus> {
         PostStatus::parse_str(&self.status)
     }
 
     /// Get author ID as string (for compatibility with existing code)
+    #[must_use]
     pub fn author_id_string(&self) -> String {
         self.author_id.to_string()
     }
 
     /// Check if post has a specific tag
+    #[must_use]
     pub fn has_tag(&self, tag: &str) -> bool {
         crate::utils::vec_helpers::contains_case_insensitive(&self.tags, tag)
     }
 
     /// Check if post is in a specific category
+    #[must_use]
     pub fn has_category(&self, category: &str) -> bool {
         crate::utils::vec_helpers::contains_case_insensitive(&self.categories, category)
     }
@@ -347,6 +364,7 @@ impl Post {
 
 impl CreatePostRequest {
     /// Generate slug from title if not provided
+    #[must_use]
     pub fn get_or_generate_slug(&self) -> String {
         self.slug
             .clone()
@@ -354,16 +372,19 @@ impl CreatePostRequest {
     }
 
     /// Validate and clean tags
+    #[must_use]
     pub fn clean_tags(&self) -> Vec<String> {
         crate::utils::text::clean_tags(self.tags.as_ref())
     }
 
     /// Clean categories
+    #[must_use]
     pub fn clean_categories(&self) -> Vec<String> {
         crate::utils::text::clean_categories(self.category.as_ref())
     }
 
-    /// Convert to NewPost for database insertion
+    /// Convert to `NewPost` for database insertion
+    #[must_use]
     pub fn into_new_post(self, author_id: Uuid) -> NewPost {
         let slug = self.get_or_generate_slug();
         let status = if self.published.unwrap_or(false) {
@@ -398,10 +419,10 @@ impl PostFilter {
     /// Validate and sanitize filter parameters
     pub fn validate_and_sanitize(&mut self) {
         // Normalize page/limit using shared helper
-        let (p, l) = crate::models::pagination::normalize_page_limit(
-            Some(self.page as u32),
-            Some(self.limit as u32),
-        );
+        let page_u32 = u32::try_from(self.page).unwrap_or(u32::MAX);
+        let limit_u32 = u32::try_from(self.limit).unwrap_or(u32::MAX);
+        let (p, l) =
+            crate::models::pagination::normalize_page_limit(Some(page_u32), Some(limit_u32));
         self.page = p as usize;
         self.limit = l as usize;
 
@@ -414,6 +435,7 @@ impl PostFilter {
     }
 
     /// Convert to SQL ORDER BY clause
+    #[must_use]
     pub fn to_order_clause(&self) -> String {
         // 共通パーサへ委譲してカラム許可と降順記法を統一
         let allowed = [
@@ -431,7 +453,7 @@ impl PostFilter {
             PostSortBy::ViewCount => ("view_count", true),
         };
         let token = match self.sort_order {
-            SortOrder::Desc => format!("-{}", sort_token),
+            SortOrder::Desc => format!("-{sort_token}"),
             SortOrder::Asc => sort_token.to_string(),
         };
         let (col, desc) =
@@ -441,7 +463,8 @@ impl PostFilter {
 }
 
 /// Generate URL-friendly slug from title (centralized)
-/// Delegates to utils::url_encoding::generate_safe_slug to avoid duplicated logic.
+/// Delegates to `utils::url_encoding::generate_safe_slug` to avoid duplicated logic.
+#[must_use]
 pub fn generate_slug(title: &str) -> String {
     crate::utils::url_encoding::generate_safe_slug(title)
 }
