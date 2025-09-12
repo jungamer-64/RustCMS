@@ -307,7 +307,10 @@ impl AuthService {
         let v: Vec<(String, String, String)> = authz
             .query_all(dsl)
             .map_err(|e| AuthError::Biscuit(format!("Failed to query {ctx}: {e}")))?;
-        v.into_iter().next().ok_or(AuthError::InvalidToken.into())
+        v.into_iter()
+            .next()
+            .ok_or(AuthError::InvalidToken)
+            .map_err(Into::into)
     }
 
     #[allow(clippy::unused_self)]
@@ -323,7 +326,8 @@ impl AuthService {
         v.into_iter()
             .next()
             .map(|t| t.0)
-            .ok_or(AuthError::InvalidToken.into())
+            .ok_or(AuthError::InvalidToken)
+            .map_err(Into::into)
     }
 
     #[allow(clippy::unused_self)]
@@ -339,7 +343,8 @@ impl AuthService {
         v.into_iter()
             .next()
             .map(|t| t.0)
-            .ok_or(AuthError::InvalidToken.into())
+            .ok_or(AuthError::InvalidToken)
+            .map_err(Into::into)
     }
 
     #[allow(clippy::unused_self)]
@@ -358,6 +363,10 @@ impl AuthService {
     }
 
     /// Create new authentication service (Biscuit 専用)
+    ///
+    /// # Errors
+    /// - 鍵素材の読み込み/生成に失敗した場合。
+    /// - 設定値の検証に失敗した場合。
     #[allow(clippy::unused_async)]
     pub async fn new(config: &AuthConfig, database: &Database) -> Result<Self> {
         // Attempt to load biscuit keypair from environment (base64 encoded), otherwise generate.
@@ -470,7 +479,7 @@ impl AuthService {
 
     /// Refresh tokens (access + rotated refresh) using current valid refresh token.
     /// 仕様:
-    /// - refresh JWT の `jti` は "<session_id>_refresh_v<version>" 形式
+    /// - refresh JWT の `jti` は "`<session_id>_refresh_v<version>`" 形式
     /// - セッションに保存している `refresh_version` と一致した場合のみ有効
     /// - 使用成功時に `refresh_version` をインクリメントし新しい `refresh_token` を発行 (旧トークンは無効化)
     /// - アクセストークンは 1h、リフレッシュは都度 30d (スライディング) とする
@@ -509,7 +518,7 @@ impl AuthService {
     ) -> Result<(u32, crate::models::User)> {
         let new_version = {
             let mut sessions = self.sessions.write().await;
-            self.validate_and_bump_refresh_session(parsed, &mut sessions)?
+            Self::validate_and_bump_refresh_session(parsed, &mut sessions)?
         };
         let user = self
             .database
@@ -529,13 +538,12 @@ impl AuthService {
     }
 
     fn validate_and_bump_refresh_session(
-        &self,
         parsed: &ParsedBiscuit,
         sessions: &mut std::collections::HashMap<String, SessionData>,
     ) -> Result<u32> {
         let session = sessions
             .get_mut(&parsed.session_id)
-            .ok_or_else(|| AuthError::InvalidToken)?;
+            .ok_or(AuthError::InvalidToken)?;
         if session.expires_at < Utc::now() {
             return Err(AuthError::TokenExpired.into());
         }
@@ -556,14 +564,21 @@ impl AuthService {
         exp_unix: i64,
     ) -> Result<String> {
         let mut program = String::new();
-        writeln!(&mut program, "user(\"{id}\", \"{username}\", \"{role}\");",
+        writeln!(
+            &mut program,
+            "user(\"{id}\", \"{username}\", \"{role}\");",
             id = user.id,
             username = user.username,
             role = user.role
-        ).expect("writing to string failed");
-    writeln!(&mut program, "token_type(\"{token_type}\");").expect("writing to string failed");
-    writeln!(&mut program, "exp({exp_unix});").expect("writing to string failed");
-    writeln!(&mut program, "session(\"{session_id}\", {version});").expect("writing to string failed");
+        )
+        .expect("writing to string failed");
+        writeln!(&mut program, "token_type(\"{token_type}\");").expect("writing to string failed");
+        writeln!(&mut program, "exp({exp_unix});").expect("writing to string failed");
+        writeln!(
+            &mut program,
+            "session(\"{session_id}\", {version});"
+        )
+        .expect("writing to string failed");
 
         let builder: BiscuitBuilder = biscuit_auth::Biscuit::builder();
         let builder = builder
@@ -579,8 +594,11 @@ impl AuthService {
         Ok(b64)
     }
 
-    /// (旧互換) verify_jwt -> Biscuit access 検証 (deprecated, behind legacy-auth-flat for eventual removal)
+    /// (旧互換) `verify_jwt` -> Biscuit access 検証 (deprecated, behind `legacy-auth-flat` for eventual removal)
     #[cfg(feature = "legacy-auth-flat")]
+    ///
+    /// # Errors
+    /// - トークンが無効/期限切れの場合。
     #[deprecated(
         note = "Use verify_biscuit(state, token) or auth_middleware injected AuthContext (will be removed in 3.0.0)"
     )]
@@ -588,7 +606,7 @@ impl AuthService {
         self.verify_biscuit_generic(token, Some("access")).await
     }
 
-    /// Biscuit トークン検証 (AppState 経由でユーザー確認 & メトリクス計測用ラッパーと組み合わせて利用)
+    /// Biscuit トークン検証 (`AppState` 経由でユーザー確認 & メトリクス計測用ラッパーと組み合わせて利用)
     ///
     /// 直接 DB コネクションを取得せず、`AppState` の `db_get_user_by_id` を利用することで
     /// メトリクスと一貫した DB アクセス経路を確保する。
@@ -643,14 +661,14 @@ impl AuthService {
             "data($id,$u,$r) <- user($id,$u,$r)",
             "user facts",
         )?;
-        let user_id = Uuid::parse_str(&id_s).map_err(|_| AuthError::InvalidToken)?;
-        let role = UserRole::parse_str(&role_s).map_err(|_| AuthError::InvalidToken)?;
+    let user_id = Uuid::parse_str(&id_s).map_err(|_| AuthError::InvalidToken)?;
+    let role = UserRole::parse_str(&role_s).map_err(|_| AuthError::InvalidToken)?;
         let token_type = self.biscuit_query_string(
             &mut authorizer,
             "data($t) <- token_type($t)",
             "token_type",
         )?;
-    let exp = self.biscuit_query_i64(&mut authorizer, "data($e) <- exp($e)", "exp")?;
+        let exp = self.biscuit_query_i64(&mut authorizer, "data($e) <- exp($e)", "exp")?;
         if exp < Utc::now().timestamp() {
             return Err(AuthError::TokenExpired.into());
         }
@@ -677,34 +695,35 @@ impl AuthService {
         let parsed = self.parse_and_check(token, expect_type)?;
         // セッション整合性チェックを専用ヘルパーへ委譲
         self.validate_session_consistency(&parsed).await?;
-        Ok(self.build_auth_context(&parsed))
+    Ok(Self::build_auth_context(&parsed))
     }
 
-    /// セッション存在・期限・バージョン整合性を検証し、last_accessed を更新
+    /// セッション存在・期限・バージョン整合性を検証し、`last_accessed` を更新
+    #[allow(clippy::significant_drop_tightening)]
     async fn validate_session_consistency(&self, parsed: &ParsedBiscuit) -> Result<()> {
-        let mut sessions = self.sessions.write().await;
         let now = Utc::now();
-        let sess = sessions
-            .get_mut(&parsed.session_id)
-            .ok_or_else(|| AuthError::InvalidToken)?;
-        if sess.expires_at < now {
-            return Err(AuthError::TokenExpired.into());
-        }
-        // last_accessed 更新
-        sess.last_accessed = now;
-        // access の場合は version <= stored_version を許可 (新しい refresh で version が進むため)
-        if parsed.token_type == "access" && parsed.version > sess.refresh_version {
-            return Err(AuthError::InvalidToken.into());
-        }
-        // refresh の場合は厳密一致を要求 (refresh_access_token で再発行済みなら旧は拒否)
-        if parsed.token_type == "refresh" && parsed.version != sess.refresh_version {
-            return Err(AuthError::InvalidToken.into());
+        {
+            let mut sessions = self.sessions.write().await;
+            let Some(sess) = sessions.get_mut(&parsed.session_id) else {
+                return Err(AuthError::InvalidToken.into());
+            };
+            if sess.expires_at < now {
+                return Err(AuthError::TokenExpired.into());
+            }
+            if parsed.token_type == "access" && parsed.version > sess.refresh_version {
+                return Err(AuthError::InvalidToken.into());
+            }
+            if parsed.token_type == "refresh" && parsed.version != sess.refresh_version {
+                return Err(AuthError::InvalidToken.into());
+            }
+            // last_accessed 更新
+            sess.last_accessed = now;
         }
         Ok(())
     }
 
     #[inline]
-    fn ensure_token_type(&self, expect_type: Option<&str>, actual: &str) -> Result<()> {
+    fn ensure_token_type(expect_type: Option<&str>, actual: &str) -> Result<()> {
         if let Some(t) = expect_type
             && actual != t
         {
@@ -714,26 +733,25 @@ impl AuthService {
     }
 
     #[inline]
-    fn build_auth_context(&self, parsed: &ParsedBiscuit) -> AuthContext {
-        let role_clone = parsed.role.clone();
+    fn build_auth_context(parsed: &ParsedBiscuit) -> AuthContext {
         AuthContext {
             user_id: parsed.user_id,
             username: parsed.username.clone(),
-            role: parsed.role.clone(),
+            role: parsed.role,
             session_id: parsed.session_id.clone(),
-            permissions: self.get_role_permissions(role_clone.as_str()),
+            permissions: Self::get_role_permissions(parsed.role.as_str()),
         }
     }
 
     #[inline]
     fn parse_and_check(&self, token: &str, expect_type: Option<&str>) -> Result<ParsedBiscuit> {
         let parsed = self.parse_biscuit(token)?;
-        self.ensure_token_type(expect_type, &parsed.token_type)?;
+        Self::ensure_token_type(expect_type, &parsed.token_type)?;
         Ok(parsed)
     }
 
     /// Get permissions for a role
-    fn get_role_permissions(&self, role: &str) -> Vec<String> {
+    fn get_role_permissions(role: &str) -> Vec<String> {
         match role {
             "SuperAdmin" => vec![
                 "admin".to_string(),
@@ -753,16 +771,25 @@ impl AuthService {
     }
 
     /// Hash password using Argon2
+    ///
+    /// # Errors
+    /// - ハッシュ計算に失敗した場合。
     pub fn hash_password(&self, password: &str) -> Result<String> {
         password::hash_password(password)
     }
 
     /// Verify password against hash
+    ///
+    /// # Errors
+    /// - 検証処理に失敗した場合。
     pub fn verify_password(&self, password: &str, hash: &str) -> Result<bool> {
         password::verify_password(password, hash)
     }
 
     /// Logout user (invalidate session)
+    ///
+    /// # Errors
+    /// - セッションの取得/更新に失敗した場合。
     pub async fn logout(&self, session_id: &str) -> Result<()> {
         self.sessions.write().await.remove(session_id);
         Ok(())
@@ -783,20 +810,27 @@ impl AuthService {
 
     /// Health check for auth service
     #[allow(clippy::unused_async)]
+    /// Health check for auth service
+    ///
+    /// # Errors
+    /// - DB コネクション取得に失敗した場合。
     pub async fn health_check(&self) -> Result<()> {
         // Check database connection
         let _conn = self.get_conn()?;
         Ok(())
     }
 
-    /// Convenience helper to get a pooled DB connection and map errors to AuthError
+    /// Convenience helper to get a pooled DB connection and map errors to `AuthError`
     fn get_conn(&self) -> std::result::Result<crate::database::PooledConnection, AuthError> {
         self.database
             .get_connection()
             .map_err(|e| AuthError::Database(e.to_string()))
     }
 
-    /// Create user using AppState so metrics are recorded centrally
+    /// Create user using `AppState` so metrics are recorded centrally
+    ///
+    /// # Errors
+    /// - 入力検証/DB 書き込みに失敗した場合。
     pub async fn create_user(
         &self,
         state: &crate::AppState,
@@ -806,6 +840,9 @@ impl AuthService {
     }
 
     /// Backwards-compatible wrapper kept for call sites that used the old helper
+    ///
+    /// # Errors
+    /// - `create_user` が失敗した場合。
     pub async fn create_user_with_state(
         &self,
         state: &crate::AppState,
@@ -848,6 +885,10 @@ impl AuthService {
 }
 
 /// Helper function to check if user has admin permissions
+/// 管理者権限を要求します。
+///
+/// # Errors
+/// - `auth_context` に `admin` 権限が含まれない場合。
 pub fn require_admin_permission(auth_context: &AuthContext) -> crate::Result<()> {
     if auth_context.permissions.iter().any(|p| p == "admin") {
         Ok(())
@@ -888,7 +929,7 @@ mod tests {
         let app_err: crate::AppError = res.unwrap_err();
         match app_err {
             crate::AppError::Authorization(_) => {}
-            other => panic!("expected Authorization error, got {:?}", other),
+            other => panic!("expected Authorization error, got {other:?}"),
         }
     }
 }
