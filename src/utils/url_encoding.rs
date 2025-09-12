@@ -50,7 +50,7 @@ pub fn decode_url_param(input: &str) -> crate::Result<String> {
     percent_decode_str(input)
         .decode_utf8()
         .map_err(|e| AppError::BadRequest(format!("Invalid URL encoding: {}", e)))
-        .map(|cow| cow.into_owned())
+        .map(std::borrow::Cow::into_owned)
 }
 
 /// スラッグの安全なエンコード（より厳密）
@@ -67,7 +67,7 @@ pub fn decode_slug(input: &str) -> crate::Result<String> {
     percent_decode_str(input)
         .decode_utf8()
     .map_err(|e| AppError::BadRequest(format!("Invalid slug encoding: {}", e)))
-        .map(|cow| cow.into_owned())
+    .map(std::borrow::Cow::into_owned)
 }
 
 /// 簡易URLエンコード（完全互換）
@@ -79,7 +79,7 @@ pub fn url_encode(input: &str) -> String {
 pub fn url_decode(input: &str) -> crate::Result<String> {
     decode(input)
     .map_err(|e| AppError::BadRequest(format!("URL decode error: {}", e)))
-        .map(|cow| cow.into_owned())
+    .map(std::borrow::Cow::into_owned)
 }
 
 /// 文字列が既にURLエンコードされているかチェック
