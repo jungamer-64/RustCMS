@@ -35,7 +35,8 @@ macro_rules! timed_op {
     ($self:ident, $kind:expr, $future:expr) => {{
         let start = std::time::Instant::now();
         let res = $future.await;
-        let elapsed = start.elapsed().as_millis() as f64;
+        // use floating-point seconds to avoid precision-loss cast from u128
+        let elapsed = start.elapsed().as_secs_f64() * 1000.0; // milliseconds as f64
         if res.is_ok() {
             match $kind {
                 #[cfg(feature = "database")] "db" => { $self.record_db_query(elapsed).await; },
@@ -191,7 +192,7 @@ where
     match fut.await {
         Ok(_) => ServiceHealth {
             status: "up".to_string(),
-            response_time_ms: start.elapsed().as_millis() as f64,
+            response_time_ms: start.elapsed().as_secs_f64() * 1000.0,
             error: None,
             details: serde_json::json!({}),
         },
@@ -202,7 +203,7 @@ where
             };
             ServiceHealth {
                 status: status.to_string(),
-                response_time_ms: start.elapsed().as_millis() as f64,
+                response_time_ms: start.elapsed().as_secs_f64() * 1000.0,
                 // use inlined debug formatting
                 error: Some(format!("{e:?}")),
                 details: serde_json::json!({}),
