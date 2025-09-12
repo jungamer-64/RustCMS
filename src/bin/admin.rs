@@ -427,7 +427,8 @@ async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> 
                 state.db_get_user_by_username(&user).await?
             };
 
-            let new_password = password.clone().unwrap_or_else(|| {
+            // Avoid cloning the Option itself; clone inner String only when present.
+            let new_password = password.as_ref().cloned().unwrap_or_else(|| {
                 prompt_password("Enter new password: ")
                     .unwrap_or_else(|_| generate_random_password())
             });
@@ -609,9 +610,11 @@ async fn handle_security_action(action: SecurityAction, _state: &AppState) -> Re
 
 fn truncate(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
-        format!("{:width$}", s, width = max_len)
+        // use positional width argument: `{value:width$}` -> `{value:1$}` where 1 references second arg
+        format!("{:1$}", s, max_len)
     } else {
-        format!("{:.width$}...", s, width = max_len - 3)
+        // positional precision/width for truncation
+        format!("{:.1$}...", s, max_len - 3)
     }
 }
 
