@@ -36,7 +36,7 @@ pub fn init_telemetry() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(feature = "monitoring")]
-fn init_metrics() {
+const fn init_metrics() {
     // For now, keep metrics initialization minimal to avoid hard dependency on
     // optional monitoring crates during consolidation. This is a safe noop that
     // preserves the feature gate and can be expanded later to initialize a
