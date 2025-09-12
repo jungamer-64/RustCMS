@@ -1,7 +1,7 @@
 //! Unified CMS server entrypoint - integrates functionality from cms-lightweight, cms-simple, and cms-unified
 //!
 //! This server supports both production mode (with database) and development mode (in-memory).
-//! It serves as the main unified entry point for the RustCMS backend.
+//! It serves as the main unified entry point for the `RustCMS` backend.
 
 use axum::Router as AxumRouter;
 use std::net::SocketAddr;

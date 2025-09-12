@@ -3,6 +3,7 @@
 // was removed from the tree; creating this stub avoids `cargo fmt --all`
 // failing in CI. If this binary is needed, replace with real implementation.
 
+#[allow(clippy::missing_const_for_fn)]
 fn main() {
     // no-op
 }
