@@ -56,12 +56,9 @@ async fn build_auth(db: &Database) -> AuthService {
 
 #[tokio::test]
 async fn refresh_fails_when_session_missing() {
-    let db = match build_db().await {
-        Some(d) => d,
-        None => {
-            eprintln!("SKIP refresh_fails_when_session_missing: DATABASE_URL not set");
-            return;
-        }
+    let Some(db) = build_db().await else {
+        eprintln!("SKIP refresh_fails_when_session_missing: DATABASE_URL not set");
+        return;
     };
     let auth = build_auth(&db).await;
     let user = dummy_user();

@@ -59,12 +59,9 @@ fn dummy_user() -> User {
 
 #[tokio::test]
 async fn biscuit_refresh_rotation_invalidate_old() {
-    let db = match build_db().await {
-        Some(d) => d,
-        None => {
-            eprintln!("SKIP biscuit_refresh_rotation_invalidate_old: DATABASE_URL not set");
-            return;
-        }
+    let Some(db) = build_db().await else {
+        eprintln!("SKIP biscuit_refresh_rotation_invalidate_old: DATABASE_URL not set");
+        return;
     };
     let auth = build_auth(&db).await;
     let user = dummy_user();

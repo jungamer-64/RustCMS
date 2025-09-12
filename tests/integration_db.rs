@@ -11,12 +11,9 @@ mod tests {
     #[test]
     fn db_connectivity_smoke() {
         // If DATABASE_URL is not set, skip (useful for local dev where integration infra isn't available)
-        let database_url = match env::var("DATABASE_URL") {
-            Ok(u) => u,
-            Err(_) => {
-                eprintln!("DATABASE_URL not set; skipping DB connectivity integration test");
-                return;
-            }
+        let Ok(database_url) = env::var("DATABASE_URL") else {
+            eprintln!("DATABASE_URL not set; skipping DB connectivity integration test");
+            return;
         };
 
         let manager = ConnectionManager::<PgConnection>::new(database_url);

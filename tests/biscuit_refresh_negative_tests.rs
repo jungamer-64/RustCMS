@@ -58,12 +58,9 @@ async fn build_auth(db: &Database, access_ttl: u64, refresh_ttl: u64) -> AuthSer
 
 #[tokio::test]
 async fn refresh_fails_after_expiry() {
-    let db = match build_db().await {
-        Some(d) => d,
-        None => {
-            eprintln!("SKIP refresh_fails_after_expiry: DATABASE_URL not set");
-            return;
-        }
+    let Some(db) = build_db().await else {
+        eprintln!("SKIP refresh_fails_after_expiry: DATABASE_URL not set");
+        return;
     };
     // Very short refresh TTL
     let auth = build_auth(&db, 1, 2).await; // access 1s, refresh 2s
@@ -80,12 +77,9 @@ async fn refresh_fails_after_expiry() {
 
 #[tokio::test]
 async fn refresh_version_mismatch_reuse_old() {
-    let db = match build_db().await {
-        Some(d) => d,
-        None => {
-            eprintln!("SKIP refresh_version_mismatch_reuse_old: DATABASE_URL not set");
-            return;
-        }
+    let Some(db) = build_db().await else {
+        eprintln!("SKIP refresh_version_mismatch_reuse_old: DATABASE_URL not set");
+        return;
     };
     let auth = build_auth(&db, 30, 60).await;
     let user = dummy_user();
