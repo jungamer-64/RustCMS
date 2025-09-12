@@ -335,7 +335,7 @@ mod tests {
     #[test]
     fn test_format_file_size() {
         assert_eq!(format_file_size(1024), "1.00 KB");
-        assert_eq!(format_file_size(1048576), "1.00 MB");
+    assert_eq!(format_file_size(1_048_576), "1.00 MB");
         assert_eq!(format_file_size(500), "500 B");
     }
 

@@ -228,7 +228,7 @@ pub async fn suggest(
                 summary = "統計例",
                 value = json!({
                     "success": true,
-                    "data": {"index_size": 12345, "documents": 42},
+                    "data": {"index_size": 12_345, "documents": 42},
                     "message": null,
                     "error": null,
                     "validation_errors": null
