@@ -31,6 +31,11 @@ pub struct CreatedApiKeyResponse {
         })
     )
 )))))]
+/// Create an API key for the authenticated user.
+///
+/// # Errors
+/// - 入力検証エラーや DB 書き込みエラーが発生した場合。
+/// - 認証情報が無効な場合。
 pub async fn create_api_key(
     State(state): State<AppState>,
     Extension(auth): Extension<crate::auth::AuthContext>,
@@ -55,6 +60,10 @@ pub async fn create_api_key(
         value = json!([{ "id": "550e8400-e29b-41d4-a716-446655440000", "name": "integration", "permissions": ["read:posts"], "revoked": false }])
     )
 )))))]
+/// List API keys owned by the authenticated user.
+///
+/// # Errors
+/// - DB からの読み出しに失敗した場合。
 pub async fn list_api_keys(
     State(state): State<AppState>,
     Extension(auth): Extension<crate::auth::AuthContext>,
