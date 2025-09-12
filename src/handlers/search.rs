@@ -81,6 +81,11 @@ pub struct SuggestQuery {
 }
 
 /// Search endpoint
+/// 検索エンドポイント。
+///
+/// # Errors
+/// - 検索バックエンドの実行に失敗した場合。
+/// - キャッシュの取得・保存時に失敗した場合。
 #[utoipa::path(
     get,
     path = "/api/v1/search",
@@ -164,6 +169,10 @@ pub async fn search(
 }
 
 /// Search suggestions endpoint
+///
+/// # Errors
+/// - サジェスト取得で検索バックエンドが失敗した場合。
+/// - キャッシュの取得・保存時に失敗した場合。
 #[utoipa::path(
     get,
     path = "/api/v1/search/suggest",
@@ -218,6 +227,10 @@ pub async fn suggest(
 }
 
 /// Search statistics endpoint
+///
+/// # Errors
+/// - 統計情報の取得で検索バックエンドが失敗した場合。
+/// - キャッシュの取得・保存時に失敗した場合。
 #[utoipa::path(
     get,
     path = "/api/v1/search/stats",
@@ -262,6 +275,9 @@ pub async fn search_stats(State(state): State<AppState>) -> Result<impl IntoResp
 }
 
 /// Reindex all content
+///
+/// # Errors
+/// - 現状、この関数は失敗しません（プレースホルダーの固定レスポンスを返します）。
 #[utoipa::path(
     post,
     path = "/api/v1/search/reindex",
