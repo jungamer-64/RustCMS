@@ -267,15 +267,16 @@ async fn main() -> Result<()> {
     // Execute command
     match cli.command {
         Commands::User { action } => handle_user_action(action, &app_state).await?,
-        Commands::Content { action } => handle_content_action(action, &app_state).await?,
-        Commands::System { action } => handle_system_action(action, &app_state).await?,
-        Commands::Analytics { action } => handle_analytics_action(action, &app_state).await?,
-        Commands::Security { action } => handle_security_action(action, &app_state).await?,
+    Commands::Content { action } => handle_content_action(action, &app_state),
+    Commands::System { action } => handle_system_action(action, &app_state),
+    Commands::Analytics { action } => handle_analytics_action(action, &app_state),
+    Commands::Security { action } => handle_security_action(action, &app_state),
     }
 
     Ok(())
 }
 
+#[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> {
     match action {
         UserAction::List { role, active_only } => {
@@ -329,8 +330,8 @@ async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> 
                 username: username.clone(),
                 email,
                 password: password.clone(),
-                first_name: Some("".to_string()),
-                last_name: Some("".to_string()),
+                first_name: Some(String::new()),
+                last_name: Some(String::new()),
                 role: role_enum,
             };
 
@@ -428,7 +429,7 @@ async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> 
             };
 
             // Avoid cloning the Option itself; clone inner String only when present.
-            let new_password = password.as_ref().cloned().unwrap_or_else(|| {
+            let new_password = password.clone().unwrap_or_else(|| {
                 prompt_password("Enter new password: ")
                     .unwrap_or_else(|_| generate_random_password())
             });
@@ -450,7 +451,8 @@ async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> 
     Ok(())
 }
 
-async fn handle_content_action(action: ContentAction, _state: &AppState) -> Result<()> {
+#[allow(clippy::cognitive_complexity)]
+fn handle_content_action(action: ContentAction, _state: &AppState) {
     match action {
         ContentAction::List {
             status,
@@ -490,10 +492,10 @@ async fn handle_content_action(action: ContentAction, _state: &AppState) -> Resu
         }
     }
 
-    Ok(())
 }
 
-async fn handle_system_action(action: SystemAction, _state: &AppState) -> Result<()> {
+#[allow(clippy::cognitive_complexity)]
+fn handle_system_action(action: SystemAction, _state: &AppState) {
     match action {
         SystemAction::Status => {
             info!("📊 System Status:");
@@ -544,10 +546,9 @@ async fn handle_system_action(action: SystemAction, _state: &AppState) -> Result
         }
     }
 
-    Ok(())
 }
 
-async fn handle_analytics_action(action: AnalyticsAction, _state: &AppState) -> Result<()> {
+fn handle_analytics_action(action: AnalyticsAction, _state: &AppState) {
     match action {
         AnalyticsAction::Users { period } => {
             info!("📊 User Analytics ({})", period);
@@ -565,10 +566,10 @@ async fn handle_analytics_action(action: AnalyticsAction, _state: &AppState) -> 
         }
     }
 
-    Ok(())
 }
 
-async fn handle_security_action(action: SecurityAction, _state: &AppState) -> Result<()> {
+#[allow(clippy::cognitive_complexity)]
+fn handle_security_action(action: SecurityAction, _state: &AppState) {
     match action {
         SecurityAction::AuditLog {
             limit,
@@ -603,18 +604,17 @@ async fn handle_security_action(action: SecurityAction, _state: &AppState) -> Re
         }
     }
 
-    Ok(())
 }
 
 // Utility functions
 
 fn truncate(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
-        // use positional width argument: `{value:width$}` -> `{value:1$}` where 1 references second arg
-        format!("{:1$}", s, max_len)
+        // Inline captured variables in formatting for clarity and clippy compliance
+        format!("{s:max_len$}")
     } else {
-        // positional precision/width for truncation
-        format!("{:.1$}...", s, max_len - 3)
+        let trunc = max_len.saturating_sub(3);
+        format!("{s:.trunc$}...")
     }
 }
 
@@ -631,7 +631,7 @@ fn generate_random_password() -> String {
 }
 
 fn prompt_password(prompt: &str) -> Result<String> {
-    print!("{}", prompt);
+    print!("{prompt}");
     io::stdout().flush()?;
     let mut password = String::new();
     io::stdin().read_line(&mut password)?;
