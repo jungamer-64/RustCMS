@@ -37,6 +37,7 @@ impl DatabasePool {
         })
     }
 
+    #[allow(clippy::unused_async)] // kept async for future async driver compatibility and API consistency
     pub async fn health_check(&self) -> Result<(), crate::AppError> {
         use diesel::prelude::*;
         use diesel::sql_query;

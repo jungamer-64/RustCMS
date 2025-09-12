@@ -252,6 +252,7 @@ pub struct Database {
 }
 
 impl Database {
+    #[allow(clippy::unused_async)]
     pub async fn new(config: &DatabaseConfig) -> Result<Self> {
         let pool = DatabasePool::new(&config.url, config.max_connections)?;
 
@@ -290,6 +291,7 @@ impl Database {
     }
 
     // User CRUD operations
+    #[allow(clippy::unused_async)]
     pub async fn create_user(&self, request: CreateUserRequest) -> Result<User> {
         // Build user with hashed password (this returns crate::AppError on failure)
         let user = User::new_with_password(
@@ -307,6 +309,7 @@ impl Database {
     }
 
     /// List users helper used by admin CLI (stub)
+    #[allow(clippy::unused_async)]
     pub async fn list_users(
         &self,
         _role: Option<&str>,
@@ -317,17 +320,20 @@ impl Database {
     }
 
     /// Get user by username helper used by admin CLI (stub)
+    #[allow(clippy::unused_async)]
     pub async fn get_user_by_username(&self, username_str: &str) -> Result<User> {
         // Propagate model-level AppError (preserves NotFound vs other AppError variants)
         self.with_conn(|conn| User::find_by_username(conn, username_str))
     }
 
+    #[allow(clippy::unused_async)]
     pub async fn get_user_by_id(&self, _id: Uuid) -> Result<User> {
         // Propagate model-level AppError so NotFound is preserved
         self.with_conn(|conn| User::find_by_id(conn, _id))
     }
 
     /// Find a user by email
+    #[allow(clippy::unused_async)]
     pub async fn get_user_by_email(&self, email: &str) -> Result<User> {
         self.with_conn(|conn| {
             let user = self.run_query(
@@ -339,7 +345,7 @@ impl Database {
     }
 
     /// Update user's last login timestamp
-    pub async fn update_last_login(&self, id: Uuid) -> Result<()> {
+    pub fn update_last_login(&self, id: Uuid) -> Result<()> {
         self.with_conn(|conn| {
             self.run_query(
                 || crate::models::User::update_last_login(conn, id),
@@ -348,7 +354,7 @@ impl Database {
         })
     }
 
-    pub async fn get_users(
+    pub fn get_users(
         &self,
         _page: u32,
         _limit: u32,
@@ -375,20 +381,20 @@ impl Database {
         })
     }
 
-    pub async fn update_user(&self, id: Uuid, request: UpdateUserRequest) -> Result<User> {
+    pub fn update_user(&self, id: Uuid, request: UpdateUserRequest) -> Result<User> {
         self.with_conn(|conn| {
             // Let the model return AppError (NotFound, etc.) propagate directly.
             User::update(conn, id, &request)
         })
     }
 
-    pub async fn count_users(&self) -> Result<usize> {
+    pub fn count_users(&self) -> Result<usize> {
         // Reuse the filtered counter to avoid duplicated query logic
-        self.count_users_filtered(None, None).await
+        self.count_users_filtered(None, None)
     }
 
     /// Count users with optional filters (for accurate pagination totals)
-    pub async fn count_users_filtered(
+    pub fn count_users_filtered(
         &self,
         _role: Option<String>,
         _active: Option<bool>,
@@ -407,7 +413,7 @@ impl Database {
     }
 
     // Post CRUD operations
-    pub async fn create_post(&self, request: CreatePostRequest) -> Result<Post> {
+    pub fn create_post(&self, request: CreatePostRequest) -> Result<Post> {
         use diesel::prelude::*;
         // Try to choose an author: prefer a user with role = 'admin', otherwise use the first user
         use crate::database::schema::posts::dsl as posts_dsl;
@@ -436,7 +442,7 @@ impl Database {
         })
     }
 
-    pub async fn get_post_by_id(&self, _id: Uuid) -> Result<Post> {
+    pub fn get_post_by_id(&self, _id: Uuid) -> Result<Post> {
         use crate::database::schema::posts::dsl as posts_dsl;
         use diesel::prelude::*;
         self.with_conn(|conn| {
@@ -449,7 +455,7 @@ impl Database {
         })
     }
 
-    pub async fn get_posts(
+    pub fn get_posts(
         &self,
         _page: u32,
         _limit: u32,
@@ -479,17 +485,17 @@ impl Database {
         })
     }
 
-    pub async fn update_post(&self, _id: Uuid, _request: UpdatePostRequest) -> Result<Post> {
+    pub fn update_post(&self, _id: Uuid, _request: UpdatePostRequest) -> Result<Post> {
         // Step 1 load + compute
-        let (changes, updated_at) = self.prepare_post_update(_id, &_request).await?;
+        let (changes, updated_at) = self.prepare_post_update(_id, &_request)?;
         // Step 2 persist
-        let updated = self.persist_post_update(_id, &changes).await?;
+        let updated = self.persist_post_update(_id, &changes)?;
         // Step 3 (optional future: trigger search index update / events) - placeholder uses updated_at to avoid unused warning
         let _ = updated_at; // reserved for future instrumentation
         Ok(updated)
     }
 
-    async fn prepare_post_update(
+    fn prepare_post_update(
         &self,
         id: Uuid,
         req: &UpdatePostRequest,
@@ -510,7 +516,7 @@ impl Database {
         })
     }
 
-    async fn persist_post_update(&self, id: Uuid, changes: &PostUpdateData) -> Result<Post> {
+    fn persist_post_update(&self, id: Uuid, changes: &PostUpdateData) -> Result<Post> {
         use crate::database::schema::posts::dsl as posts_dsl;
         use diesel::prelude::*;
         self.with_conn(|conn| {
@@ -554,7 +560,7 @@ impl Database {
 
     // (helper removed; original in-function sorting logic retained to avoid type privacy complications)
 
-    pub async fn delete_post(&self, _id: Uuid) -> Result<()> {
+    pub fn delete_post(&self, _id: Uuid) -> Result<()> {
         use crate::database::schema::posts::dsl as posts_dsl;
         use diesel::prelude::*;
         // Use helper to execute and ensure at least one row affected
@@ -567,14 +573,13 @@ impl Database {
         })
     }
 
-    pub async fn count_posts(&self, _tag: Option<&str>) -> Result<usize> {
+    pub fn count_posts(&self, _tag: Option<&str>) -> Result<usize> {
         // Delegate to the filtered counter to avoid duplication
-        self.count_posts_filtered(None, None, _tag.map(|t| t.to_string()))
-            .await
+        self.count_posts_filtered(None, None, _tag.map(str::to_string))
     }
 
     /// Count posts with optional filters to match listing totals
-    pub async fn count_posts_filtered(
+    pub fn count_posts_filtered(
         &self,
         _status: Option<String>,
         _author: Option<Uuid>,
@@ -593,9 +598,9 @@ impl Database {
         })
     }
 
-    pub async fn count_posts_by_author(&self, author: Uuid) -> Result<usize> {
+    pub fn count_posts_by_author(&self, author: Uuid) -> Result<usize> {
         // Delegate to the filtered counter to avoid duplication
-        self.count_posts_filtered(None, Some(author), None).await
+        self.count_posts_filtered(None, Some(author), None)
     }
 
     // Helper to run a diesel execute call and ensure affected > 0, mapping errors consistently.
@@ -651,7 +656,7 @@ impl Database {
     }
 
     /// Delete a user by ID
-    pub async fn delete_user(&self, id: Uuid) -> Result<()> {
+    pub fn delete_user(&self, id: Uuid) -> Result<()> {
         self.with_conn(|conn| {
             self.execute_and_ensure(
                 || User::delete(conn, id),
@@ -662,7 +667,7 @@ impl Database {
     }
 
     /// Reset user password helper used by admin CLI
-    pub async fn reset_user_password(&self, id: Uuid, new_password: &str) -> Result<()> {
+    pub fn reset_user_password(&self, id: Uuid, new_password: &str) -> Result<()> {
         use crate::database::schema::users::dsl as users_dsl;
         use diesel::prelude::*;
         let hash = crate::utils::password::hash_password(new_password)?;
