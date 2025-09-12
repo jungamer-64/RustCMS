@@ -92,7 +92,10 @@ pub async fn delete_post(
     Path(id): Path<uuid::Uuid>,
 ) -> Result<impl IntoResponse> {
     require_admin_permission(&auth)?;
-    let fut = async move { state.db_admin_delete_post(id).await.map(|()| ()) };
+    let fut = async move {
+        state.db_admin_delete_post(id).await?;
+        Ok::<(), crate::AppError>(())
+    };
     // Reuse delete_with for consistent JSON payload (admin previously returned 204)
     delete_with(fut, "Post deleted successfully").await
 }

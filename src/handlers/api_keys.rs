@@ -89,6 +89,11 @@ pub struct ApiKeyStatus {
         })
     )
 )))))]
+/// 指定された API キーを失効させます。
+///
+/// # Errors
+/// - 対象のキーが見つからない、または所有者が一致しない場合。
+/// - DB 操作に失敗した場合。
 pub async fn revoke_api_key(
     State(state): State<AppState>,
     Extension(auth): Extension<crate::auth::AuthContext>,
@@ -97,8 +102,8 @@ pub async fn revoke_api_key(
     let fut = async move {
         state
             .db_revoke_api_key_owned(id, auth.user_id)
-            .await
-            .map(|_| ())
+            .await?;
+        Ok::<(), crate::AppError>(())
     };
     delete_with(fut, "API key revoked").await
 }

@@ -305,6 +305,11 @@ pub struct RefreshRequest {
         (status = 500, description = "Server error")
     )
 )]
+/// Refresh access/refresh tokens.
+///
+/// # Errors
+/// - 無効または期限切れのリフレッシュトークン（401）。
+/// - 内部エラー（500）。
 pub async fn refresh_token(
     State(state): State<AppState>,
     Json(body): Json<RefreshRequest>,
