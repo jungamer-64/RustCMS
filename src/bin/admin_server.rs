@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Bind to configured address
     let host = config.server.host.clone();
     let port = config.server.port;
-    let addr = format!("{}:{}", host, port).parse::<SocketAddr>()?;
+    let addr = format!("{host}:{port}").parse::<SocketAddr>()?;
 
     info!("Binding admin server to {}", addr);
 
@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 info!("Server exited cleanly");
             }
         }
-        _ = shutdown_signal() => {
+        () = shutdown_signal() => {
             info!("Shutdown signal received, stopping server");
         }
     }
