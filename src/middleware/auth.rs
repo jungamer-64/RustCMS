@@ -8,6 +8,7 @@ use axum::{
 
 /// Authorization ヘッダの簡易パーサ
 /// 許容スキーム: "Bearer" / "Biscuit"（どちらも同等に扱う）
+#[must_use]
 pub fn parse_authorization_header(value: &str) -> Option<&str> {
     let v = value.trim();
     if let Some(rest) = v.strip_prefix("Bearer ") {
@@ -19,6 +20,10 @@ pub fn parse_authorization_header(value: &str) -> Option<&str> {
     None
 }
 
+/// # Errors
+///
+/// 認証情報が欠落・不正・検証失敗の場合は `StatusCode::UNAUTHORIZED` を返します。
+/// アプリケーション状態が取得できないなど内部要因の場合は `StatusCode::INTERNAL_SERVER_ERROR` を返します。
 pub async fn auth_middleware(
     mut req: Request,
     next: Next,
