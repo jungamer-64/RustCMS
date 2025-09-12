@@ -1,4 +1,4 @@
-//! Runtime serialization guard for AuthSuccessResponse flattened token fields.
+//! Runtime serialization guard for `AuthSuccessResponse` flattened token fields.
 //! Ensures that when feature `auth-flat-fields` is enabled the deprecated fields still serialize,
 //! and when disabled they are absent, preventing accidental resurrection or premature removal.
 use chrono::Utc;

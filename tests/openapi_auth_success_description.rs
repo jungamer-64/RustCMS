@@ -1,4 +1,4 @@
-//! Validates that AuthSuccessResponse schema description matches feature state.
+//! Validates that `AuthSuccessResponse` schema description matches feature state.
 use cms_backend::openapi::ApiDoc;
 use utoipa::OpenApi;
 

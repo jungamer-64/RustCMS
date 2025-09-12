@@ -1,4 +1,4 @@
-//! OpenAPI の security スキーム適用を検証するテスト
+//! `OpenAPI` の security スキーム適用を検証するテスト
 use axum::{body::to_bytes, response::IntoResponse};
 use cms_backend::handlers; // lib ターゲット (crate 名は Cargo.toml の package 名に依存)
 use hyper::StatusCode;

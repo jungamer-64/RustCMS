@@ -17,20 +17,18 @@ fn openapi_snapshot_default_features() {
         .and_then(|v| v.as_array())
         .expect("required array");
     let required_fields: Vec<&str> = required.iter().filter_map(|v| v.as_str()).collect();
-    for f in ["success", "tokens", "user"].iter() {
+    for f in &["success", "tokens", "user"] {
         assert!(required_fields.contains(f), "missing required field {f}");
     }
     if cfg!(feature = "auth-flat-fields") {
-        for f in [
+        for f in &[
             "access_token",
             "refresh_token",
             "biscuit_token",
             "expires_in",
             "session_id",
             "token",
-        ]
-        .iter()
-        {
+        ] {
             assert!(
                 required_fields.contains(f),
                 "missing flat required field {f}"
@@ -38,16 +36,14 @@ fn openapi_snapshot_default_features() {
         }
     } else {
         // Ensure flat fields not required
-        for f in [
+        for f in &[
             "access_token",
             "refresh_token",
             "biscuit_token",
             "expires_in",
             "session_id",
             "token",
-        ]
-        .iter()
-        {
+        ] {
             assert!(
                 !required_fields.contains(f),
                 "flat field {f} should be absent when feature disabled"
