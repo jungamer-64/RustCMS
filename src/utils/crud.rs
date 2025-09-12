@@ -4,6 +4,11 @@ use axum::http::StatusCode;
 use serde::Serialize;
 
 /// Generic create helper returning (201, ApiOk(dto)) with optional post-create hook.
+///
+/// # Errors
+///
+/// - Propagates any error returned by `db_create`.
+/// - May return errors from downstream layers (database, validation, mapping) via `Result`.
 pub async fn create_entity<Req, Model, Dto, F, Fut, Map, Hook, HookFut>(
     state: AppState,
     req: Req,
@@ -27,6 +32,11 @@ where
 }
 
 /// Generic update helper producing ApiOk(dto)
+///
+/// # Errors
+///
+/// - Propagates any error returned by `db_update`.
+/// - May return errors from downstream layers (database, validation, mapping) via `Result`.
 pub async fn update_entity<Req, Model, Dto, F, Fut, Map, Hook, HookFut>(
     state: AppState,
     id: uuid::Uuid,
@@ -52,6 +62,11 @@ where
 }
 
 /// Generic cached get helper: compute dto & wrap.
+///
+/// # Errors
+///
+/// - Propagates any error returned by the `loader` future.
+/// - May return errors from the cache layer or (de)serialization when interacting with the cache.
 pub async fn get_cached_entity<Dto, Fut, Loader>(
     state: AppState,
     cache_key: String,
