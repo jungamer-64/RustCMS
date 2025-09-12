@@ -5,6 +5,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sha2::{Digest, Sha256};
 
 /// Compute SHA-256 digest and return as lowercase hex string
+#[must_use]
 pub fn sha256_hex(data: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(data);
@@ -13,6 +14,7 @@ pub fn sha256_hex(data: &[u8]) -> String {
 }
 
 /// Compute SHA-256 digest and return as base64url (no padding)
+#[must_use]
 pub fn sha256_b64url(data: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(data);
