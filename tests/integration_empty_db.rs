@@ -8,7 +8,7 @@ mod tests {
     fn empty_db_health_check() {
         // Very small smoke test: ensure building a Duration succeeds so the test compiles
         // and acts as a placeholder for future integration tests that exercise HTTP.
-        let _ = Duration::from_secs(1);
-        assert!(true);
+    let d = Duration::from_secs(1);
+    assert_eq!(d.as_secs(), 1);
     }
 }
