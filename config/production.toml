@@ -9,7 +9,7 @@ request_timeout = 60         # 60 seconds for complex operations
 worker_threads = 16          # 大規模トラフィック対応
 
 [database]
-url = "postgresql://cms_user:cms_password@localhost:5432/cms_production"
+url = "${DATABASE_URL}"
 max_connections = 50         # 高トラフィック対応
 min_connections = 10
 connection_timeout = 30

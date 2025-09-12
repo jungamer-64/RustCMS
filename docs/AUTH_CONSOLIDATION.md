@@ -37,7 +37,9 @@ Successfully consolidated all authentication mechanisms to use Biscuit authentic
 #### Example
 ```bash
 # Before (deprecated)
-curl -H "x-admin-token: your_admin_token" \
+# Avoid embedding tokens directly in docs. Use an environment variable or secret.
+# Example (local): export X_ADMIN_TOKEN="your_admin_token"
+curl -H "x-admin-token: $X_ADMIN_TOKEN" \
      http://localhost:3000/api/v1/admin/posts
 
 # After (current)

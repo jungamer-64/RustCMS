@@ -251,7 +251,11 @@ CREATE TRIGGER update_categories_updated_at BEFORE UPDATE ON categories FOR EACH
 CREATE TRIGGER update_media_files_updated_at BEFORE UPDATE ON media_files FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_comments_updated_at BEFORE UPDATE ON comments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Insert default admin user (password: admin123)
+-- Insert default admin user
+-- NOTE: For security, do NOT include plaintext passwords in repository comments or code.
+-- If a default password is required for local testing, document it in developer setup docs
+-- and ensure it's different from production credentials. Rotate or remove defaults before
+-- deploying to production.
 INSERT INTO users (id, username, email, password_hash, role, is_active, email_verified) VALUES 
 ('00000000-0000-0000-0000-000000000001', 'admin', 'admin@example.com', '$2b$14$K8QFjQXoMGVF3.nJ1gP8.eXMFq7qOW3.vWqNlP.2Y1qBK8QFjQXoMG', 'admin', true, true);
 

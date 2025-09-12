@@ -1,0 +1,62 @@
+name: Security scan (Docker build + Trivy)
+
+on:
+  push:
+    branches: [ main, chore/remove-aws-lc ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@2b82ce82d56a2a04d2637cd93a637ae1b359c0a7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build image (Dockerfile.security)
+        run: |
+          docker build -f Dockerfile.security -t rustcms:security-test .
+
+      - name: Install Trivy
+        run: |
+          wget -qO- https://github.com/aquasecurity/trivy/releases/latest/download/trivy_$(uname -s)_$(uname -m).tar.gz | tar xz -C /tmp && sudo mv /tmp/trivy /usr/local/bin/
+
+      - name: Run Trivy image scan (HIGH,CRITICAL)
+        run: |
+          trivy image --no-progress --severity HIGH,CRITICAL -f json -o security/image-scan-after-ci.json rustcms:security-test
+
+      - name: Upload scan result
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-scan-after-ci
+          path: security/image-scan-after-ci.json
+
+      - name: Fail on High/Critical vulnerabilities
+        run: |
+          count=$(jq '.Results[].Vulnerabilities | map(select(.Severity=="HIGH" or .Severity=="CRITICAL")) | length' security/image-scan-after-ci.json || true)
+          echo "VULN_COUNT=$count" >> $GITHUB_ENV
+          if [ "$count" -gt 0 ]; then
+            echo ":warning: Found $count HIGH/CRITICAL vulnerabilities";
+            jq '.Results[] | {Target: .Target, Vulnerabilities: (.Vulnerabilities[]? | {VulnerabilityID, PkgName, InstalledVersion, FixedVersion, Severity, Title})}' security/image-scan-after-ci.json || true
+            exit 1
+          fi
+
+      - name: Complete
+        run: echo "Security scan job completed"

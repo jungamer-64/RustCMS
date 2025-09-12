@@ -1,3 +1,25 @@
+//! 設定モジュール
+//!
+//! 本モジュールはアプリ全体の設定値を表す型定義と、設定の読み込みロジックを提供します。
+//! 読み込みの優先順位は次のとおりです（後勝ちで上書き）：
+//! 1) `config/default.toml`
+//! 2) `config/{profile}.toml`（例: production, staging。development 以外のときに適用）
+//! 3) `config/local.toml`（ローカル開発者向けの上書き）
+//! 4) 環境変数 `CMS_*`（例: `CMS_SERVER__PORT=3000`）
+//!
+//! さらに以下の環境変数は後方互換のため特別に拾い上げます：
+//! - `DATABASE_URL`（データベース接続文字列。設定ファイルの `${DATABASE_URL}` を実値で置換）
+//! - `LOG_LEVEL` / `LOG_FORMAT`（ロギングの上書き）
+//! - `ACCESS_TOKEN_TTL_SECS` / `REFRESH_TOKEN_TTL_SECS`（旧設定名の移行サポート）
+//!
+//! Cargo feature によりサブ設定の有無が決まります：
+//! - `database` 有効時に `DatabaseConfig`
+//! - `cache` 有効時に `RedisConfig`
+//! - `search` 有効時に `SearchConfig`
+//! - `auth` 有効時に `AuthConfig`
+//!
+//! これらを `Config::from_env()` で統合し、`AppState` 構築時に使用します。
+
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::PathBuf;

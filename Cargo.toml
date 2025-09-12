@@ -6,7 +6,7 @@ authors = ["CMS Development Team"]
 description = "Enterprise-grade scalable CMS backend with PostgreSQL, Diesel ORM, Tantivy search, biscuit-auth, WebAuthn, and rustls (Pure Rust)"
 license = "MIT"
 repository = "https://github.com/jungamer-64/Rust-CMS"
-keywords = ["cms", "backend", "postgresql", "tantivy", "biscuit-auth", "webauthn", "enterprise"]
+keywords = ["cms", "backend", "postgresql", "tantivy", "biscuit-auth", "webauthn", "rustls", "diesel", "axum", "rust"]
 categories = ["web-programming", "database"]
 autobins = false
 default-run = "cms-server"
@@ -36,7 +36,7 @@ path = "src/bin/admin.rs"
 axum = { version = "0.8", features = ["multipart", "ws", "macros", "form"] }
 axum-extra = { version = "0.10", features = ["typed-header", "cookie", "query", "form"] }
 hyper = { version = "1.6", features = ["full"] }
-hyper-rustls = { version = "0.27", features = ["http2"], default-features = false }
+hyper-rustls = { version = "0.27", default-features = false, features = ["http2", "ring", "webpki-roots"] }
 tower = { version = "0.5", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "fs", "limit", "timeout", "request-id", "auth", "sensitive-headers", "compression-gzip", "normalize-path"], default-features = false }
 
@@ -71,13 +71,15 @@ oauth2 = "5.0.0-rc.1"
 # ===== CACHING (Redis + In-Memory) =====
 deadpool-redis = { version = "0.22.0", optional = true }
 moka = { version = "0.12", features = ["future"] }
-redis = { version = "0.32.5", features = ["tokio-rustls-comp", "cluster", "streams"], default-features = false, optional = true }
+# Use conservative tokio-compatible redis features without enabling rustls-native-certs
+# `tokio-rustls-comp` pulls in rustls-native-certs -> openssl-probe; replace it with `tokio-comp`
+redis = { version = "0.32.5", features = ["tokio-comp", "cluster", "streams"], default-features = false, optional = true }
 
 # ===== TLS & CRYPTOGRAPHY (rustls only, no OpenSSL) =====
 aes-gcm = "0.10"
 hmac = "0.12"
 ring = "0.17"
-rustls = { version = "0.23", features = ["ring"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 rustls-pemfile = "2.0"
 rustls-webpki = "0.103"
 sha2 = "0.10"
@@ -120,7 +122,11 @@ garde = { version = "0.22", features = ["derive"] }
 validator = { version = "0.20", features = ["derive", "unic"] }
 
 # ===== MEDIA PROCESSING (Production) =====
-image = { version = "0.25", features = ["jpeg", "png", "webp", "avif"], default-features = false }
+# NOTE: Temporarily removing the `avif` feature to avoid pulling in the
+# `ravif`/`rav1e` -> `paste` transitive chain (RUSTSEC-2024-0436). If AVIF
+# support is required, we'll evaluate alternate crates or a maintained upstream
+# that doesn't depend on `paste`.
+image = { version = "0.25", features = ["jpeg", "png", "webp"], default-features = false }
 mime = "0.3"
 mime_guess = "2.0"
 tempfile = "3.8"
@@ -155,7 +161,7 @@ utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
 lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport", "builder"], default-features = false, optional = true }
 
 # ===== WEBSOCKETS (rustls) =====
-tokio-tungstenite = { version = "0.27", features = ["rustls-tls-native-roots"], default-features = false }
+tokio-tungstenite = { version = "0.27", features = ["__rustls-tls"], default-features = false }
  
 [dev-dependencies]
 # Development and test helpers (alphabetical)

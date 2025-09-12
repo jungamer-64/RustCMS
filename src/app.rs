@@ -1,5 +1,14 @@
-//! Application State and Service Management
+//! アプリケーション状態とサービス管理
 //!
+//! 本モジュールは CMS の中核状態 `AppState` とその周辺(メトリクス/ヘルスチェック/初期化)を提供します。
+//! - データベース接続（接続プール）
+//! - 認証サービス（biscuit-auth + `WebAuthn`）
+//! - キャッシュサービス（Redis + メモリ）
+//! - 検索サービス（Tantivy 全文検索）
+//! - ヘルス監視とメトリクス収集
+//!
+//! Feature フラグによりサービスの有効/無効が決まります。無効な場合はヘルスチェックが
+//! `not_configured` を返すなど、挙動が変化します。詳細は `docs/FEATURES_JA.md` を参照してください。
 //! Centralized application state containing all services for the CMS:
 //! - Database connections with pooling
 //! - Authentication service with biscuit-auth + `WebAuthn`
@@ -314,6 +323,14 @@ pub struct ServiceHealth {
 }
 
 impl AppState {
+    /// 環境設定からアプリケーション状態を生成
+    ///
+    /// 概要: 環境変数や設定ファイルから `Config` を組み立て、`from_config` に委譲します。
+    ///
+    /// # Errors
+    ///
+    /// 設定の読み込みに失敗した場合、または `from_config` がエラーを返した場合に `Err` を返します。
+    ///
     /// Create application state from environment configuration
     ///
     /// # Errors
@@ -324,6 +341,15 @@ impl AppState {
         Self::from_config(config).await
     }
 
+    /// 与えられた `Config` からアプリケーション状態を生成（集中初期化用）
+    ///
+    /// # Panics
+    ///
+    /// 有効な feature に対応するサービスが初期化されていない場合、`AppStateBuilder::build` が panic します。
+    ///
+    /// # Errors
+    ///
+    /// DB/キャッシュ/検索/認証の初期化に失敗した場合に `Err` を返します。
     /// Create application state from a provided `Config` (useful for central init)
     ///
     /// # Panics

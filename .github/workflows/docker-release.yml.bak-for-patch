@@ -33,22 +33,14 @@ jobs:
     steps:
       - name: Checkout
         # TODO: pin this action to a full commit SHA for immutability
-<<<<<<< HEAD
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
-=======
-  uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
->>>>>>> origin/main
         with:
           fetch-depth: 0
 
       - name: Derive meta
         id: meta
         # TODO: pin this action to a full commit SHA for immutability
-<<<<<<< HEAD
         uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f
-=======
-  uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f
->>>>>>> origin/main
         with:
           images: ${{ env.IMAGE_BASE }}
           tags: |
@@ -66,19 +58,11 @@ jobs:
 
       - name: Set up QEMU
         # TODO: pin this action to a full commit SHA for immutability
-<<<<<<< HEAD
         uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392
 
       - name: Set up Buildx
         # TODO: pin this action to a full commit SHA for immutability
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
-=======
-  uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392
-
-      - name: Set up Buildx
-        # TODO: pin this action to a full commit SHA for immutability
-  uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
->>>>>>> origin/main
 
       - name: Set build metadata
         id: buildmeta
@@ -88,11 +72,7 @@ jobs:
 
       - name: Login GHCR
         # TODO: pin this action to a full commit SHA for immutability
-<<<<<<< HEAD
         uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1
-=======
-  uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1
->>>>>>> origin/main
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -101,11 +81,7 @@ jobs:
       - name: Build & Push (multi-arch)
         id: build
         # TODO: pin this action to a full commit SHA for immutability
-<<<<<<< HEAD
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
-=======
-  uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
->>>>>>> origin/main
         with:
           context: .
           file: Dockerfile
@@ -129,11 +105,7 @@ jobs:
 
       - name: Cosign install
         # TODO: pin this action to a full commit SHA for immutability
-<<<<<<< HEAD
         uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20
-=======
-  uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20
->>>>>>> origin/main
 
       - name: Sign images (keyless)
         # Make signing required for tag pushes, but non-fatal when triggered from workflow_run (CI snapshots)
@@ -164,11 +136,7 @@ jobs:
 
       - name: Upload image inspection reports
         # TODO: pin this action to a full commit SHA for immutability
-<<<<<<< HEAD
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-=======
-  uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
->>>>>>> origin/main
         with:
           name: docker-image-inspect
           path: build-inspect

@@ -1,0 +1,83 @@
+# Dockerfile.security
+# Minimal-security-focused Dockerfile for RustCMS (multistage)
+# Purpose: provide a safe-to-test alternative that minimizes runtime packages.
+# Notes:
+# - This is a conservative change: builder stage is unchanged aside from producing a stripped
+#   release binary, runtime stage installs only ca-certificates and libssl and avoids curl/git.
+# - Recommended next step: build a static MUSL binary and use `scratch` or a distroless image.
+
+ARG RUST_VERSION=1.89.0-bookworm
+ARG BINARY=cms-server
+ARG APP_UID=10001
+ARG APP_GID=10001
+ARG BUILD_VARIANT=security-minimal
+
+# Builder: use the existing rust image and produce a release binary
+FROM rust:${RUST_VERSION} AS builder
+WORKDIR /app
+# Keep a reasonably small set of build deps; these are the same ones used in the main Dockerfile
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    binutils \
+    libssl-dev \
+    libpq-dev \
+    nasm \
+  && rm -rf /var/lib/apt/lists/*
+
+# Copy source and build
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY migrations ./migrations
+COPY templates ./templates
+COPY config ./config
+
+# Build release
+RUN cargo build --release --bin ${BINARY} --locked
+# Strip binary to reduce size (best-effort)
+RUN if command -v strip >/dev/null 2>&1; then strip --strip-all /app/target/release/${BINARY} || true; fi
+
+# Runtime: minimal debian-slim with only runtime essentials
+FROM debian:bookworm-slim AS runtime
+ARG BINARY
+ARG APP_UID
+ARG APP_GID
+ARG BUILD_VARIANT
+
+# Install only required runtime packages (no curl/git/imagemagick/sqlite etc.)
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV TZ=UTC
+WORKDIR /app
+
+# Create non-root user/group early
+RUN set -eux; \
+    groupadd --system -g "${APP_GID}" cms || true; \
+    useradd --system -l -g "${APP_GID}" -u "${APP_UID}" --home /app --shell /usr/sbin/nologin cms || true
+
+# Copy binary and assets from builder
+COPY --from=builder --chown=cms:cms /app/target/release/${BINARY} /usr/local/bin/${BINARY}
+COPY --from=builder --chown=cms:cms /app/migrations ./migrations
+COPY --from=builder --chown=cms:cms /app/config ./config
+COPY --from=builder --chown=cms:cms /app/templates ./templates
+
+USER cms
+
+ENV CONFIG_FILE=/app/config/default.toml \
+    CMS_ENVIRONMENT=production
+
+EXPOSE 3000
+
+# Note: omit runtime HEALTHCHECK to avoid adding curl/wget; consider CI-level healthchecks instead.
+
+LABEL org.opencontainers.image.title="Rust CMS (minimal runtime)" \
+      org.opencontainers.image.vendor="RustCMS" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.description="Minimal runtime image for security testing (no curl/git/imagemagick installed)"
+
+ENTRYPOINT ["/usr/local/bin/cms-server"]

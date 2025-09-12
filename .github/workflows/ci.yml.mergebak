@@ -1,3 +1,4 @@
+ 
 name: CI
 
 on:
@@ -49,29 +50,23 @@ jobs:
       contents: read
     steps:
   # TODO: pin this action to a full commit SHA for immutability (e.g. actions/checkout@<full-sha>)
+<<<<<<< HEAD
+      - uses: actions/checkout@v4
+=======
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+>>>>>>> origin/main
         with:
           fetch-depth: 1
 
       - name: Setup toolchain (stable)
-<<<<<<< HEAD
   # TODO: pin this action to a full commit SHA for immutability
         uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
-=======
-        # TODO: pin this action to a full commit SHA for immutability
-  uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
->>>>>>> origin/main
         with:
           components: rustfmt, clippy
 
       - name: Cache (Swatinem/rust-cache)
-<<<<<<< HEAD
   # TODO: pin this action to a full commit SHA for immutability
         uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0
-=======
-        # TODO: pin this action to a full commit SHA for immutability
-  uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0
->>>>>>> origin/main
         with:
           workspaces: . -> target
 
@@ -119,16 +114,16 @@ jobs:
     steps:
       # TODO: pin this action to a full commit SHA for immutability
       
+<<<<<<< HEAD
+      - uses: actions/checkout@v4
+=======
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+>>>>>>> origin/main
         with:
           fetch-depth: 1
 
       - name: Setup toolchain ${{ matrix.toolchain }}
-<<<<<<< HEAD
   # TODO: pin this action to a full commit SHA for immutability
-=======
-        # TODO: pin this action to a full commit SHA for immutability
->>>>>>> origin/main
         uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
         with:
           toolchain: ${{ matrix.toolchain }}
@@ -138,11 +133,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Cache (Swatinem/rust-cache)
-<<<<<<< HEAD
   # TODO: pin this action to a full commit SHA for immutability
-=======
-        # TODO: pin this action to a full commit SHA for immutability
->>>>>>> origin/main
         uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0
         with:
           workspaces: . -> target
@@ -208,12 +199,8 @@ jobs:
           cargo insta test
       - name: Upload test log
         if: always()
-<<<<<<< HEAD
         
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-=======
-  uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
->>>>>>> origin/main
         with:
           name: test-log-${{ matrix.toolchain }}-${{ matrix.feature-set }}
           path: test-output.log
@@ -229,7 +216,11 @@ jobs:
     steps:
       # TODO: pin this action to a full commit SHA for immutability
       
+<<<<<<< HEAD
+      - uses: actions/checkout@v4
+=======
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+>>>>>>> origin/main
         with:
           fetch-depth: 1
       - name: Run deprecation scan (src-only, human)
@@ -277,7 +268,11 @@ jobs:
         image: postgres:15
         env:
           POSTGRES_USER: postgres
+<<<<<<< HEAD
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+=======
+          POSTGRES_PASSWORD: password
+>>>>>>> origin/main
           POSTGRES_DB: rustcms_test
         ports:
           - 5432:5432
@@ -287,7 +282,11 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
+<<<<<<< HEAD
+      - uses: actions/checkout@v4
+=======
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+>>>>>>> origin/main
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
         with:
@@ -315,7 +314,11 @@ jobs:
           echo "BISCUIT_PUBLIC_KEY_B64=$PUB" >> "$GITHUB_ENV"
       - name: Run DB migrations for integration
         env:
+<<<<<<< HEAD
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+=======
+          DATABASE_URL: postgres://postgres:password@localhost:5432/rustcms_test
+>>>>>>> origin/main
         run: |
           set -euo pipefail
           cargo build --bin cms-migrate --quiet || true
@@ -326,7 +329,11 @@ jobs:
           fi
       - name: Run integration tests
         env:
+<<<<<<< HEAD
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+=======
+          DATABASE_URL: postgres://postgres:password@localhost:5432/rustcms_test
+>>>>>>> origin/main
         run: |
           set -euo pipefail
           echo "Using BISCUIT_PRIVATE_KEY_B64=${BISCUIT_PRIVATE_KEY_B64:-<none>}"
@@ -342,16 +349,16 @@ jobs:
     if: github.event_name != 'pull_request' || github.base_ref == 'main' || github.event_name == 'schedule'
     steps:
       
+<<<<<<< HEAD
+      - uses: actions/checkout@v4
+=======
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+>>>>>>> origin/main
         with:
           fetch-depth: 1
       - name: Cache cargo registry & index
         # TODO: pin this action to a full commit SHA for immutability
-<<<<<<< HEAD
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
-=======
-  uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
->>>>>>> origin/main
         with:
           path: |
             ~/.cargo/registry
@@ -410,7 +417,11 @@ jobs:
     steps:
       # TODO: pin this action to a full commit SHA for immutability
       
+<<<<<<< HEAD
+      - uses: actions/checkout@v4
+=======
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+>>>>>>> origin/main
         with:
           fetch-depth: 1
       - name: Cache cargo registry & index
@@ -440,22 +451,19 @@ jobs:
     steps:
       - name: Checkout repository
         # TODO: pin this action to a full commit SHA for immutability
-<<<<<<< HEAD
       
+<<<<<<< HEAD
+        uses: actions/checkout@v4
 =======
->>>>>>> origin/main
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+>>>>>>> origin/main
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
         with:
           components: rustfmt, clippy
       - name: Cache cargo & target
-<<<<<<< HEAD
         
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
-=======
-  uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
->>>>>>> origin/main
         with:
           path: |
             ~/.cargo/registry
@@ -479,23 +487,15 @@ jobs:
         run: cargo tarpaulin --verbose --workspace --out Lcov --timeout 240
       - name: Upload coverage to Codacy
         if: env.CODACY_PROJECT_TOKEN != ''
-<<<<<<< HEAD
         
         uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699
-=======
-  uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699
->>>>>>> origin/main
         with:
           project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
           coverage-reports: lcov.info
       - name: Upload LCOV artifact
         if: always()
-<<<<<<< HEAD
         
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-=======
-  uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
->>>>>>> origin/main
         with:
           name: lcov-report
           path: lcov.info

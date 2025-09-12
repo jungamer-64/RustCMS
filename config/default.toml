@@ -19,7 +19,7 @@ thumbnail_sizes = [[150, 150], [300, 300]]
 smtp_host = "localhost"
 smtp_port = 587
 smtp_username = "user"
-smtp_password = "pass"
+smtp_password = "${SMTP_PASSWORD}"
 from_address = "noreply@example.com"
 from_name = "CMS"
 

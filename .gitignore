@@ -1,26 +1,105 @@
 # Rust CMS Backend
 
+# Build artifacts
 target/
-Cargo.lock
-.env
-keys/
-repo-mirror/
-backups
 
-# IDE
+# Note: For applications it's recommended to commit Cargo.lock so CI and reproducible
+# Security scanner outputs
+security/
+*.gitleaks*
+gitleaks-report.json
+gitleaks-raw.log
+gitleaks-exitcode.txt
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+.env.*
+.secrets
+secret-*
+
+# Private keys and certificates
+*.pem
+*.key
+*.crt
+*.p12
+
+# IDE / Editor
 .vscode/
 .idea/
+*.sublime-workspace
+*.sublime-project
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db
 
-# Uploads
+# Build artifacts
+**/target/
+**/dist/
+
+# Misc temporary files
+*.log
+*.tmp
+*.swp
+.cache/
+# builds use the same resolved dependency graph. Do NOT ignore Cargo.lock here.
+
+# Environment files (local secrets)
+.env
+.env.local
+
+# Ignore other env variants but keep the example file
+.env.*
+!.env.example
+
+# Sensitive or local-only directories
+keys/
+repo-mirror/
+backups/
+
+# Common secret/key file patterns
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+secrets/
+*.secret
+secrets.json
+credentials.yml
+
+# Cloud/local credentials
+.aws/
+.azure/
+
+# Terraform
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+
+# Trivy / scanner caches and local scan outputs
+.trivyignore
+.trivy/
+trivy-report-*.json
+
+
+# IDE settings
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Uploads (keep a placeholder)
 uploads/*
 !uploads/.gitkeep
-.env
 
-#Ignore vscode AI rules
-.github\instructions\codacy.instructions.md
+# Ignore platform-neutral path to instructions (use forward slashes)
+.github/instructions/codacy.instructions.md
+
 # Log files (temporary)
 *.log
