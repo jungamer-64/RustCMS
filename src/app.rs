@@ -1105,14 +1105,14 @@ impl AppState {
     /// # Errors
     ///
     /// - データベース接続の取得や削除クエリの実行に失敗した場合。
-    /// - 指定した ID の API キーが存在しない場合は NotFound エラーを返します。
+    /// - 指定した ID の API キーが存在しない場合は `NotFound` エラーを返します。
     pub async fn db_delete_api_key(&self, key_id: uuid::Uuid) -> crate::Result<()> {
-        use crate::database::schema::api_keys::dsl::*;
+        use crate::database::schema::api_keys::dsl::{api_keys, id as api_key_id};
         use diesel::prelude::*;
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
             let affected =
-                diesel::delete(api_keys.filter(crate::database::schema::api_keys::dsl::id.eq(key_id)))
+                diesel::delete(api_keys.filter(api_key_id.eq(key_id)))
                     .execute(&mut conn)?;
             if affected == 0 {
                 return Err(crate::AppError::NotFound("api key not found".into()));
@@ -1128,7 +1128,7 @@ impl AppState {
     ///
     /// - 元の API キー取得に失敗した場合（存在しない等）。
     /// - 新しい API キー生成・保存に失敗した場合。
-    /// - 旧キーの失効更新（expires_at の更新）でエラーが発生した場合。
+    /// - 旧キーの失効更新（`expires_at` の更新）でエラーが発生した場合。
     pub async fn db_rotate_api_key(
         &self,
         id: uuid::Uuid,
@@ -1146,7 +1146,7 @@ impl AppState {
         // Expire old key (soft: set expires_at = now)
         #[cfg(all(feature = "database", feature = "auth"))]
         {
-            use crate::database::schema::api_keys::dsl::*;
+            use crate::database::schema::api_keys::dsl::{api_keys, expires_at};
             use diesel::prelude::*;
             let mut conn = self.database.get_connection()?;
             let now = chrono::Utc::now();
@@ -1163,7 +1163,7 @@ impl AppState {
     /// # Errors
     ///
     /// - データベース接続の取得や削除処理に失敗した場合。
-    /// - 指定 ID の API キーが存在しない場合には NotFound 等のエラーが返る可能性があります。
+    /// - 指定 ID の API キーが存在しない場合には `NotFound` 等のエラーが返る可能性があります。
     pub async fn db_revoke_api_key(&self, id: uuid::Uuid) -> crate::Result<()> {
         use crate::models::ApiKey;
         timed_op!(self, "db", async {
@@ -1180,23 +1180,19 @@ impl AppState {
     ///
     /// - DB 接続/削除クエリ実行に失敗した場合。
     /// - 指定 ID が存在するが所有者が一致しない場合は Authorization エラー。
-    /// - 指定 ID が存在しない場合は NotFound エラー。
+    /// - 指定 ID が存在しない場合は `NotFound` エラー。
     pub async fn db_revoke_api_key_owned(
         &self,
         key_id: uuid::Uuid,
         user: uuid::Uuid,
     ) -> crate::Result<()> {
-        use crate::database::schema::api_keys::dsl::*;
+        use crate::database::schema::api_keys::dsl::{api_keys, id as api_key_id, user_id};
         use crate::models::ApiKey;
         use diesel::prelude::*;
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
             let affected = diesel::delete(
-                api_keys.filter(
-                    crate::database::schema::api_keys::dsl::id
-                        .eq(key_id)
-                        .and(user_id.eq(user)),
-                ),
+                api_keys.filter(api_key_id.eq(key_id).and(user_id.eq(user))),
             )
             .execute(&mut conn)?;
             if affected == 0 {
@@ -1293,7 +1289,7 @@ impl AppState {
         &self,
         raw: &str,
     ) -> crate::Result<Option<crate::models::ApiKey>> {
-        use crate::database::schema::api_keys::dsl::*;
+    use crate::database::schema::api_keys::dsl::{api_keys, api_key_lookup_hash};
         use crate::models::ApiKey as ApiKeyModel;
         use diesel::prelude::*;
 
@@ -1380,7 +1376,7 @@ impl AppState {
     pub async fn db_list_api_keys_missing_lookup(
         &self,
     ) -> crate::Result<Vec<crate::models::ApiKey>> {
-        use crate::database::schema::api_keys::dsl::*;
+        use crate::database::schema::api_keys::dsl::{api_keys, api_key_lookup_hash};
         use diesel::prelude::*;
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
@@ -1401,7 +1397,7 @@ impl AppState {
         &self,
         now: chrono::DateTime<chrono::Utc>,
     ) -> crate::Result<usize> {
-        use crate::database::schema::api_keys::dsl::*;
+        use crate::database::schema::api_keys::dsl::{api_keys, api_key_lookup_hash, expires_at};
         use diesel::prelude::*;
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
