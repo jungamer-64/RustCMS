@@ -2,7 +2,7 @@
 //!
 //! Centralized application state containing all services for the CMS:
 //! - Database connections with pooling
-//! - Authentication service with biscuit-auth + WebAuthn
+//! - Authentication service with biscuit-auth + `WebAuthn`
 //! - Cache service with Redis + in-memory layers
 //! - Search service with Tantivy full-text search
 //! - Health monitoring and metrics collection
@@ -204,7 +204,7 @@ where
                 status: status.to_string(),
                 response_time_ms: start.elapsed().as_millis() as f64,
                 // use inlined debug formatting
-                error: Some(format!("{:?}", e)),
+                error: Some(format!("{e:?}")),
                 details: serde_json::json!({}),
             }
         }
@@ -224,7 +224,7 @@ fn service_not_configured(msg: &str) -> ServiceHealth {
 
 // (旧) update_running_avg は各 record_* 内へインライン化済み
 
-/// Builder pattern for AppState to handle conditional compilation
+/// Builder pattern for `AppState` to handle conditional compilation
 pub struct AppStateBuilder {
     pub config: Arc<Config>,
     pub metrics: Arc<RwLock<AppMetrics>>,
@@ -241,6 +241,11 @@ pub struct AppStateBuilder {
 }
 
 impl AppStateBuilder {
+    /// Build `AppState` from the collected parts.
+    ///
+    /// # Panics
+    /// 有効な feature に対応するサービスが初期化されていない場合は panic します。これはコンパイル時の feature と実行時の初期化の整合性を保証するためです。
+    #[must_use]
     pub fn build(self) -> AppState {
         AppState {
             #[cfg(feature = "database")]
@@ -309,6 +314,9 @@ pub struct ServiceHealth {
 
 impl AppState {
     /// Create application state from environment configuration
+    ///
+    /// # Errors
+    /// 設定の読み込みや各サービスの初期化に失敗した場合はエラーを返します。
     pub async fn from_env() -> Result<Self> {
         // Load configuration and delegate to from_config
         let config = Config::from_env()?;
@@ -316,6 +324,14 @@ impl AppState {
     }
 
     /// Create application state from a provided `Config` (useful for central init)
+    ///
+    /// # Panics
+    /// 有効化された feature に対するサービスが初期化されていない場合は panic します（`AppStateBuilder::build` 内）。
+    ///
+    /// # Errors
+    /// 各サービス（DB/キャッシュ/検索/認証）の初期化に失敗した場合、エラーを返します。
+    // Allow cognitive complexity: feature-gated initialization requires branching and is clearer consolidated here.
+    #[allow(clippy::cognitive_complexity)]
     pub async fn from_config(config: Config) -> Result<Self> {
         info!("🔧 Initializing application state from provided Config");
 
@@ -573,16 +589,21 @@ impl AppState {
     }
 
     /// Get application uptime in seconds
+    #[must_use]
     pub fn uptime(&self) -> u64 {
         self.start_time.elapsed().as_secs()
     }
 
     /// Rate limit helper for IP addresses. Returns true if request allowed.
+    #[must_use]
     pub fn allow_ip(&self, ip: &std::net::IpAddr) -> bool {
         self.rate_limiter.allow(&ip.to_string())
     }
 
-    /// Convenience helper to get a pooled DB connection from AppState
+    /// Convenience helper to get a pooled DB connection from `AppState`
+    ///
+    /// # Errors
+    /// - DB プールが枯渇・停止しているなど、接続の取得に失敗した場合。
     #[cfg(feature = "database")]
     pub fn get_conn(&self) -> crate::Result<crate::database::PooledConnection> {
         self.database.get_connection()
@@ -590,6 +611,12 @@ impl AppState {
 
     // ---------------- Cache helper (get or compute & store) ----------------
     #[cfg(feature = "cache")]
+    /// キャッシュから値を取得し、存在しない場合は計算して保存します。
+    ///
+    /// # Errors
+    /// - `builder` が返す非同期処理がエラーを返した場合。
+    /// - 値のシリアライズ/デシリアライズに失敗した場合。
+    /// - Redis への保存でエラーが発生した場合（致命ではないため、内部ではログに留めます）。
     pub async fn cache_get_or_set<T, F, Fut>(
         &self,
         key: &str,
@@ -616,9 +643,11 @@ impl AppState {
     /// Wildcard削除はサービス側の delete がパターン処理をサポートしている前提。
     #[cfg(feature = "cache")]
     pub async fn cache_invalidate_prefix(&self, prefix: &str) {
+        // 先に I/O（await）を終えてからメトリクスのロックを取得し、ロック保持時間を最小化
+        let res = self.cache.delete(prefix).await;
         let mut metrics = self.metrics.write().await;
-        match self.cache.delete(prefix).await {
-            Ok(_) => {
+        match res {
+            Ok(()) => {
                 metrics.cache_invalidations += 1;
             }
             Err(e) => {
@@ -632,10 +661,11 @@ impl AppState {
     #[cfg(feature = "cache")]
     pub async fn invalidate_post_caches(&self, id: uuid::Uuid) {
         use crate::utils::cache_key::{CACHE_PREFIX_POST_ID, CACHE_PREFIX_POSTS};
-                let key = format!("{}{}", CACHE_PREFIX_POST_ID, id);
+        let key = format!("{}{}", CACHE_PREFIX_POST_ID, id);
+        let res = self.cache.delete(&key).await;
         let mut metrics = self.metrics.write().await;
-        match self.cache.delete(&key).await {
-            Ok(_) => {
+        match res {
+            Ok(()) => {
                 metrics.cache_invalidations += 1;
             }
             Err(e) => {
@@ -644,8 +674,8 @@ impl AppState {
             }
         }
         drop(metrics);
-                self.cache_invalidate_prefix(&format!("{}*", CACHE_PREFIX_POSTS))
-            .await; // prefix helper already logs
+                let posts_prefix = format!("{}*", CACHE_PREFIX_POSTS);
+                self.cache_invalidate_prefix(&posts_prefix).await; // prefix helper already logs
     }
 
     #[cfg(feature = "cache")]
@@ -653,10 +683,11 @@ impl AppState {
         use crate::utils::cache_key::{
             CACHE_PREFIX_USER_ID, CACHE_PREFIX_USER_POSTS, CACHE_PREFIX_USERS,
         };
-                let key = format!("{}{}", CACHE_PREFIX_USER_ID, id);
+        let key = format!("{}{}", CACHE_PREFIX_USER_ID, id);
+        let res = self.cache.delete(&key).await;
         let mut metrics = self.metrics.write().await;
-        match self.cache.delete(&key).await {
-            Ok(_) => {
+        match res {
+            Ok(()) => {
                 metrics.cache_invalidations += 1;
             }
             Err(e) => {
@@ -665,10 +696,10 @@ impl AppState {
             }
         }
         drop(metrics);
-                self.cache_invalidate_prefix(&format!("{}*", CACHE_PREFIX_USERS))
-            .await;
-                self.cache_invalidate_prefix(&format!("{}{}:*", CACHE_PREFIX_USER_POSTS, id))
-            .await;
+                let users_prefix = format!("{}*", CACHE_PREFIX_USERS);
+                self.cache_invalidate_prefix(&users_prefix).await;
+                let user_posts_prefix = format!("{}{}:*", CACHE_PREFIX_USER_POSTS, id);
+                self.cache_invalidate_prefix(&user_posts_prefix).await;
     }
 
     // ---------------- Search index safe helpers (avoid duplicated error logging) ----------------
@@ -854,16 +885,14 @@ impl AppState {
         active: Option<bool>,
         sort: Option<String>,
     ) -> crate::Result<Vec<crate::models::User>> {
-        timed_op!(
-            self,
-            "db",
+        timed_op!(self, "db", async {
             self.database.get_users(page, limit, role, active, sort)
-        )
+        })
     }
 
     #[cfg(feature = "database")]
     pub async fn db_update_last_login(&self, id: uuid::Uuid) -> crate::Result<()> {
-        timed_op!(self, "db", self.database.update_last_login(id))
+        timed_op!(self, "db", async { self.database.update_last_login(id) })
     }
 
     // Additional user helpers used by handlers/CLI
@@ -881,7 +910,7 @@ impl AppState {
         id: uuid::Uuid,
         request: crate::models::UpdateUserRequest,
     ) -> crate::Result<crate::models::User> {
-        let user = timed_op!(self, "db", self.database.update_user(id, request))?;
+    let user = timed_op!(self, "db", async { self.database.update_user(id, request) })?;
         #[cfg(feature = "cache")]
         self.invalidate_user_caches(id).await;
         Ok(user)
@@ -889,7 +918,7 @@ impl AppState {
 
     #[cfg(feature = "database")]
     pub async fn db_delete_user(&self, id: uuid::Uuid) -> crate::Result<()> {
-    timed_op!(self, "db", self.database.delete_user(id))?;
+    timed_op!(self, "db", async { self.database.delete_user(id) })?;
         #[cfg(feature = "cache")]
         self.invalidate_user_caches(id).await;
     Ok(())
@@ -904,13 +933,13 @@ impl AppState {
         timed_op!(
             self,
             "db",
-            self.database.reset_user_password(id, new_password)
+            async { self.database.reset_user_password(id, new_password) }
         )
     }
 
     #[cfg(feature = "database")]
     pub async fn db_count_users(&self) -> crate::Result<usize> {
-        timed_op!(self, "db", self.database.count_users())
+    timed_op!(self, "db", async { self.database.count_users() })
     }
 
     #[cfg(feature = "database")]
@@ -919,7 +948,7 @@ impl AppState {
         role: Option<String>,
         active: Option<bool>,
     ) -> crate::Result<usize> {
-        timed_op!(self, "db", self.database.count_users_filtered(role, active))
+    timed_op!(self, "db", async { self.database.count_users_filtered(role, active) })
     }
 
     #[cfg(feature = "database")]
@@ -927,12 +956,12 @@ impl AppState {
         &self,
         req: crate::models::CreatePostRequest,
     ) -> crate::Result<crate::models::Post> {
-        timed_op!(self, "db", self.database.create_post(req))
+    timed_op!(self, "db", async { self.database.create_post(req) })
     }
 
     #[cfg(feature = "database")]
     pub async fn db_get_post_by_id(&self, id: uuid::Uuid) -> crate::Result<crate::models::Post> {
-        timed_op!(self, "db", self.database.get_post_by_id(id))
+    timed_op!(self, "db", async { self.database.get_post_by_id(id) })
     }
 
     #[cfg(feature = "database")]
@@ -948,8 +977,8 @@ impl AppState {
         timed_op!(
             self,
             "db",
-            self.database
-                .get_posts(page, limit, status, author, tag, sort)
+            async { self.database
+                .get_posts(page, limit, status, author, tag, sort) }
         )
     }
 
@@ -959,22 +988,22 @@ impl AppState {
         id: uuid::Uuid,
         req: crate::models::UpdatePostRequest,
     ) -> crate::Result<crate::models::Post> {
-        timed_op!(self, "db", self.database.update_post(id, req))
+    timed_op!(self, "db", async { self.database.update_post(id, req) })
     }
 
     #[cfg(feature = "database")]
     pub async fn db_delete_post(&self, id: uuid::Uuid) -> crate::Result<()> {
-        timed_op!(self, "db", self.database.delete_post(id))
+    timed_op!(self, "db", async { self.database.delete_post(id) })
     }
 
     #[cfg(feature = "database")]
     pub async fn db_count_posts(&self, tag: Option<&str>) -> crate::Result<usize> {
-        timed_op!(self, "db", self.database.count_posts(tag))
+    timed_op!(self, "db", async { self.database.count_posts(tag) })
     }
 
     #[cfg(feature = "database")]
     pub async fn db_count_posts_by_author(&self, author_id: uuid::Uuid) -> crate::Result<usize> {
-        timed_op!(self, "db", self.database.count_posts_by_author(author_id))
+    timed_op!(self, "db", async { self.database.count_posts_by_author(author_id) })
     }
 
     #[cfg(feature = "database")]
@@ -987,7 +1016,7 @@ impl AppState {
         timed_op!(
             self,
             "db",
-            self.database.count_posts_filtered(status, author, tag)
+            async { self.database.count_posts_filtered(status, author, tag) }
         )
     }
 
