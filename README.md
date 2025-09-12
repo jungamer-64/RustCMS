@@ -140,7 +140,7 @@ cargo insta accept
 
 ## 🔐 認証（実装とドキュメントの同期）
 
-- 標準ヘッダ: `Authorization: Bearer <token>`
+- 標準ヘッダ: `Authorization: Bearer <your_token>`
 - 互換許容: `Authorization: Biscuit <token>`（ミドルウェアで同等に検証）
 
 公開/保護はルータ構成で管理します。
@@ -617,7 +617,7 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "username": "demo_user",
-    "password": "password"
+    "password": "<your_password>"
   }'
 ```
 
@@ -626,7 +626,7 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 ```bash
 curl -X POST http://localhost:3000/api/v1/posts \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
+  -H "Authorization: Bearer <your_token>" \
   -d '{
     "title": "最初の投稿",
     "content": "これは最初の投稿の本文です。",
