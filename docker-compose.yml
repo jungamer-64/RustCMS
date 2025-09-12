@@ -8,7 +8,8 @@ services:
     environment:
       POSTGRES_DB: production_cms
       POSTGRES_USER: cms_user
-      POSTGRES_PASSWORD: cms_password
+      # Set POSTGRES_PASSWORD in your environment (see .env.example)
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -66,12 +67,13 @@ services:
       dockerfile: Dockerfile
     container_name: cms-backend
     environment:
-      - DATABASE_URL=postgresql://cms_user:cms_password@postgres:5432/production_cms
+      - DATABASE_URL=${DATABASE_URL}
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - ELASTICSEARCH_INDEX=cms_posts
       - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=production-jwt-secret-must-be-at-least-32-characters-long-for-security
-      - SESSION_SECRET=production-session-secret-must-be-at-least-32-characters-long-for-security
+      # Use environment variables for secrets (see .env.example)
+      - JWT_SECRET=${JWT_SECRET}
+      - SESSION_SECRET=${SESSION_SECRET}
       - WEBAUTHN_RP_ID=localhost
       - WEBAUTHN_RP_NAME=Production CMS
       - WEBAUTHN_ORIGIN=http://localhost:3000
@@ -105,8 +107,8 @@ services:
     image: dpage/pgadmin4:latest
     container_name: cms-pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
     ports:
       - "5050:80"
     depends_on:
