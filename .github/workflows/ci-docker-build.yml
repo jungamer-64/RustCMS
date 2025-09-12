@@ -55,6 +55,7 @@ jobs:
       - name: Checkout
         # TODO: pin this action to a full commit SHA for immutability
         uses: actions/checkout@v4
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 

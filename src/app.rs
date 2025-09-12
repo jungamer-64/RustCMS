@@ -9,6 +9,12 @@
 //!
 //! Feature フラグによりサービスの有効/無効が決まります。無効な場合はヘルスチェックが
 //! `not_configured` を返すなど、挙動が変化します。詳細は `docs/FEATURES_JA.md` を参照してください。
+//! Centralized application state containing all services for the CMS:
+//! - Database connections with pooling
+//! - Authentication service with biscuit-auth + `WebAuthn`
+//! - Cache service with Redis + in-memory layers
+//! - Search service with Tantivy full-text search
+//! - Health monitoring and metrics collection
 
 use crate::limiter::FixedWindowLimiter;
 use crate::{Result, config::Config};
@@ -325,6 +331,10 @@ impl AppState {
     ///
     /// 設定の読み込みに失敗した場合、または `from_config` がエラーを返した場合に `Err` を返します。
     ///
+    /// Create application state from environment configuration
+    ///
+    /// # Errors
+    /// 設定の読み込みや各サービスの初期化に失敗した場合はエラーを返します。
     pub async fn from_env() -> Result<Self> {
         // Load configuration and delegate to from_config
         let config = Config::from_env()?;
@@ -340,6 +350,13 @@ impl AppState {
     /// # Errors
     ///
     /// DB/キャッシュ/検索/認証の初期化に失敗した場合に `Err` を返します。
+    /// Create application state from a provided `Config` (useful for central init)
+    ///
+    /// # Panics
+    /// 有効化された feature に対するサービスが初期化されていない場合は panic します（`AppStateBuilder::build` 内）。
+    ///
+    /// # Errors
+    /// 各サービス（DB/キャッシュ/検索/認証）の初期化に失敗した場合、エラーを返します。
     // Allow cognitive complexity: feature-gated initialization requires branching and is clearer consolidated here.
     #[allow(clippy::cognitive_complexity)]
     pub async fn from_config(config: Config) -> Result<Self> {

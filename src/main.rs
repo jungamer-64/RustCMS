@@ -9,6 +9,8 @@
 //! 2. 依存サービスの初期化（DB/認証/キャッシュ/検索など、featureに応じて）
 //! 3. ルータの構築と状態(AppState)の注入
 //! 4. HTTPサーバーの待受開始
+//! This server supports both production mode (with database) and development mode (in-memory).
+//! It serves as the main unified entry point for the `RustCMS` backend.
 
 use axum::Router as AxumRouter;
 use std::net::SocketAddr;

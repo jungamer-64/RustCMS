@@ -1,3 +1,4 @@
+ 
 name: CI
 
 on:
@@ -49,6 +50,7 @@ jobs:
       contents: read
     steps:
   # TODO: pin this action to a full commit SHA for immutability (e.g. actions/checkout@<full-sha>)
+      - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
@@ -109,6 +111,7 @@ jobs:
     steps:
       # TODO: pin this action to a full commit SHA for immutability
       
+      - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
@@ -208,6 +211,7 @@ jobs:
       # TODO: pin this action to a full commit SHA for immutability
       
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 1
       - name: Run deprecation scan (src-only, human)
@@ -256,6 +260,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB: rustcms_test
         ports:
           - 5432:5432
@@ -265,6 +270,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/checkout@v4
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
@@ -294,6 +300,7 @@ jobs:
       - name: Run DB migrations for integration
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           set -euo pipefail
           cargo build --bin cms-migrate --quiet || true
@@ -304,6 +311,7 @@ jobs:
           fi
       - name: Run integration tests
         env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           set -euo pipefail
@@ -320,6 +328,7 @@ jobs:
     if: github.event_name != 'pull_request' || github.base_ref == 'main' || github.event_name == 'schedule'
     steps:
       
+      - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
@@ -385,6 +394,7 @@ jobs:
       # TODO: pin this action to a full commit SHA for immutability
       
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 1
       - name: Cache cargo registry & index
@@ -415,6 +425,7 @@ jobs:
       - name: Checkout repository
         # TODO: pin this action to a full commit SHA for immutability
       
+        uses: actions/checkout@v4
         uses: actions/checkout@v4
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
