@@ -84,7 +84,7 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB: cms_test
         ports: ["5432:5432"]
         options: >-
@@ -251,7 +251,7 @@ jobs:
         image: postgres:15
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB: rustcms_test
         ports:
           - 5432:5432
@@ -289,7 +289,7 @@ jobs:
           echo "BISCUIT_PUBLIC_KEY_B64=$PUB" >> "$GITHUB_ENV"
       - name: Run DB migrations for integration
         env:
-          DATABASE_URL: postgres://postgres:password@localhost:5432/rustcms_test
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           set -euo pipefail
           cargo build --bin cms-migrate --quiet || true
@@ -300,7 +300,7 @@ jobs:
           fi
       - name: Run integration tests
         env:
-          DATABASE_URL: postgres://postgres:password@localhost:5432/rustcms_test
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           set -euo pipefail
           echo "Using BISCUIT_PRIVATE_KEY_B64=${BISCUIT_PRIVATE_KEY_B64:-<none>}"
