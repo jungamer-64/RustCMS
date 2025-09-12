@@ -85,7 +85,8 @@ impl Default for CsrfService {
 pub struct SecurityHeadersLayer;
 
 impl SecurityHeadersLayer {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -166,17 +167,19 @@ where
             );
 
             // Strict Transport Security (HSTS) for HTTPS
+            let hsts_val = format!("max-age={HSTS_MAX_AGE}; includeSubDomains; preload");
             add_security_header(
                 headers,
                 HeaderName::from_static("strict-transport-security"),
-                &format!("max-age={}; includeSubDomains; preload", HSTS_MAX_AGE),
+                &hsts_val,
             );
 
             // Content Security Policy (CSP)
+            let csp = build_csp_for_path(&path);
             add_security_header(
                 headers,
                 HeaderName::from_static("content-security-policy"),
-                &build_csp_for_path(&path),
+                &csp,
             );
 
             // Server identification
@@ -203,6 +206,7 @@ fn add_security_header(headers: &mut HeaderMap, name: HeaderName, value: &str) {
 
 /// HTML escaping utility to prevent XSS attacks
 /// 提供 HTML 转义功能以防止 XSS 攻击
+#[must_use]
 pub fn escape_html(input: &str) -> String {
     // Basic HTML entity escaping for security
     input
@@ -216,6 +220,7 @@ pub fn escape_html(input: &str) -> String {
 
 /// Sanitize user input to prevent various injection attacks
 /// 清理用户输入以防止注入攻击
+#[must_use]
 pub fn sanitize_input(input: &str) -> String {
     // Remove potentially dangerous characters and sequences
     let sanitized: String = input
@@ -234,12 +239,14 @@ pub fn sanitize_input(input: &str) -> String {
 
 /// URL encoding utility for safe URL construction
 /// 安全的 URL 构建工具
+#[must_use]
 pub fn encode_url_component(input: &str) -> String {
     urlencoding::encode(input).to_string()
 }
 
 /// Check if endpoint requires CSRF protection
 /// API endpoints with proper authentication (Bearer tokens) are exempt from CSRF
+#[must_use]
 pub fn is_csrf_protected_endpoint(method: &Method, path: &str) -> bool {
     // Only protect state-changing operations
     if !matches!(
