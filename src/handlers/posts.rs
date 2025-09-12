@@ -114,6 +114,10 @@ pub(crate) async fn paginate_posts(
 }
 
 /// Create a new post
+///
+/// # Errors
+/// - バリデーション失敗や DB への保存に失敗した場合。
+/// - 検索インデックス更新（有効時）に失敗した場合。
 #[utoipa::path(
     post,
     path = "/api/v1/posts",
@@ -368,6 +372,10 @@ pub async fn update_post(
 }
 
 /// Delete post
+///
+/// # Errors
+/// - 指定 ID の投稿が存在しない場合。
+/// - DB 削除処理、または検索インデックス削除（有効時）が失敗した場合。
 #[utoipa::path(
     delete,
     path = "/api/v1/posts/{id}",
@@ -420,6 +428,11 @@ pub async fn delete_post(
         (status=500, description="Server error")
     )
 )]
+/// 指定タグの投稿一覧をページング取得します。
+///
+/// # Errors
+/// - クエリ条件に一致する投稿の取得で DB アクセスに失敗した場合。
+/// - キャッシュ操作に失敗した場合。
 pub async fn get_posts_by_tag(
     State(state): State<AppState>,
     Path(tag): Path<String>,
@@ -453,6 +466,10 @@ pub async fn get_posts_by_tag(
 }
 
 /// Publish post
+///
+/// # Errors
+/// - 指定 ID の投稿が存在しない場合。
+/// - 投稿の公開更新や検索インデックス更新（有効時）が失敗した場合。
 #[utoipa::path(
     post,
     path = "/api/v1/posts/{id}/publish",
