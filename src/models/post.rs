@@ -179,7 +179,8 @@ pub struct UpdatePostRequest {
 
 // Builder-style convenience constructors to remove repetitive None initializations in handlers
 impl UpdatePostRequest {
-    pub fn empty() -> Self {
+    #[must_use]
+    pub const fn empty() -> Self {
         Self {
             title: None,
             content: None,
@@ -195,6 +196,7 @@ impl UpdatePostRequest {
             status: None,
         }
     }
+    #[must_use]
     pub fn publish_now(mut self) -> Self {
         self.published = Some(true);
         self.status = Some(PostStatus::Published);
@@ -306,7 +308,7 @@ impl Post {
                     format!("{}...", &content_text[..length])
                 }
             },
-            |excerpt| excerpt.clone(),
+            std::clone::Clone::clone,
         )
     }
 
