@@ -10,6 +10,7 @@ use axum::{
 use serde_json::Value as JsonValue;
 use serde_json::json;
 use utoipa::OpenApi;
+use std::collections::HashSet;
 
 pub mod admin;
 pub mod api_keys;
@@ -155,7 +156,11 @@ pub async fn docs_ui() -> impl IntoResponse {
 
 // Legacy `/docs` support removed - use `/api/docs`.
 
-/// Return generated OpenAPI JSON from the compile-time `ApiDoc`
+/// Return generated `OpenAPI` JSON from the compile-time `ApiDoc`
+///
+/// # Panics
+///
+/// `ApiDoc` のシリアライズに失敗した場合、内部で `expect` によりパニックします。
 pub async fn openapi_json() -> impl IntoResponse {
     // bring trait into scope to call `openapi()`
     let doc = ApiDoc::openapi();
@@ -200,7 +205,6 @@ pub async fn openapi_json() -> impl IntoResponse {
     }
 
     // 公開（認証不要）エンドポイント一覧 (path, method)
-    use std::collections::HashSet;
     let public: HashSet<(&'static str, &'static str)> = [
         ("/api/v1/auth/register", "post"),
         ("/api/v1/auth/login", "post"),
@@ -221,7 +225,7 @@ pub async fn openapi_json() -> impl IntoResponse {
     if let Some(paths) = v.get_mut("paths").and_then(|p| p.as_object_mut()) {
         // Biscuit のみ許可したいエンドポイント (method, path)
         let biscuit_only: std::collections::HashSet<(&'static str, &'static str)> =
-            [("post", "/api/v1/search/reindex")].into_iter().collect();
+            std::iter::once(("post", "/api/v1/search/reindex")).collect();
         for (path, item) in paths.iter_mut() {
             let Some(item_obj) = item.as_object_mut() else {
                 continue;
