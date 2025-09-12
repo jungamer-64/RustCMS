@@ -5,7 +5,7 @@ GITLEAKS_CMD="gitleaks detect --source . --report-format json --report-path secu
 echo "Running gitleaks pre-commit check..."
 mkdir -p security
 if command -v gitleaks >/dev/null 2>&1; then
-  if $GITLEAKS_CMD 2> security/gitleaks-pre-commit.log; then
+  if "$GITLEAKS_CMD" 2> security/gitleaks-pre-commit.log; then
     echo "No secrets detected by gitleaks."
     exit 0
   else

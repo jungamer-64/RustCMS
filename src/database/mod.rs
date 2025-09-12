@@ -12,6 +12,13 @@
 //! - `NotFound` と Internal を `AppError` に正規化して上位層に伝播
 //! - 並行性は r2d2 の最大接続数で制御（ブロッキング注意）
 //! - 検索インデックス連携は上位層（`AppState`）が呼び出し側フックで実施
+//!
+//! NOTE: This module is large (~600+ LOC). Codacy flagged file complexity.
+//! Automated refactors are risky; prefer incremental refactors:
+//!  - extract smaller submodules (connections, migrations, queries)
+//!  - add unit tests for extracted pieces
+//!  - consider repository/service patterns to reduce module size
+//! See: docs/REFACTORING_GUIDE.md for a suggested plan (create if needed)
 
 pub mod pool;
 pub mod schema;
