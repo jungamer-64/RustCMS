@@ -95,7 +95,7 @@ fn prune_versions(dir: &Path, keep: usize) {
         .collect();
     for v in to_remove {
         for prefix in ["biscuit_private_v", "biscuit_public_v"] {
-            let path = dir.join(format!("{}{}.b64", prefix, v));
+            let path = dir.join(format!("{prefix}{v}.b64"));
             if path.exists() {
                 if let Err(e) = fs::remove_file(&path) {
                     eprintln!("Failed to remove old version {}: {}", path.display(), e);
@@ -111,7 +111,7 @@ fn write_file_if_allowed(path: &Path, data: &str, force: bool) -> std::io::Resul
     if path.exists() && !force {
         return Err(std::io::Error::new(
             std::io::ErrorKind::AlreadyExists,
-            format!("{} already exists", path.display()),
+                format!("{} already exists", path.display()),
         ));
     }
     let mut f = fs::File::create(path)?;
@@ -225,8 +225,8 @@ fn handle_files_output(
     let (priv_path, pub_path) = if versioned {
         let v = next_version(path).unwrap_or(1);
         (
-            path.join(format!("biscuit_private_v{}.b64", v)),
-            path.join(format!("biscuit_public_v{}.b64", v)),
+            path.join(format!("biscuit_private_v{v}.b64")),
+            path.join(format!("biscuit_public_v{v}.b64")),
         )
     } else {
         (
@@ -349,7 +349,7 @@ fn maybe_backup_file(
         .file_name()
     .map(|s| s.to_string_lossy())
         .unwrap_or_else(|| "backup".into());
-    let bak_name = format!("{}.bak.{}", file_name, ts);
+    let bak_name = format!("{file_name}.bak.{ts}");
     let bak = if let Some(dir) = backup_dir {
         dir.join(bak_name)
     } else {
@@ -398,7 +398,7 @@ fn compress_file(path: &Path) -> std::io::Result<()> {
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("backup");
-    let gz_name = format!("{}.gz", file_name);
+    let gz_name = format!("{file_name}.gz");
     let gz_path = path.with_file_name(gz_name);
     let f = fs::File::create(&gz_path)?;
     let mut encoder = GzEncoder::new(f, Compression::default());

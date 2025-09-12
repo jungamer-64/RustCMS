@@ -630,14 +630,14 @@ impl AuthService {
                 Ok(self.biscuit_public_key)
             };
         let biscuit = unverified.verify(key_provider).map_err(|e| {
-            AuthError::Biscuit(format!("Biscuit signature verification failed: {}", e))
+            AuthError::Biscuit(format!("Biscuit signature verification failed: {e}"))
         })?;
         let mut authorizer = biscuit
             .authorizer()
             .map_err(|e| AuthError::Biscuit(format!("Failed to create authorizer: {e}")))?;
         let _ = authorizer
             .authorize()
-            .map_err(|e| AuthError::Biscuit(format!("Authorizer run failed: {}", e)))?;
+            .map_err(|e| AuthError::Biscuit(format!("Authorizer run failed: {e}")))?;
         let (id_s, username, role_s) = self.biscuit_query_triple(
             &mut authorizer,
             "data($id,$u,$r) <- user($id,$u,$r)",

@@ -237,7 +237,7 @@ impl ApiKey {
         use argon2::{Argon2, PasswordHash, PasswordVerifier};
 
         let parsed_hash = PasswordHash::new(&self.key_hash)
-            .map_err(|e| AppError::Authentication(format!("Invalid hash format: {}", e)))?;
+            .map_err(|e| AppError::Authentication(format!("Invalid hash format: {e}")))?;
 
         Ok(Argon2::default()
             .verify_password(key.as_bytes(), &parsed_hash)

@@ -108,7 +108,7 @@ impl CacheService {
     {
         let serialized = serde_json::to_vec(value)?;
         let prefix = &self.config.key_prefix;
-        let full_key = format!("{prefix}{key}");
+    let full_key = format!("{prefix}{key}");
 
         // Set in Redis (multiplexed)
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
@@ -157,7 +157,7 @@ impl CacheService {
         T: DeserializeOwned,
     {
         let prefix = &self.config.key_prefix;
-        let full_key = format!("{prefix}{key}");
+    let full_key = format!("{prefix}{key}");
 
         // Try memory cache first
         {
@@ -213,7 +213,7 @@ impl CacheService {
     /// - Redis との通信に失敗した場合。
     pub async fn delete(&self, key: &str) -> Result<()> {
         let prefix = &self.config.key_prefix;
-        let full_key = format!("{prefix}{key}");
+    let full_key = format!("{prefix}{key}");
 
         // Remove from Redis
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
@@ -231,7 +231,7 @@ impl CacheService {
     /// - Redis との通信に失敗した場合。
     pub async fn exists(&self, key: &str) -> Result<bool> {
         let prefix = &self.config.key_prefix;
-        let full_key = format!("{prefix}{key}");
+    let full_key = format!("{prefix}{key}");
 
         // Check memory cache first
         {
@@ -259,7 +259,7 @@ impl CacheService {
     /// # Errors
     /// - Redis との通信に失敗した場合。
     pub async fn expire(&self, key: &str, ttl: Duration) -> Result<()> {
-        let full_key = format!("{}{}", self.config.key_prefix, key);
+    let full_key = format!("{}{key}", self.config.key_prefix);
 
         // Set TTL in Redis
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
@@ -281,7 +281,7 @@ impl CacheService {
     pub async fn clear(&self) -> Result<()> {
         // Clear Redis with pattern
         let prefix = &self.config.key_prefix;
-        let pattern = format!("{prefix}*");
+    let pattern = format!("{prefix}*");
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
 
         let keys: Vec<String> = conn.keys(&pattern).await?;

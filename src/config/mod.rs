@@ -408,8 +408,7 @@ impl Config {
         ] {
             if env::var(k).is_ok() {
                 warn!(
-                    "deprecated env var '{}' detected; use CMS_SERVER__* or CMS_SECURITY__* via prefixed config",
-                    k
+                    "deprecated env var '{k}' detected; use CMS_SERVER__* or CMS_SECURITY__* via prefixed config"
                 );
             }
         }
