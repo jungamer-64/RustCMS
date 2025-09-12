@@ -31,14 +31,17 @@ pub fn find_gz_in_dir(backup_dir: &PathBuf) -> bool {
     for entry in fs::read_dir(backup_dir).unwrap() {
         let entry = entry.unwrap();
         let name = entry.file_name().to_string_lossy().to_string();
-        if name.ends_with(".gz") {
+        if std::path::Path::new(&name)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("gz"))
+        {
             return true;
         }
     }
     false
 }
 
-/// Run gen_biscuit_keys multiple times to create backups
+/// Run `gen_biscuit_keys` multiple times to create backups
 pub fn run_gen_biscuit_keys_multiple_backups(out_dir: &str, backup_dir: &str, times: usize) {
     for _ in 0..times {
         run_cargo_gen_biscuit_keys(&[

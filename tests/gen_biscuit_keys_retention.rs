@@ -32,7 +32,6 @@ fn retention_keeps_only_n_backups() {
     let priv_backups = count_backups_with_prefix(&backup_dir, "biscuit_private.b64.bak.");
     assert!(
         priv_backups <= 2,
-        "expected at most 2 private backups, found {}",
-        priv_backups
+        "expected at most 2 private backups, found {priv_backups}"
     );
 }
