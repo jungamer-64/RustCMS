@@ -94,6 +94,7 @@ jobs:
             BUILD_VARIANT=prod
             VCS_REF=${{ steps.buildmeta.outputs.VCS_REF }}
             BUILD_DATE=${{ steps.buildmeta.outputs.BUILD_DATE }}
+            RUSTFLAGS=-C debuginfo=0 -C strip=symbols -D warnings
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=release-prod
