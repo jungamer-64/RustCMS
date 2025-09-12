@@ -9,6 +9,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower::{Layer, Service};
 
+// HSTS max-age in seconds (1 year)
+const HSTS_MAX_AGE: u64 = 31_536_000;
+
 /// CSRF protection service for preventing Cross-Site Request Forgery attacks
 #[derive(Clone)]
 pub struct CsrfService {
@@ -166,7 +169,7 @@ where
             add_security_header(
                 headers,
                 HeaderName::from_static("strict-transport-security"),
-                "max-age=31536000; includeSubDomains; preload",
+                &format!("max-age={}; includeSubDomains; preload", HSTS_MAX_AGE),
             );
 
             // Content Security Policy (CSP)
