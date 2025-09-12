@@ -72,12 +72,9 @@ fn naive_tamper(b64: &str) -> String {
 
 #[tokio::test]
 async fn tampered_refresh_token_rejected() {
-    let db = match build_db().await {
-        Some(d) => d,
-        None => {
-            eprintln!("SKIP tampered_refresh_token_rejected: DATABASE_URL not set");
-            return;
-        }
+    let Some(db) = build_db().await else {
+        eprintln!("SKIP tampered_refresh_token_rejected: DATABASE_URL not set");
+        return;
     };
     let auth = build_auth(&db).await;
     let user = dummy_user();
@@ -91,12 +88,9 @@ async fn tampered_refresh_token_rejected() {
 
 #[tokio::test]
 async fn random_garbage_token_rejected() {
-    let db = match build_db().await {
-        Some(d) => d,
-        None => {
-            eprintln!("SKIP random_garbage_token_rejected: DATABASE_URL not set");
-            return;
-        }
+    let Some(db) = build_db().await else {
+        eprintln!("SKIP random_garbage_token_rejected: DATABASE_URL not set");
+        return;
     };
     let auth = build_auth(&db).await;
     // 生成されていない乱数 base64 文字列

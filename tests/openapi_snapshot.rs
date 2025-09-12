@@ -1,4 +1,4 @@
-//! OpenAPI schema snapshot test
+//! `OpenAPI` schema snapshot test
 //! Ensures unintended schema regressions (e.g. accidental inclusion/removal of legacy types) are detected.
 use cms_backend::openapi::ApiDoc;
 use utoipa::OpenApi; // bring openapi() into scope
@@ -61,7 +61,7 @@ fn openapi_snapshot_default_features() {
     }
 }
 
-/// When the transitional feature `legacy-auth-flat` is enabled we expect the legacy LoginResponse
+/// When the transitional feature `legacy-auth-flat` is enabled we expect the legacy `LoginResponse`
 /// schema to be present. This test only compiles under that feature.
 #[cfg(feature = "legacy-auth-flat")]
 #[test]

@@ -170,15 +170,13 @@ async fn api_key_management_endpoints_have_dual_security() {
                 }
                 assert!(
                     has_bearer && has_biscuit,
-                    "{} {} should allow both Bearer and Biscuit",
-                    method,
-                    path
+                    "{method} {path} should allow both Bearer and Biscuit",
                 );
             } else {
-                panic!("operation {} {} missing", method, path);
+                panic!("operation {method} {path} missing");
             }
         } else {
-            panic!("path {} missing", path);
+            panic!("path {path} missing");
         }
     }
 }

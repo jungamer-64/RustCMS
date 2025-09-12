@@ -42,6 +42,6 @@ fn api_key_invalid_permission_rejected() {
     let user_id = Uuid::new_v4();
     let err = ApiKey::new_validated("bad".to_string(), user_id, vec!["unknown:perm".into()])
         .expect_err("should fail");
-    let as_string = format!("{}", err); // ensure Display
+    let as_string = format!("{err}"); // ensure Display
     assert!(as_string.contains("invalid_permission") || as_string.contains("Validation"));
 }

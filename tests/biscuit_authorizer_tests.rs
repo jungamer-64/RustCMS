@@ -18,7 +18,7 @@ fn build_token(user_id: &str, username: &str, role: &str) -> (Biscuit, KeyPair) 
 fn biscuit_authorizer_query_roundtrip() {
     let (token, _kp) = build_token("11111111-1111-1111-1111-111111111111", "alice", "admin");
     let mut authorizer = token.authorizer().expect("authorizer");
-    let q = r#"data($id,$u,$r) <- user($id,$u,$r)"#;
+    let q = r"data($id,$u,$r) <- user($id,$u,$r)";
     let rows: Vec<(String, String, String)> = authorizer.query_all(q).expect("query");
     assert_eq!(rows.len(), 1);
     let (id, u, r) = &rows[0];
@@ -32,7 +32,7 @@ fn biscuit_authorizer_no_fact_returns_empty() {
     let kp = KeyPair::new();
     let token = Biscuit::builder().build(&kp).expect("empty biscuit");
     let mut authorizer = token.authorizer().expect("authorizer");
-    let q = r#"data($id,$u,$r) <- user($id,$u,$r)"#;
+    let q = r"data($id,$u,$r) <- user($id,$u,$r)";
     let rows: Vec<(String, String, String)> = authorizer.query_all(q).expect("query");
     assert!(rows.is_empty(), "expected no rows, got {:?}", rows);
 }
