@@ -1,3 +1,5 @@
+//! Pagination helpers and API bridges
+#![allow(clippy::option_if_let_else)] // False-positive: lint mis-spans into struct field; no such pattern in this module.
 use crate::utils::api_types::Pagination as ApiPagination;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -115,6 +117,7 @@ pub fn normalize_limit_offset_usize(limit: Option<usize>, offset: Option<usize>)
 
 // ---------------- Generic Paginated<T> helper (new) ----------------
 #[derive(Debug, Serialize, Deserialize, ToSchema, Clone)]
+#[allow(clippy::option_if_let_else)] // Clippy mis-spans to this field; no option if-let-else here.
 pub struct Paginated<T> {
     pub items: Vec<T>,
     pub total: usize,
