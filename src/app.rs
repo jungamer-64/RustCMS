@@ -1101,9 +1101,8 @@ impl AppState {
                 let exists = ApiKey::find_by_id(&mut conn, key_id).ok();
                 if exists.is_some() {
                     return Err(crate::AppError::Authorization("not owner".into()));
-                } else {
-                    return Err(crate::AppError::NotFound("api key not found".into()));
                 }
+                return Err(crate::AppError::NotFound("api key not found".into()));
             }
             Ok(())
         })
