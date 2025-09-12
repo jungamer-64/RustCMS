@@ -11,6 +11,11 @@ pub struct DatabasePool {
 }
 
 impl DatabasePool {
+    /// 接続プールを作成します。
+    ///
+    /// # Errors
+    ///
+    /// 接続プールの初期化に失敗した場合にエラーを返します。
     pub fn new(database_url: &str, max_connections: u32) -> Result<Self, crate::AppError> {
         let manager = ConnectionManager::<PgConnection>::new(database_url);
         let pool = r2d2::Pool::builder()
@@ -28,6 +33,11 @@ impl DatabasePool {
         })
     }
 
+    /// プールから接続を取得します。
+    ///
+    /// # Errors
+    ///
+    /// 利用可能な接続が無い、もしくは取得に失敗した場合にエラーを返します。
     pub fn get(&self) -> Result<PooledConnection, crate::AppError> {
         self.pool.get().map_err(|e| {
             crate::AppError::Database(diesel::result::Error::DatabaseError(
@@ -38,6 +48,11 @@ impl DatabasePool {
     }
 
     #[allow(clippy::unused_async)] // kept async for future async driver compatibility and API consistency
+    /// ヘルスチェック用に簡単なクエリを実行します。
+    ///
+    /// # Errors
+    ///
+    /// クエリの実行に失敗した場合にエラーを返します。
     pub async fn health_check(&self) -> Result<(), crate::AppError> {
         use diesel::prelude::*;
         use diesel::sql_query;

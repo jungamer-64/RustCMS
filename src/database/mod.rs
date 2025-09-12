@@ -169,26 +169,22 @@ struct PostUpdateData {
 fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpdateData {
     let title = req
         .title
-        .as_ref()
-        .cloned()
+        .clone()
         .unwrap_or_else(|| existing.title.clone());
     let slug = req
         .slug
-        .as_ref()
-        .cloned()
+        .clone()
         .unwrap_or_else(|| existing.slug.clone());
     let content = req
         .content
-        .as_ref()
-        .cloned()
+        .clone()
         .unwrap_or_else(|| existing.content.clone());
     let excerpt = merge_opt_option(req.excerpt.as_ref(), existing.excerpt.as_ref());
     let tags = merge_opt(req.tags.as_ref(), &existing.tags);
     let categories = req
         .category
         .as_ref()
-        .map(|cat| vec![cat.trim().to_lowercase()])
-        .unwrap_or_else(|| existing.categories.clone());
+        .map_or_else(|| existing.categories.clone(), |cat| vec![cat.trim().to_lowercase()]);
     let meta_title = merge_opt_option(req.meta_title.as_ref(), existing.meta_title.as_ref());
     let meta_description =
         merge_opt_option(req.meta_description.as_ref(), existing.meta_description.as_ref());
@@ -197,7 +193,7 @@ fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpd
     let mut status = req
         .status
         .as_ref()
-        .map_or_else(|| existing.status.clone(), |st| st.to_string());
+        .map_or_else(|| existing.status.clone(), ToString::to_string);
     let mut published_at = if req.published_at.is_some() {
         req.published_at
     } else {
@@ -280,14 +276,24 @@ impl Database {
     }
 
     #[must_use]
-    pub fn pool(&self) -> &DatabasePool {
+    pub const fn pool(&self) -> &DatabasePool {
         &self.pool
     }
 
+    /// プールから接続を取得します。
+    ///
+    /// # Errors
+    ///
+    /// 接続の取得に失敗した場合にエラーを返します。
     pub fn get_connection(&self) -> Result<PooledConnection> {
         self.pool.get()
     }
 
+    /// データベースのヘルスチェックを実行します。
+    ///
+    /// # Errors
+    ///
+    /// チェック用クエリの実行に失敗した場合にエラーを返します。
     pub async fn health_check(&self) -> Result<serde_json::Value> {
         self.pool.health_check().await?;
         Ok(serde_json::json!({
@@ -298,6 +304,11 @@ impl Database {
 
     // User CRUD operations
     #[allow(clippy::unused_async)]
+    /// ユーザーを作成します。
+    ///
+    /// # Errors
+    ///
+    /// 入力検証や保存処理に失敗した場合にエラーを返します。
     pub async fn create_user(&self, request: CreateUserRequest) -> Result<User> {
         // Build user with hashed password (this returns crate::AppError on failure)
         let user = User::new_with_password(
@@ -316,6 +327,11 @@ impl Database {
 
     /// List users helper used by admin CLI (stub)
     #[allow(clippy::unused_async)]
+    /// 管理用: ユーザー一覧を返します（スタブ）。
+    ///
+    /// # Errors
+    ///
+    /// 内部処理失敗時にエラーを返します。
     pub async fn list_users(
         &self,
         _role: Option<&str>,
@@ -327,19 +343,34 @@ impl Database {
 
     /// Get user by username helper used by admin CLI (stub)
     #[allow(clippy::unused_async)]
+    /// ユーザー名でユーザーを取得します。
+    ///
+    /// # Errors
+    ///
+    /// 見つからない場合や取得に失敗した場合にエラーを返します。
     pub async fn get_user_by_username(&self, username_str: &str) -> Result<User> {
         // Propagate model-level AppError (preserves NotFound vs other AppError variants)
         self.with_conn(|conn| User::find_by_username(conn, username_str))
     }
 
     #[allow(clippy::unused_async)]
-    pub async fn get_user_by_id(&self, _id: Uuid) -> Result<User> {
+    /// IDでユーザーを取得します。
+    ///
+    /// # Errors
+    ///
+    /// 見つからない場合や取得に失敗した場合にエラーを返します。
+    pub async fn get_user_by_id(&self, id: Uuid) -> Result<User> {
         // Propagate model-level AppError so NotFound is preserved
-        self.with_conn(|conn| User::find_by_id(conn, _id))
+        self.with_conn(|conn| User::find_by_id(conn, id))
     }
 
     /// Find a user by email
     #[allow(clippy::unused_async)]
+    /// メールアドレスでユーザーを取得します。
+    ///
+    /// # Errors
+    ///
+    /// 見つからない場合や取得に失敗した場合にエラーを返します。
     pub async fn get_user_by_email(&self, email: &str) -> Result<User> {
         self.with_conn(|conn| {
             let user = self.run_query(
@@ -351,6 +382,11 @@ impl Database {
     }
 
     /// Update user's last login timestamp
+    /// 最終ログイン時刻を更新します。
+    ///
+    /// # Errors
+    ///
+    /// 更新処理に失敗した場合にエラーを返します。
     pub fn update_last_login(&self, id: Uuid) -> Result<()> {
         self.with_conn(|conn| {
             self.run_query(
@@ -360,24 +396,29 @@ impl Database {
         })
     }
 
+    /// ユーザー一覧を取得します（フィルタ/ソート対応）。
+    ///
+    /// # Errors
+    ///
+    /// 取得処理に失敗した場合にエラーを返します。
     pub fn get_users(
         &self,
-        _page: u32,
-        _limit: u32,
-        _role: Option<String>,
-        _active: Option<bool>,
-        _sort: Option<String>,
+        page: u32,
+        per_page: u32,
+        role: Option<String>,
+        active: Option<bool>,
+        sort: Option<String>,
     ) -> Result<Vec<User>> {
         use crate::database::schema::users::dsl as users_dsl;
         use diesel::prelude::*;
 
-        let (_page_n, limit, offset) = Self::paged_params(_page, _limit);
+    let (_, limit, offset) = Self::paged_params(page, per_page);
 
         // Build and execute inside with_conn to centralize connection logic
         self.with_conn(|conn| {
             let mut query = users_dsl::users.into_boxed();
-            apply_user_filters!(query, _role, _active);
-            apply_user_sort!(query, _sort);
+            apply_user_filters!(query, role, active);
+            apply_user_sort!(query, sort);
 
             let results = self.run_query(
                 || query.offset(offset).limit(limit).load::<User>(conn),
@@ -387,38 +428,58 @@ impl Database {
         })
     }
 
-    pub fn update_user(&self, id: Uuid, request: UpdateUserRequest) -> Result<User> {
+    /// ユーザー情報を更新します。
+    ///
+    /// # Errors
+    ///
+    /// 更新対象が見つからない、または更新に失敗した場合にエラーを返します。
+    pub fn update_user(&self, id: Uuid, request: &UpdateUserRequest) -> Result<User> {
         self.with_conn(|conn| {
             // Let the model return AppError (NotFound, etc.) propagate directly.
-            User::update(conn, id, &request)
+            User::update(conn, id, request)
         })
     }
 
+    /// ユーザー数を返します。
+    ///
+    /// # Errors
+    ///
+    /// 集計に失敗した場合にエラーを返します。
     pub fn count_users(&self) -> Result<usize> {
         // Reuse the filtered counter to avoid duplicated query logic
         self.count_users_filtered(None, None)
     }
 
     /// Count users with optional filters (for accurate pagination totals)
+    /// 条件付きのユーザー数を返します。
+    ///
+    /// # Errors
+    ///
+    /// 集計に失敗した場合にエラーを返します。
     pub fn count_users_filtered(
         &self,
-        _role: Option<String>,
-        _active: Option<bool>,
+        role: Option<String>,
+        active: Option<bool>,
     ) -> Result<usize> {
         use crate::database::schema::users::dsl as users_dsl;
         use diesel::prelude::*;
         self.with_conn(|conn| {
             let mut query = users_dsl::users.into_boxed();
-            apply_user_filters!(query, _role, _active);
+            apply_user_filters!(query, role, active);
             let total: i64 = self.count_query(
                 || query.count().get_result(conn),
                 "Failed to count users (filtered)",
             )?;
-            Ok(total as usize)
+            usize::try_from(total).map_err(|_| crate::AppError::Internal("users count overflow".into()))
         })
     }
 
     // Post CRUD operations
+    /// 投稿を作成します。
+    ///
+    /// # Errors
+    ///
+    /// 入力検証や保存処理に失敗した場合にエラーを返します。
     pub fn create_post(&self, request: CreatePostRequest) -> Result<Post> {
         use diesel::prelude::*;
         // Try to choose an author: prefer a user with role = 'admin', otherwise use the first user
@@ -448,12 +509,17 @@ impl Database {
         })
     }
 
-    pub fn get_post_by_id(&self, _id: Uuid) -> Result<Post> {
+    /// 投稿IDで投稿を取得します。
+    ///
+    /// # Errors
+    ///
+    /// 見つからない場合や取得に失敗した場合にエラーを返します。
+    pub fn get_post_by_id(&self, id: Uuid) -> Result<Post> {
         use crate::database::schema::posts::dsl as posts_dsl;
         use diesel::prelude::*;
         self.with_conn(|conn| {
             let post = self.get_one_query(
-                || posts_dsl::posts.find(_id).first::<Post>(conn),
+                || posts_dsl::posts.find(id).first::<Post>(conn),
                 "Post not found",
                 "Failed to fetch post",
             )?;
@@ -461,27 +527,32 @@ impl Database {
         })
     }
 
+    /// 投稿一覧を取得します（フィルタ/ソート対応）。
+    ///
+    /// # Errors
+    ///
+    /// 取得処理に失敗した場合にエラーを返します。
     pub fn get_posts(
         &self,
-        _page: u32,
-        _limit: u32,
-        _status: Option<String>,
-        _author: Option<Uuid>,
-        _tag: Option<String>,
-        _sort: Option<String>,
+        page: u32,
+        per_page: u32,
+        status: Option<String>,
+        author: Option<Uuid>,
+        tag: Option<String>,
+        sort: Option<String>,
     ) -> Result<Vec<Post>> {
         use diesel::prelude::*;
         // no raw SQL needed
         use crate::database::schema::posts::dsl as posts_dsl;
 
         // Pagination guards
-        let (_page_n, limit, offset) = Self::paged_params(_page, _limit);
+    let (_, limit, offset) = Self::paged_params(page, per_page);
 
         self.with_conn(|conn| {
             let mut query = posts_dsl::posts.into_boxed();
-            apply_post_filters!(query, _status, _author, _tag);
+            apply_post_filters!(query, status, author, tag);
 
-            apply_post_sort!(query, _sort);
+            apply_post_sort!(query, sort);
 
             let results = self.run_query(
                 || query.offset(offset).limit(limit).load::<Post>(conn),
@@ -491,11 +562,16 @@ impl Database {
         })
     }
 
-    pub fn update_post(&self, _id: Uuid, _request: UpdatePostRequest) -> Result<Post> {
+    /// 投稿を更新します。
+    ///
+    /// # Errors
+    ///
+    /// 更新対象が見つからない、または更新に失敗した場合にエラーを返します。
+    pub fn update_post(&self, id: Uuid, request: UpdatePostRequest) -> Result<Post> {
         // Step 1 load + compute
-        let (changes, updated_at) = self.prepare_post_update(_id, &_request)?;
+        let (changes, updated_at) = self.prepare_post_update(id, &request)?;
         // Step 2 persist
-        let updated = self.persist_post_update(_id, &changes)?;
+        let updated = self.persist_post_update(id, &changes)?;
         // Step 3 (optional future: trigger search index update / events) - placeholder uses updated_at to avoid unused warning
         let _ = updated_at; // reserved for future instrumentation
         Ok(updated)
