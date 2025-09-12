@@ -534,6 +534,8 @@ impl AppState {
     pub async fn get_metrics(&self) -> AppMetrics {
         let metrics = self.metrics.read().await;
         let mut current_metrics = metrics.clone();
+        // Release the read lock before performing any await to avoid holding the lock across .await
+        drop(metrics);
 
         // Add real-time computed metrics if cache is available
         #[cfg(feature = "cache")]
@@ -548,18 +550,22 @@ impl AppState {
 
     /// Update request metrics
     pub async fn record_request(&self) {
-        let mut metrics = self.metrics.write().await;
-        metrics.total_requests += 1;
+        {
+            let mut metrics = self.metrics.write().await;
+            metrics.total_requests += 1;
+        }
     }
 
     /// Update authentication metrics
     pub async fn record_auth_attempt(&self, success: bool) {
-        let mut metrics = self.metrics.write().await;
-        metrics.auth_attempts += 1;
-        if success {
-            metrics.auth_successes += 1;
-        } else {
-            metrics.auth_failures += 1;
+        {
+            let mut metrics = self.metrics.write().await;
+            metrics.auth_attempts += 1;
+            if success {
+                metrics.auth_successes += 1;
+            } else {
+                metrics.auth_failures += 1;
+            }
         }
     }
 
@@ -567,30 +573,37 @@ impl AppState {
     pub async fn record_search_query(&self, response_time_ms: f64) {
         let mut m = self.metrics.write().await;
         m.search_queries += 1;
+        // Average update using numerically stable, fewer-FLOPs formula:
+        // avg += (x - avg) / n
+        #[allow(clippy::cast_precision_loss)]
         let n = m.search_queries as f64;
-        m.search_avg_response_time_ms =
-            (m.search_avg_response_time_ms * (n - 1.0) + response_time_ms) / n;
+        m.search_avg_response_time_ms +=
+            (response_time_ms - m.search_avg_response_time_ms) / n;
     }
 
     /// Update database metrics
     pub async fn record_db_query(&self, response_time_ms: f64) {
         let mut m = self.metrics.write().await;
         m.db_queries += 1;
+        // avg += (x - avg) / n
+        #[allow(clippy::cast_precision_loss)]
         let n = m.db_queries as f64;
-        m.db_avg_response_time_ms = (m.db_avg_response_time_ms * (n - 1.0) + response_time_ms) / n;
+        m.db_avg_response_time_ms += (response_time_ms - m.db_avg_response_time_ms) / n;
     }
 
     /// Record error by type
     pub async fn record_error(&self, error_type: &str) {
-        let mut metrics = self.metrics.write().await;
-        metrics.errors_total += 1;
+        {
+            let mut metrics = self.metrics.write().await;
+            metrics.errors_total += 1;
 
-        match error_type {
-            "auth" => metrics.errors_auth += 1,
-            "db" => metrics.errors_db += 1,
-            "cache" => metrics.errors_cache += 1,
-            "search" => metrics.errors_search += 1,
-            _ => {}
+            match error_type {
+                "auth" => metrics.errors_auth += 1,
+                "db" => metrics.errors_db += 1,
+                "cache" => metrics.errors_cache += 1,
+                "search" => metrics.errors_search += 1,
+                _ => {}
+            }
         }
     }
 
@@ -651,13 +664,12 @@ impl AppState {
     pub async fn cache_invalidate_prefix(&self, prefix: &str) {
         // 先に I/O（await）を終えてからメトリクスのロックを取得し、ロック保持時間を最小化
         let res = self.cache.delete(prefix).await;
-        let mut metrics = self.metrics.write().await;
         match res {
             Ok(()) => {
-                metrics.cache_invalidations += 1;
+                self.metrics.write().await.cache_invalidations += 1;
             }
             Err(e) => {
-                metrics.cache_invalidation_errors += 1;
+                self.metrics.write().await.cache_invalidation_errors += 1;
                 warn!("cache invalidate failed prefix={} err={}", prefix, e);
             }
         }
@@ -669,19 +681,17 @@ impl AppState {
         use crate::utils::cache_key::{CACHE_PREFIX_POST_ID, CACHE_PREFIX_POSTS};
         let key = format!("{CACHE_PREFIX_POST_ID}{id}");
         let res = self.cache.delete(&key).await;
-        let mut metrics = self.metrics.write().await;
         match res {
             Ok(()) => {
-                metrics.cache_invalidations += 1;
+                self.metrics.write().await.cache_invalidations += 1;
             }
             Err(e) => {
-                metrics.cache_invalidation_errors += 1;
+                self.metrics.write().await.cache_invalidation_errors += 1;
                 warn!(post_id=%id, error=%e, "post cache delete failed");
             }
         }
-        drop(metrics);
-                let posts_prefix = format!("{CACHE_PREFIX_POSTS}*");
-                self.cache_invalidate_prefix(&posts_prefix).await; // prefix helper already logs
+        let posts_prefix = format!("{CACHE_PREFIX_POSTS}*");
+        self.cache_invalidate_prefix(&posts_prefix).await; // prefix helper already logs
     }
 
     #[cfg(feature = "cache")]
@@ -691,21 +701,19 @@ impl AppState {
         };
         let key = format!("{CACHE_PREFIX_USER_ID}{id}");
         let res = self.cache.delete(&key).await;
-        let mut metrics = self.metrics.write().await;
         match res {
             Ok(()) => {
-                metrics.cache_invalidations += 1;
+                self.metrics.write().await.cache_invalidations += 1;
             }
             Err(e) => {
-                metrics.cache_invalidation_errors += 1;
+                self.metrics.write().await.cache_invalidation_errors += 1;
                 warn!(user_id=%id, error=%e, "user cache delete failed");
             }
         }
-        drop(metrics);
-                let users_prefix = format!("{CACHE_PREFIX_USERS}*");
-                self.cache_invalidate_prefix(&users_prefix).await;
-                let user_posts_prefix = format!("{CACHE_PREFIX_USER_POSTS}{id}:*");
-                self.cache_invalidate_prefix(&user_posts_prefix).await;
+        let users_prefix = format!("{CACHE_PREFIX_USERS}*");
+        self.cache_invalidate_prefix(&users_prefix).await;
+        let user_posts_prefix = format!("{CACHE_PREFIX_USER_POSTS}{id}:*");
+        self.cache_invalidate_prefix(&user_posts_prefix).await;
     }
 
     // ---------------- Search index safe helpers (avoid duplicated error logging) ----------------
