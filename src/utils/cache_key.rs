@@ -136,6 +136,7 @@ impl CacheKeyBuilder {
 /// (label, Option<String>) pairs for additional labeled segments. When the
 /// Option is None the key will encode the segment as "label:all" using
 /// `kv_opt` semantics.
+#[must_use]
 pub fn build_list_cache_key(
     base: &str,
     page: u32,
