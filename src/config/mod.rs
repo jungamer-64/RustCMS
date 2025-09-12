@@ -147,7 +147,7 @@ pub struct SecurityConfig {
 impl Default for SecurityConfig {
     fn default() -> Self {
         Self {
-            cors_origins: vec!["http://localhost:3000".to_string()],
+            cors_origins: vec![String::from("http://localhost:3000")],
             rate_limit_requests: 100,
             rate_limit_window: 60,
         }
@@ -163,10 +163,11 @@ pub struct LoggingConfig {
 }
 
 fn default_log_level() -> String {
-    "info".into()
+    // String cannot be returned from a const fn yet in stable, but helper stays small and pure
+    String::from("info")
 }
 fn default_log_format() -> String {
-    "text".into()
+    String::from("text")
 }
 
 impl Default for LoggingConfig {
@@ -188,10 +189,10 @@ pub struct MonitoringConfig {
     pub health_check_interval: u64,
 }
 
-fn default_metrics_port() -> u16 {
+const fn default_metrics_port() -> u16 {
     9090
 }
-fn default_health_interval() -> u64 {
+const fn default_health_interval() -> u64 {
     30
 }
 
@@ -208,7 +209,7 @@ impl Default for MonitoringConfig {
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
-            host: "0.0.0.0".to_string(),
+            host: String::from("0.0.0.0"),
             port: 3000,
             max_request_size: 10 * 1024 * 1024, // 10MB
             request_timeout: 30,
@@ -220,7 +221,7 @@ impl Default for ServerConfig {
 impl Default for DatabaseConfig {
     fn default() -> Self {
         Self {
-            url: "postgresql://localhost/cms".to_string(),
+            url: String::from("postgresql://localhost/cms"),
             max_connections: 20,
             min_connections: 5,
             connection_timeout: 30,
@@ -234,10 +235,10 @@ impl Default for DatabaseConfig {
 impl Default for RedisConfig {
     fn default() -> Self {
         Self {
-            url: "redis://localhost:6379".to_string(),
+            url: String::from("redis://localhost:6379"),
             pool_size: 10,
             default_ttl: 3600,
-            key_prefix: "cms:".to_string(),
+            key_prefix: String::from("cms:"),
         }
     }
 }
@@ -257,7 +258,7 @@ impl Default for SearchConfig {
 impl Default for AuthConfig {
     fn default() -> Self {
         Self {
-            biscuit_root_key: "your-biscuit-root-key".to_string(),
+            biscuit_root_key: String::from("your-biscuit-root-key"),
             webauthn: WebAuthnConfig::default(),
             bcrypt_cost: 12,
             session_timeout: 86_400, // 24 hours
@@ -270,9 +271,9 @@ impl Default for AuthConfig {
 impl Default for WebAuthnConfig {
     fn default() -> Self {
         Self {
-            rp_id: "localhost".to_string(),
-            rp_name: "CMS".to_string(),
-            rp_origin: "http://localhost:3000".to_string(),
+            rp_id: String::from("localhost"),
+            rp_name: String::from("CMS"),
+            rp_origin: String::from("http://localhost:3000"),
             timeout: 60_000,
         }
     }
@@ -303,8 +304,8 @@ impl Default for EmailConfig {
         Self {
             smtp_host: "localhost".to_string(),
             smtp_port: 587,
-            smtp_username: "".to_string(),
-            smtp_password: "".to_string(),
+            smtp_username: String::new(),
+            smtp_password: String::new(),
             from_address: "noreply@example.com".to_string(),
             from_name: "CMS".to_string(),
         }
@@ -322,6 +323,12 @@ impl Default for WebhookConfig {
 }
 
 impl Config {
+    /// 環境変数と設定ファイルから `Config` を構築します。
+    ///
+    /// # Errors
+    ///
+    /// 設定ファイルの読み込みやデシリアライズに失敗した場合、
+    /// もしくは `DATABASE_URL` プレースホルダーが設定内にあり環境変数が未設定の場合にエラーを返します。
     pub fn from_env() -> Result<Self, crate::AppError> {
         dotenvy::dotenv().ok();
         // プロファイル (development / production / staging など) を環境変数から取得
@@ -332,9 +339,8 @@ impl Config {
         let mut builder = config::Config::builder()
             .add_source(config::File::with_name("config/default").required(false));
         if profile != "development" {
-            let profile_path = format!("config/{}", profile);
             builder = builder.add_source(
-                config::File::with_name(&profile_path).required(false),
+                config::File::with_name(&format!("config/{profile}")).required(false),
             );
         }
         builder = builder
