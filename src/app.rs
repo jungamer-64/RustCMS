@@ -394,8 +394,10 @@ impl AppState {
 
         let mut app_state = app_state_builder.build();
         // Override default limiter with configured values
+        let max_reqs = u32::try_from(config.security.rate_limit_requests)
+            .unwrap_or(u32::MAX);
         app_state.rate_limiter = Arc::new(FixedWindowLimiter::new(
-            config.security.rate_limit_requests as u32,
+            max_reqs,
             config.security.rate_limit_window,
         ));
 
