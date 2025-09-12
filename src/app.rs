@@ -1211,7 +1211,7 @@ impl AppState {
                 .load(&mut conn)?;
 
             // try to find a verifying match
-            for cand in candidates.iter_mut() {
+            for cand in &mut candidates {
                 if cand.verify_key(&raw).unwrap_or(false) {
                     // compute new lookup and persist
                     let new_lookup = ApiKeyModel::lookup_hash(&raw);
