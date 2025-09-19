@@ -125,46 +125,155 @@ impl From<AuthError> for crate::AppError {
     }
 }
 
-/// Authentication service
-#[allow(dead_code)]
-pub struct AuthService {
-    /// Biscuit private key for token generation
-    biscuit_private_key: PrivateKey,
-    /// Biscuit public key for token verification
-    biscuit_public_key: PublicKey,
-    /// Database reference
-    database: Database,
-    /// Configuration
-    config: AuthConfig,
-    /// Active sessions (`session_id` -> `SessionData`)
-    sessions: Arc<RwLock<HashMap<String, SessionData>>>,
-    /// Password hasher
-    argon2: Argon2<'static>,
+//================ Session Store 抽象化 ==================
+#[allow(async_fn_in_trait)]
+type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+pub trait SessionStore: Send + Sync {
+    fn insert(&self, id: SessionId, data: SessionData) -> BoxFuture<'_, ()>;
+    fn remove(&self, id: SessionId) -> BoxFuture<'_, ()>;
+    fn count(&self) -> BoxFuture<'_, usize>;
+    fn cleanup_expired(&self, now: DateTime<Utc>) -> BoxFuture<'_, ()>;
+    fn validate_access(
+        &self,
+        id: SessionId,
+        version: u32,
+        now: DateTime<Utc>,
+    ) -> BoxFuture<'_, Result<()>>;
+    fn validate_and_bump_refresh(
+        &self,
+        id: SessionId,
+        expected_version: u32,
+        now: DateTime<Utc>,
+    ) -> BoxFuture<'_, Result<u32>>;
+    #[cfg(test)]
+    fn clear(&self) -> BoxFuture<'_, ()>;
 }
 
+pub struct InMemorySessionStore {
+    inner: RwLock<HashMap<SessionId, SessionData>>, 
+}
+impl Default for InMemorySessionStore {
+    fn default() -> Self {
+        Self {
+            inner: RwLock::new(HashMap::new()),
+        }
+    }
+}
+impl InMemorySessionStore {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+#[allow(clippy::significant_drop_tightening)]
+impl SessionStore for InMemorySessionStore {
+    fn insert(&self, id: SessionId, data: SessionData) -> BoxFuture<'_, ()> {
+        Box::pin(async move {
+            self.inner.write().await.insert(id, data);
+        })
+    }
+    fn remove(&self, id: SessionId) -> BoxFuture<'_, ()> {
+        Box::pin(async move {
+            self.inner.write().await.remove(&id);
+        })
+    }
+    fn count(&self) -> BoxFuture<'_, usize> {
+        Box::pin(async move { self.inner.read().await.len() })
+    }
+    fn cleanup_expired(&self, now: DateTime<Utc>) -> BoxFuture<'_, ()> {
+        Box::pin(async move {
+            self.inner.write().await.retain(|_, s| s.expires_at > now);
+        })
+    }
+    fn validate_access(
+        &self,
+        id: SessionId,
+        version: u32,
+        now: DateTime<Utc>,
+    ) -> BoxFuture<'_, Result<()>> {
+        Box::pin(async move {
+            let mut map = self.inner.write().await;
+            let sess = map.get_mut(&id).ok_or(AuthError::InvalidToken)?;
+            if sess.expires_at < now {
+                return Err(AuthError::TokenExpired.into());
+            }
+            if version > sess.refresh_version {
+                return Err(AuthError::InvalidToken.into());
+            }
+            sess.last_accessed = now;
+            Ok(())
+        })
+    }
+    fn validate_and_bump_refresh(
+        &self,
+        id: SessionId,
+        expected_version: u32,
+        now: DateTime<Utc>,
+    ) -> BoxFuture<'_, Result<u32>> {
+        Box::pin(async move {
+            let mut map = self.inner.write().await;
+            let sess = map.get_mut(&id).ok_or(AuthError::InvalidToken)?;
+            if sess.expires_at < now {
+                return Err(AuthError::TokenExpired.into());
+            }
+            if sess.refresh_version != expected_version {
+                return Err(AuthError::InvalidToken.into());
+            }
+            sess.refresh_version += 1;
+            sess.last_accessed = now;
+            Ok(sess.refresh_version)
+        })
+    }
+    #[cfg(test)]
+    fn clear(&self) -> BoxFuture<'_, ()> {
+        Box::pin(async move {
+            self.inner.write().await.clear();
+        })
+    }
+}
+
+/// Authentication service
+#[cfg(feature = "auth")]
+pub struct AuthService {
+    /// 起動時に読み込み/生成された KeyPair (再利用でパフォーマンス向上)
+    biscuit_keypair: Arc<KeyPair>,
+    /// 公開鍵 (検証用) - Copy 可能
+    biscuit_public_key: PublicKey,
+    user_repo: Arc<dyn UserRepository>,
+    config: AuthConfig,
+    session_store: Arc<dyn SessionStore>,
+    argon2: Arc<Argon2<'static>>,
+    access_ttl_secs: i64,
+    refresh_ttl_secs: i64,
+}
+
+#[cfg(feature = "auth")]
 impl Clone for AuthService {
     fn clone(&self) -> Self {
-        // Preserve existing keys instead of regenerating them so tokens remain verifiable
         Self {
-            biscuit_private_key: self.biscuit_private_key.clone(),
+            biscuit_keypair: Arc::clone(&self.biscuit_keypair),
             biscuit_public_key: self.biscuit_public_key,
-            database: self.database.clone(),
+            user_repo: Arc::clone(&self.user_repo),
             config: self.config.clone(),
-            sessions: Arc::clone(&self.sessions),
-            argon2: Argon2::default(),
+            session_store: Arc::clone(&self.session_store),
+            argon2: Arc::clone(&self.argon2),
+            access_ttl_secs: self.access_ttl_secs,
+            refresh_ttl_secs: self.refresh_ttl_secs,
         }
     }
 }
 
+#[cfg(feature = "auth")]
 impl AuthService {
-    /// Testing helper: clears all sessions (used by integration tests)
+    #[cfg(test)]
     pub async fn clear_sessions_for_test(&self) {
-        self.sessions.write().await.clear();
+        self.session_store.clear().await;
     }
 }
 
 /// Session data
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionData {
     pub user_id: Uuid,
     pub username: String,
@@ -172,64 +281,58 @@ pub struct SessionData {
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub last_accessed: DateTime<Utc>,
-    /// 現在有効なリフレッシュトークンのバージョン (1 から開始し、ローテーション毎に +1)
-    pub refresh_version: u32,
+    pub refresh_version: u32, // 現在有効な refresh token version
 }
 
-/// Biscuit 解析結果内部表現 (impl 内定義不可のためここで宣言)
 struct ParsedBiscuit {
     user_id: Uuid,
     username: String,
     role: UserRole,
     token_type: String,
-    // 有効期限は parse 内でチェック後廃棄するため保持しない
-    session_id: String,
+    session_id: SessionId,
     version: u32,
 }
 
-// JWT 関連構造体は削除 (後方互換保持不要と判断)
-
-/// Login request
-#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
     pub remember_me: Option<bool>,
 }
 
-/// Authentication response
 #[derive(Debug, Serialize, ToSchema, Clone)]
 pub struct AuthResponse {
     pub user: UserInfo,
-    /// Canonical nested tokens container (used by handlers to build `AuthSuccessResponse`)
     pub tokens: crate::utils::auth_response::AuthTokens,
 }
 
-// RefreshResponse removed: refresh now returns AuthTokens + User directly at handler layer.
-
-/// Authentication context
 #[derive(Debug, Clone)]
 pub struct AuthContext {
     pub user_id: Uuid,
     pub username: String,
     pub role: UserRole,
-    pub session_id: String,
+    pub session_id: SessionId,
     pub permissions: Vec<String>,
 }
 
+#[cfg(feature = "auth")]
 impl AuthService {
-    // --- Key loading helpers (duplication reduction) ---
-    fn try_load_env_keys() -> Option<(PrivateKey, PublicKey)> {
+    // remember_me 用アクセス TTL は config から
+    // ---- Key Loading (起動時のみ) ----
+    fn try_load_env_keys() -> Option<KeyPair> {
         let priv_b64 = std::env::var("BISCUIT_PRIVATE_KEY_B64").ok()?;
         let pub_b64 = std::env::var("BISCUIT_PUBLIC_KEY_B64").ok()?;
         let priv_bytes = STANDARD.decode(&priv_b64).ok()?;
         let pub_bytes = STANDARD.decode(&pub_b64).ok()?;
         let priv_key = PrivateKey::from_bytes(&priv_bytes, BiscuitAlgorithm::Ed25519).ok()?;
         let pub_key = PublicKey::from_bytes(&pub_bytes, BiscuitAlgorithm::Ed25519).ok()?;
-        Some((priv_key, pub_key))
+        let kp = KeyPair::from(&priv_key);
+        if kp.public().to_bytes() != pub_key.to_bytes() {
+            return None;
+        }
+        Some(kp)
     }
-
-    fn generate_and_persist(dir: &std::path::Path) -> crate::Result<(PrivateKey, PublicKey)> {
+    fn generate_and_persist(dir: &std::path::Path) -> crate::Result<KeyPair> {
         std::fs::create_dir_all(dir).map_err(|e| {
             crate::AppError::Internal(format!("Failed to create biscuit key dir: {e}"))
         })?;
