@@ -152,7 +152,7 @@ fn map_diesel_result<T>(
         Ok(v) => Ok(v),
         Err(e) => match e {
             diesel::result::Error::NotFound => {
-                Err(crate::AppError::NotFound(not_found_msg.to_string()))
+                Err(crate::AppError::NotFound(not_found_msg.into()))
             }
             other => Err(crate::AppError::Internal(format!("{ctx}: {other}"))),
         },
@@ -161,7 +161,7 @@ fn map_diesel_result<T>(
 
 fn ensure_affected_nonzero(affected: usize, not_found_msg: &str) -> Result<()> {
     if affected == 0 {
-        Err(crate::AppError::NotFound(not_found_msg.to_string()))
+    Err(crate::AppError::NotFound(not_found_msg.into()))
     } else {
         Ok(())
     }
@@ -192,27 +192,23 @@ struct PostUpdateData {
 
 // Compute the final set of fields for a post update, based on the request and existing row
 fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpdateData {
-    let title = req
-        .title
-        .clone()
-        .unwrap_or_else(|| existing.title.clone());
-    let slug = req
-        .slug
-        .clone()
-        .unwrap_or_else(|| existing.slug.clone());
+    let title = req.title.clone().unwrap_or_else(|| existing.title.clone());
+    let slug = req.slug.clone().unwrap_or_else(|| existing.slug.clone());
     let content = req
         .content
         .clone()
         .unwrap_or_else(|| existing.content.clone());
     let excerpt = merge_opt_option(req.excerpt.as_ref(), existing.excerpt.as_ref());
     let tags = merge_opt(req.tags.as_ref(), &existing.tags);
-    let categories = req
-        .category
-        .as_ref()
-        .map_or_else(|| existing.categories.clone(), |cat| vec![cat.trim().to_lowercase()]);
+    let categories = req.category.as_ref().map_or_else(
+        || existing.categories.clone(),
+        |cat| vec![cat.trim().to_lowercase()],
+    );
     let meta_title = merge_opt_option(req.meta_title.as_ref(), existing.meta_title.as_ref());
-    let meta_description =
-        merge_opt_option(req.meta_description.as_ref(), existing.meta_description.as_ref());
+    let meta_description = merge_opt_option(
+        req.meta_description.as_ref(),
+        existing.meta_description.as_ref(),
+    );
 
     // status / published_at handling
     let mut status = req
@@ -448,7 +444,7 @@ impl Database {
         use crate::database::schema::users::dsl as users_dsl;
         use diesel::prelude::*;
 
-    let (_, limit, offset) = Self::paged_params(page, per_page);
+        let (_, limit, offset) = Self::paged_params(page, per_page);
 
         // Build and execute inside with_conn to centralize connection logic
         self.with_conn(|conn| {
@@ -476,6 +472,10 @@ impl Database {
         })
     }
 
+        // ... rest of impl Database ...
+
+
+    // impl UserRepository moved to module scope below
     /// ユーザー数を返します。
     ///
     /// # Errors
@@ -507,7 +507,8 @@ impl Database {
                 || query.count().get_result(conn),
                 "Failed to count users (filtered)",
             )?;
-            usize::try_from(total).map_err(|_| crate::AppError::Internal("users count overflow".into()))
+            usize::try_from(total)
+                .map_err(|_| crate::AppError::Internal("users count overflow".into()))
         })
     }
 
@@ -584,7 +585,7 @@ impl Database {
         use crate::database::schema::posts::dsl as posts_dsl;
 
         // Pagination guards
-    let (_, limit, offset) = Self::paged_params(page, per_page);
+        let (_, limit, offset) = Self::paged_params(page, per_page);
 
         self.with_conn(|conn| {
             let mut query = posts_dsl::posts.into_boxed();
@@ -607,7 +608,7 @@ impl Database {
     /// 更新対象が見つからない、または更新に失敗した場合にエラーを返します。
     pub fn update_post(&self, id: Uuid, request: &UpdatePostRequest) -> Result<Post> {
         // Step 1 load + compute
-    let (changes, updated_at) = self.prepare_post_update(id, request)?;
+        let (changes, updated_at) = self.prepare_post_update(id, request)?;
         // Step 2 persist
         let updated = self.persist_post_update(id, &changes)?;
         // Step 3 (optional future: trigger search index update / events) - placeholder uses updated_at to avoid unused warning
@@ -876,14 +877,23 @@ mod tests {
         let current = "current".to_string();
         let candidate_some = Some("cand".to_string());
         let candidate_none: Option<String> = None;
-    assert_eq!(merge_opt(candidate_some.as_ref(), &current), "cand".to_string());
-    assert_eq!(merge_opt(candidate_none.as_ref(), &current), current);
+        assert_eq!(
+            merge_opt(candidate_some.as_ref(), &current),
+            "cand".to_string()
+        );
+        assert_eq!(merge_opt(candidate_none.as_ref(), &current), current);
 
         let cur_opt: Option<String> = Some("cur".to_string());
         let cand_opt_some = Some("new".to_string());
         let cand_opt_none: Option<String> = None;
-    assert_eq!(merge_opt_option(cand_opt_some.as_ref(), cur_opt.as_ref()), Some("new".to_string()));
-    assert_eq!(merge_opt_option(cand_opt_none.as_ref(), cur_opt.as_ref()), Some("cur".to_string()));
+        assert_eq!(
+            merge_opt_option(cand_opt_some.as_ref(), cur_opt.as_ref()),
+            Some("new".to_string())
+        );
+        assert_eq!(
+            merge_opt_option(cand_opt_none.as_ref(), cur_opt.as_ref()),
+            Some("cur".to_string())
+        );
     }
 
     #[test]
