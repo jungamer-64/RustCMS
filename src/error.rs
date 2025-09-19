@@ -6,11 +6,12 @@
 //! Feature に応じて DB/Cache/Search 等の依存エラーを包含します。
 use crate::utils::api_types::{ApiResponse, ValidationError};
 use axum::{
-    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
+    Json,
 };
 use std::fmt;
+use tracing::{debug, error};
 use validator::ValidationErrors;
 
 #[derive(Debug)]
@@ -32,13 +33,22 @@ pub enum AppError {
     Biscuit(String),
     Search(String),
     Media(String),
+    // Back-compat string-based config error
     Config(String),
+    // Rich config load/deserialize error from `config` crate
+    ConfigLoad(config::ConfigError),
+    // Specific missing configuration value (e.g., required env var)
+    ConfigValueMissing(String),
+    // Configuration validation failed after loading
+    ConfigValidationError(String),
     IO(std::io::Error),
     Serde(serde_json::Error),
     #[cfg(feature = "search")]
     Tantivy(tantivy::TantivyError),
 }
 
+// Displayの実装を少しRustらしく簡潔にしました。
+// 元のコードでも機能は同じですが、こちらの方が一般的です。
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -55,26 +65,53 @@ impl fmt::Display for AppError {
             Self::Internal(msg) => write!(f, "Internal error: {msg}"),
             Self::BadRequest(msg) => write!(f, "Bad request: {msg}"),
             #[cfg(feature = "auth")]
-            Self::Argon2(err) => write!(f, "Argon2 error: {err}"),
+            Self::Argon2(err) => write!(f, "Password hashing error: {err}"),
             Self::Biscuit(msg) => write!(f, "Biscuit auth error: {msg}"),
             Self::Search(msg) => write!(f, "Search error: {msg}"),
             Self::Media(msg) => write!(f, "Media error: {msg}"),
             Self::Config(msg) => write!(f, "Configuration error: {msg}"),
+            Self::ConfigLoad(err) => write!(f, "Configuration loading error: {err}"),
+            Self::ConfigValueMissing(key) => write!(f, "Configuration value missing for key: {key}"),
+            Self::ConfigValidationError(msg) => write!(f, "Configuration validation error: {msg}"),
             Self::IO(err) => write!(f, "IO error: {err}"),
             Self::Serde(err) => write!(f, "Serialization error: {err}"),
             #[cfg(feature = "search")]
-            Self::Tantivy(err) => write!(f, "Search error: {err}"),
+            Self::Tantivy(err) => write!(f, "Tantivy search error: {err}"),
         }
     }
 }
 
-impl std::error::Error for AppError {}
+/// Provide source chaining for wrapped errors so callers can traverse
+/// the underlying cause (diesel, redis, io, serde, config, tantivy, ...).
+impl std::error::Error for AppError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            #[cfg(feature = "database")]
+            Self::Database(err) => Some(err as &(dyn std::error::Error + 'static)),
+            #[cfg(feature = "cache")]
+            Self::Redis(err) => Some(err as &(dyn std::error::Error + 'static)),
+            // argon2::Error does not currently implement std::error::Error
+            // in all versions; skip exposing it as a source to avoid type errors.
+            #[cfg(feature = "auth")]
+            Self::Argon2(_) => None,
+            Self::ConfigLoad(err) => Some(err as &(dyn std::error::Error + 'static)),
+            Self::IO(err) => Some(err as &(dyn std::error::Error + 'static)),
+            Self::Serde(err) => Some(err as &(dyn std::error::Error + 'static)),
+            #[cfg(feature = "search")]
+            Self::Tantivy(err) => Some(err as &(dyn std::error::Error + 'static)),
+            // Variants that hold Cow/strings or ValidationErrors do not have
+            // a boxed underlying `Error` to expose here.
+            _ => None,
+        }
+    }
+}
 
 #[cfg(feature = "database")]
 impl From<diesel::result::Error> for AppError {
     fn from(err: diesel::result::Error) -> Self {
         match err {
-            diesel::result::Error::NotFound => Self::NotFound("Resource not found".to_string()),
+            diesel::result::Error::NotFound => Self::NotFound("Resource not found".into()),
+            // その他のDBエラーはすべて内包する
             _ => Self::Database(err),
         }
     }
@@ -112,6 +149,12 @@ impl From<serde_json::Error> for AppError {
     }
 }
 
+impl From<config::ConfigError> for AppError {
+    fn from(err: config::ConfigError) -> Self {
+        Self::ConfigLoad(err)
+    }
+}
+
 #[cfg(feature = "search")]
 impl From<tantivy::TantivyError> for AppError {
     fn from(err: tantivy::TantivyError) -> Self {
@@ -120,66 +163,96 @@ impl From<tantivy::TantivyError> for AppError {
 }
 
 impl IntoResponse for AppError {
+    #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
     fn into_response(self) -> Response {
-        let (status, error_message, validation_details): (
-            StatusCode,
-            &str,
-            Option<Vec<ValidationError>>,
-        ) = match &self {
+        // Delegate classification to AppError::summary
+        let summary = self.summary();
+        error!(summary = %summary, "Converting error into HTTP response");
+        debug!(error.details = ?self, "Full error details");
+
+        let (status, error_message, validation_details) = match &self {
+            // 5xx系のエラー。クライアントには汎用的なメッセージを返し、詳細はログで確認する。
             #[cfg(feature = "database")]
             Self::Database(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Database error occurred",
+                "A database error occurred",
                 None,
             ),
             #[cfg(feature = "cache")]
             Self::Redis(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Cache error occurred",
+                "A cache error occurred",
                 None,
             ),
+            // For internal server errors we avoid returning internal message
+            // verbatim to clients to prevent accidental leakage of sensitive
+            // implementation details. The log above contains the full details
+            // for operators.
+            Self::Internal(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "An internal server error occurred",
+                None,
+            ),
+            #[cfg(feature = "auth")]
+            Self::Argon2(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "A password hashing error occurred",
+                None,
+            ),
+            Self::Search(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str(), None),
+            Self::Config(_) | Self::ConfigLoad(_) | Self::ConfigValueMissing(_) | Self::ConfigValidationError(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "A server configuration error occurred",
+                None
+            ),
+            Self::IO(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "An I/O error occurred",
+                None,
+            ),
+            #[cfg(feature = "search")]
+            Self::Tantivy(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "A search service error occurred",
+                None,
+            ),
+
+            // 4xx系のエラー。クライアントに原因が分かるようなメッセージを返す。
             Self::Validation(ve) => {
-                let mut list = Vec::new();
-                for (field, errs) in ve.field_errors() {
-                    for e in errs {
-                        let message = e
-                            .message
-                            .clone()
-                            .unwrap_or_else(|| std::borrow::Cow::from("validation error"));
-                        list.push(ValidationError {
+                let details = ve
+                    .field_errors()
+                    .into_iter()
+                    .flat_map(|(field, errors)| {
+                        errors.iter().map(move |e| ValidationError {
                             field: field.to_string(),
-                            message: message.to_string(),
-                        });
-                    }
-                }
-                (StatusCode::BAD_REQUEST, "Invalid input data", Some(list))
+                            message: e.message.as_ref().map_or_else(
+                                || "Invalid value".to_string(),
+                                |s| s.to_string(),
+                            ),
+                        })
+                    })
+                    .collect();
+                (
+            StatusCode::UNPROCESSABLE_ENTITY, // 400 Bad Requestより具体的
+                "Invalid input",
+                    Some(details),
+                )
             }
             Self::Authentication(msg) => (StatusCode::UNAUTHORIZED, msg.as_str(), None),
             Self::Authorization(msg) => (StatusCode::FORBIDDEN, msg.as_str(), None),
             Self::NotFound(msg) => (StatusCode::NOT_FOUND, msg.as_str(), None),
             Self::Conflict(msg) => (StatusCode::CONFLICT, msg.as_str(), None),
             Self::RateLimit(msg) => (StatusCode::TOO_MANY_REQUESTS, msg.as_str(), None),
-            Self::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str(), None),
             Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.as_str(), None),
-            #[cfg(feature = "auth")]
-            Self::Argon2(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Password hashing error",
-                None,
-            ),
             Self::Biscuit(msg) => (StatusCode::UNAUTHORIZED, msg.as_str(), None),
-            Self::Search(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str(), None),
             Self::Media(msg) => (StatusCode::BAD_REQUEST, msg.as_str(), None),
-            Self::Config(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str(), None),
-            Self::IO(_) => (StatusCode::INTERNAL_SERVER_ERROR, "IO error occurred", None),
-            Self::Serde(_) => (StatusCode::BAD_REQUEST, "Serialization error", None),
-            #[cfg(feature = "search")]
-            Self::Tantivy(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Search service error",
+            Self::Serde(_) => (
+                StatusCode::BAD_REQUEST,
+                "Failed to process request body",
                 None,
             ),
         };
+
         let body = validation_details.map_or_else(
             || Json(ApiResponse::error(error_message.to_string())),
             |details| {
@@ -189,8 +262,41 @@ impl IntoResponse for AppError {
                 ))
             },
         );
+
         (status, body).into_response()
     }
 }
 
+impl AppError {
+    /// Return a short, non-sensitive summary suitable for logs or client-facing
+    /// short messages (not the detailed error text).
+    pub fn summary(&self) -> &'static str {
+        match self {
+            Self::Validation(_) => "validation error",
+            Self::Authentication(_) => "authentication failure",
+            Self::Authorization(_) => "authorization failure",
+            Self::NotFound(_) => "resource not found",
+            Self::Conflict(_) => "conflict",
+            Self::RateLimit(_) => "rate limited",
+            Self::BadRequest(_) => "bad request",
+            Self::Internal(_) => "internal server error",
+            Self::IO(_) => "io error",
+            Self::Serde(_) => "serde error",
+            #[cfg(feature = "database")]
+            Self::Database(_) => "database error",
+            #[cfg(feature = "cache")]
+            Self::Redis(_) => "cache error",
+            #[cfg(feature = "auth")]
+            Self::Argon2(_) => "password hashing error",
+            Self::Biscuit(_) => "biscuit auth error",
+            Self::Search(_) => "search error",
+            Self::Media(_) => "media error",
+            Self::Config(_) | Self::ConfigLoad(_) | Self::ConfigValueMissing(_) | Self::ConfigValidationError(_) => "configuration error",
+            #[cfg(feature = "search")]
+            Self::Tantivy(_) => "search backend error",
+        }
+    }
+}
+
+// Result型エイリアスはモジュールの最後に定義するのが一般的
 pub type Result<T> = std::result::Result<T, AppError>;
