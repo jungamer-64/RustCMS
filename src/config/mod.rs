@@ -186,23 +186,28 @@ impl Default for SecurityConfig {
 pub struct LoggingConfig {
     #[serde(default = "default_log_level")]
     pub level: String,
-    #[serde(default = "default_log_format")]
-    pub format: String, // "text" | "json"
+    #[serde(default)]
+    pub format: LogFormat,
 }
 
 fn default_log_level() -> String {
     // String cannot be returned from a const fn yet in stable, but helper stays small and pure
     String::from("info")
 }
-fn default_log_format() -> String {
-    String::from("text")
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum LogFormat {
+    #[default]
+    Text,
+    Json,
 }
 
 impl Default for LoggingConfig {
     fn default() -> Self {
         Self {
             level: default_log_level(),
-            format: default_log_format(),
+            format: LogFormat::default(),
         }
     }
 }
@@ -237,10 +242,10 @@ impl Default for MonitoringConfig {
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
-            host: String::from("0.0.0.0"),
-            port: 3000,
-            max_request_size: 10 * 1024 * 1024, // 10MB
-            request_timeout: 30,
+            host: String::from(ServerConfig::DEFAULT_HOST),
+            port: ServerConfig::DEFAULT_PORT,
+            max_request_size: ServerConfig::DEFAULT_MAX_REQUEST_SIZE,
+            request_timeout: ServerConfig::DEFAULT_REQUEST_TIMEOUT,
             worker_threads: None,
         }
     }
@@ -275,8 +280,8 @@ impl Default for SearchConfig {
     fn default() -> Self {
         Self {
             index_path: PathBuf::from("./data/search_index"),
-            writer_memory: 50_000_000, // 50MB
-            max_results: 100,
+            writer_memory: SearchConfig::DEFAULT_WRITER_MEMORY,
+            max_results: SearchConfig::DEFAULT_MAX_RESULTS,
             enable_fuzzy: true,
             fuzzy_distance: 2,
         }
