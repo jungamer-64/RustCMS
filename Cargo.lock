@@ -866,6 +866,7 @@ dependencies = [
  "anyhow",
  "argon2",
  "assert_cmd",
+ "async-trait",
  "axum",
  "axum-extra",
  "base64 0.22.1",
