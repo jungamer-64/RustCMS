@@ -100,7 +100,7 @@ pub enum FilterOperator {
 }
 
 /// Search service implementation
-#[allow(dead_code)]
+#[cfg(feature = "search")]
 #[derive(Clone)]
 pub struct SearchService {
     index: Index,
@@ -122,6 +122,7 @@ pub struct SearchSchema {
     pub created_at: Field,
 }
 
+#[cfg(feature = "search")]
 impl SearchService {
     /// Create new search service
     ///
@@ -256,6 +257,17 @@ impl SearchService {
             }
         }
         total_size
+    }
+
+    /// Perform best-effort shutdown/flush of the search backend (commit pending writes)
+    #[allow(clippy::unused_async)]
+    pub async fn shutdown(&self) -> Result<()> {
+        // Acquire the writer lock and commit pending changes
+        let mut writer = self.writer.write().await;
+        writer
+            .commit()
+            .map_err(|e| crate::AppError::Internal(format!("Search commit failed: {e}").into()))?;
+        Ok(())
     }
 }
 
