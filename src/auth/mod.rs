@@ -40,11 +40,13 @@ use biscuit_auth::{
     error::Format as BiscuitFormat,
 };
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::HashMap; // InMemory 実装でのみ使用
 use std::fmt::Write;
 use std::sync::Arc;
 use thiserror::Error;
+use tracing::{debug, error, info, warn};
 use tokio::sync::RwLock;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -52,20 +54,22 @@ use uuid::Uuid;
 use crate::{
     Result,
     config::AuthConfig,
-    database::Database,
-    models::{CreateUserRequest, User, UserRole},
-    utils::{common_types::UserInfo, password},
+    models::{User, UserRole},
+    repositories::UserRepository,
+    utils::{common_types::{UserInfo, SessionId}, password},
 };
+use std::future::Future;
+use std::pin::Pin;
 
-// --- Key file helper funcs (extracted for reduced complexity in try_load_dir_keys) ---
+// --- Key file helper funcs (共通読込ユーティリティ) ---
 fn read_file_string(path: &std::path::Path, label: &str) -> crate::Result<String> {
     std::fs::read_to_string(path).map_err(|e| {
-                    crate::AppError::Internal(format!("Failed reading biscuit {label} key file: {e}"))
+        crate::AppError::Internal(format!("Failed reading biscuit {label} key file: {e}"))
     })
 }
 fn decode_key_b64(data: &str, label: &str) -> crate::Result<Vec<u8>> {
     STANDARD.decode(data).map_err(|e| {
-                    crate::AppError::Internal(format!("Failed to decode biscuit {label} key b64: {e}"))
+        crate::AppError::Internal(format!("Failed to decode biscuit {label} key b64: {e}"))
     })
 }
 fn read_biscuit_private_key(path: &std::path::Path) -> crate::Result<PrivateKey> {
@@ -79,6 +83,15 @@ fn read_biscuit_public_key(path: &std::path::Path) -> crate::Result<PublicKey> {
     let bytes = decode_key_b64(&b64, "public")?;
     PublicKey::from_bytes(&bytes, BiscuitAlgorithm::Ed25519)
         .map_err(|e| crate::AppError::Internal(format!("Failed to parse biscuit public key: {e}")))
+}
+
+#[inline]
+fn mask_session_id(sid: &SessionId) -> String {
+    let s = sid.as_ref();
+    if s.len() <= 6 {
+        return "***".to_string();
+    }
+    format!("{}…{}", &s[..3], &s[s.len() - 3..])
 }
 
 #[derive(Debug, Error)]
