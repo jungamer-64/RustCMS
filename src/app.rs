@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "cache")]
 use std::time::Duration;
 use std::{sync::Arc, time::Instant};
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, broadcast};
 use tracing::{debug, error, info, warn};
 use utoipa::ToSchema;
 
@@ -116,6 +116,8 @@ pub struct AppState {
 
     /// Application start time for uptime calculations
     pub start_time: Instant,
+    /// Broadcast sender used to notify background tasks to exit during shutdown
+    pub shutdown_tx: broadcast::Sender<()>,
 }
 
 /// Application metrics for monitoring
@@ -280,6 +282,7 @@ impl AppStateBuilder {
             metrics: self.metrics,
             rate_limiter: Arc::new(FixedWindowLimiter::new(100, 60)), // default; real values set in from_config
             start_time: self.start_time,
+            shutdown_tx: broadcast::channel(1).0,
         }
     }
 }
@@ -432,6 +435,8 @@ impl AppState {
         {
             // Clone for task
             let state_clone = app_state.clone();
+            // Create a receiver for shutdown notifications
+            let mut shutdown_rx = state_clone.shutdown_tx.subscribe();
             // Cleanup interval (seconds) via env or default 300
             let interval_secs: u64 = std::env::var("AUTH_SESSION_CLEAN_INTERVAL_SECS")
                 .ok()
@@ -441,14 +446,25 @@ impl AppState {
                 let mut ticker =
                     tokio::time::interval(std::time::Duration::from_secs(interval_secs));
                 loop {
-                    ticker.tick().await;
-                    // Clean expired
-                    state_clone.auth.cleanup_expired_sessions().await;
-                    // Update metric snapshot
-                    let active = state_clone.auth.get_active_session_count().await as u64;
-                    if let Ok(mut m) = state_clone.metrics.try_write() {
-                        // try_write to avoid blocking
-                        m.active_sessions = active;
+                    tokio::select! {
+                        _ = ticker.tick() => {
+                            // Clean expired
+                            state_clone.auth.cleanup_expired_sessions().await;
+                            // Update metric snapshot
+                            let active = state_clone.auth.get_active_session_count().await as u64;
+                            if let Ok(mut m) = state_clone.metrics.try_write() {
+                                // try_write to avoid blocking
+                                m.active_sessions = active;
+                            }
+                        }
+                        Ok(_) = shutdown_rx.recv() => {
+                            info!("Auth cleanup task received shutdown");
+                            break;
+                        }
+                        else => {
+                            // Channel closed or other; break to be safe
+                            break;
+                        }
                     }
                 }
             });
@@ -457,6 +473,7 @@ impl AppState {
         // CSRF token cleanup task (security hardening)
         {
             let state_clone = app_state.clone();
+            let mut shutdown_rx = state_clone.shutdown_tx.subscribe();
             let cleanup_interval_secs: u64 = std::env::var("CSRF_CLEANUP_INTERVAL_SECS")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -465,8 +482,16 @@ impl AppState {
                 let mut ticker =
                     tokio::time::interval(std::time::Duration::from_secs(cleanup_interval_secs));
                 loop {
-                    ticker.tick().await;
-                    state_clone.csrf.cleanup_expired_tokens().await;
+                    tokio::select! {
+                        _ = ticker.tick() => {
+                            state_clone.csrf.cleanup_expired_tokens().await;
+                        }
+                        Ok(_) = shutdown_rx.recv() => {
+                            info!("CSRF cleanup task received shutdown");
+                            break;
+                        }
+                        else => { break; }
+                    }
                 }
             });
         }
@@ -637,6 +662,38 @@ impl AppState {
     #[must_use]
     pub fn uptime(&self) -> u64 {
         self.start_time.elapsed().as_secs()
+    }
+
+    /// Signal background tasks and services to shutdown. This will send a broadcast
+    /// notification to any subscribed background tasks and perform best-effort
+    /// cleanup of services (flush writers, close pools, etc.). This function
+    /// should be called during application graceful shutdown.
+    pub async fn shutdown(&self) {
+        info!("AppState shutdown initiated");
+        // Send broadcast (ignore error if there are no receivers)
+        let _ = self.shutdown_tx.send(());
+
+        // Attempt service-specific shutdown/cleanup
+        #[cfg(feature = "search")]
+        {
+            if let Err(e) = self.search.shutdown().await {
+                warn!(error=?e, "search shutdown failed during AppState shutdown");
+            }
+        }
+
+        #[cfg(feature = "database")]
+        {
+            // Best-effort DB pool close if supported
+            if let Err(e) = self.database.close().await {
+                warn!(error=?e, "database close failed during shutdown");
+            }
+        }
+
+    // Telemetry shutdown (best-effort no-op by default)
+    #[cfg(feature = "monitoring")]
+    crate::telemetry::shutdown_telemetry();
+
+        info!("AppState shutdown complete (signalled background tasks)");
     }
 
     /// Rate limit helper for IP addresses. Returns true if request allowed.
