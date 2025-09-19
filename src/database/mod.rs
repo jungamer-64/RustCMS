@@ -154,7 +154,7 @@ fn map_diesel_result<T>(
             diesel::result::Error::NotFound => {
                 Err(crate::AppError::NotFound(not_found_msg.into()))
             }
-            other => Err(crate::AppError::Internal(format!("{ctx}: {other}"))),
+            other => Err(crate::AppError::Internal(format!("{ctx}: {other}").into())),
         },
     }
 }
@@ -172,7 +172,7 @@ fn map_internal_err<T, E: std::fmt::Display>(
     res: std::result::Result<T, E>,
     ctx: &str,
 ) -> Result<T> {
-    res.map_err(|e| crate::AppError::Internal(format!("{ctx}: {e}")))
+    res.map_err(|e| crate::AppError::Internal(format!("{ctx}: {e}").into()))
 }
 
 // Data holder for post update fields to keep update_post lean and testable
