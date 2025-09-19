@@ -1,20 +1,7 @@
-<<<<<<< HEAD
 //! `OpenAPI` ドキュメント生成（簡易版）
 //!
-//! 依存の安定化まで、一時的に最小限の `utoipa` 宣言でコンパイルを成立させています。
-//! `SecurityAddon` で Bearer（Biscuit）認証スキームを動的に追加します。
-//!
-//! Feature によるスキーマ差分:
-//! - `legacy-auth-flat` 有効: 歴史的 `LoginResponse` を含めるバリアントを使用。
-//! - 無効: `LoginResponse` を含めず、統一スキーマ（`AuthSuccessResponse`）のみを前提とします。
-//!
-//! 将来的に依存問題が解消され次第、フルスキーマに戻します（`docs/FEATURES_JA.md` 参照）。
-
-#![allow(clippy::needless_for_each)]
-//! `OpenAPI` Documentation - Simplified for compilation
-//!
-//! Temporary simplified `OpenAPI` configuration to resolve compilation issues
-//! Full API documentation will be restored after fixing dependencies
+//! Temporary simplified `OpenAPI` configuration to resolve compilation issues.
+//! Adds a Bearer (Biscuit) security scheme dynamically to avoid macro incompatibilities.
 
 #![allow(clippy::needless_for_each)]
 
@@ -29,55 +16,59 @@ struct SecurityAddon;
 
 impl Modify for SecurityAddon {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-    let components = openapi.components.get_or_insert(utoipa::openapi::Components::default());
+        let components = openapi
+            .components
+            .get_or_insert(utoipa::openapi::Components::default());
         let mut http = Http::new(HttpAuthScheme::Bearer);
         http.bearer_format = Some("Biscuit".to_string());
         components.add_security_scheme("BearerAuth", SecurityScheme::Http(http));
     }
 }
 
-// Minimal, well-formed OpenApi declarations: one for legacy feature, one for non-legacy.
-
-#[cfg(feature = "legacy-auth-flat")]
+// Single ApiDoc definition: both legacy and non-legacy features use the same content.
 #[allow(clippy::needless_for_each)]
 #[derive(OpenApi)]
 #[openapi(
     info(
-        title = "Enterprise CMS API",
+        title = "CMS API",
         version = "2.0.0",
         description = "Simplified API docs for compilation"
     ),
     paths(
-        crate::handlers::health::health_check
+        crate::handlers::health::health_check,
+        // Auth
+        crate::handlers::auth::register,
+        crate::handlers::auth::login,
+        crate::handlers::auth::logout,
+        crate::handlers::auth::profile,
+        crate::handlers::auth::refresh_token,
+        // Posts
+        crate::handlers::posts::create_post,
+        crate::handlers::posts::get_post,
+        crate::handlers::posts::get_posts,
+        crate::handlers::posts::update_post,
+        crate::handlers::posts::delete_post,
+        crate::handlers::posts::get_posts_by_tag,
+        crate::handlers::posts::publish_post,
+        // Search
+        crate::handlers::search::search,
+        crate::handlers::search::suggest,
+        crate::handlers::search::search_stats,
+        crate::handlers::search::reindex,
+        crate::handlers::search::search_health,
+        // API Keys
+        crate::handlers::api_keys::create_api_key,
+        crate::handlers::api_keys::list_api_keys,
+        crate::handlers::api_keys::revoke_api_key
     ),
     components(
         schemas(
             AppMetrics,
             HealthStatus,
-            ServiceHealth
-        )
-    ),
-    modifiers(&SecurityAddon)
-)]
-pub struct ApiDoc;
-
-#[cfg(not(feature = "legacy-auth-flat"))]
-#[allow(clippy::needless_for_each)]
-#[derive(OpenApi)]
-#[openapi(
-    info(
-        title = "Enterprise CMS API",
-        version = "2.0.0",
-        description = "Simplified API docs for compilation"
-    ),
-    paths(
-        crate::handlers::health::health_check
-    ),
-    components(
-        schemas(
-            AppMetrics,
-            HealthStatus,
-            ServiceHealth
+            ServiceHealth,
+            crate::utils::auth_response::AuthSuccessResponse,
+            crate::utils::auth_response::AuthTokens,
+            crate::utils::common_types::UserInfo
         )
     ),
     modifiers(&SecurityAddon)
