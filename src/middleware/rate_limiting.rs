@@ -69,11 +69,11 @@ where
         let mut service = self.service.clone();
 
         // Extract IP early
-    let ip = extract_ip_from_request(&request).unwrap_or_else(|| IpAddr::from([127, 0, 0, 1]));
+        let ip = extract_ip_from_request(&request).unwrap_or_else(|| IpAddr::from([127, 0, 0, 1]));
 
         // Pull state extension
         let state_opt = request.extensions().get::<AppState>().cloned();
-    let allowed = state_opt.as_ref().map_or(true, |s| s.allow_ip(&ip)); // if no state, fail open
+        let allowed = state_opt.as_ref().map_or(true, |s| s.allow_ip(&ip)); // if no state, fail open
 
         #[cfg(feature = "monitoring")]
         {
@@ -107,6 +107,7 @@ where
 
 #[inline]
 #[allow(clippy::cast_precision_loss)]
+#[cfg(feature = "monitoring")]
 const fn usize_to_f64(n: usize) -> f64 {
     n as f64
 }
