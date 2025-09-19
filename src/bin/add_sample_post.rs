@@ -6,23 +6,10 @@ use cms_backend::{
 };
 
 #[tokio::main]
-async fn main() {
-    // Load config and database
-    let cfg = match Config::from_env() {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("Failed to load config: {e}");
-            std::process::exit(1);
-        }
-    };
-
-    let db = match Database::new(&cfg.database).await {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("Failed to init database: {e}");
-            std::process::exit(1);
-        }
-    };
+async fn main() -> cms_backend::Result<()> {
+    // Load config and initialize database; propagate errors to the caller
+    let cfg = Config::from_env()?;
+    let db = Database::new(&cfg.database).await?;
 
     // Build a minimal CreatePostRequest
     let req = CreatePostRequest {
@@ -40,13 +27,8 @@ async fn main() {
         status: Some(PostStatus::Published),
     };
 
-    match db.create_post(req) {
-        Ok(post) => {
-            println!("Inserted sample post: {} (id={})", post.title, post.id);
-        }
-        Err(e) => {
-            eprintln!("Failed to insert sample post: {e}");
-            std::process::exit(1);
-        }
-    }
+    let post = db.create_post(req)?;
+    println!("Inserted sample post: {} (id={})", post.title, post.id);
+
+    Ok(())
 }
