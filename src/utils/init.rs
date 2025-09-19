@@ -17,6 +17,18 @@ pub fn init_logging_and_config() -> Result<Config> {
     Ok(config)
 }
 
+/// Initialize telemetry with verbose option and return loaded `Config`.
+/// Prefer this from CLI binaries that accept a --verbose flag.
+pub fn init_logging_and_config_with_verbose(verbose: bool) -> Result<Config> {
+    // Initialize tracing subscriber (idempotent)
+    let _ = telemetry::init_telemetry_with_verbose(verbose);
+
+    // Load configuration
+    let config = Config::from_env()?;
+
+    Ok(config)
+}
+
 /// Synchronous environment initialization for small bins
 pub fn init_env() {
     // Load .env file if present
@@ -33,6 +45,12 @@ pub fn init_env() {
 /// 設定のロードや `AppState` の初期化に失敗した場合、エラーを返します。
 pub async fn init_app_state() -> crate::Result<crate::AppState> {
     let config = init_logging_and_config()?;
+    crate::AppState::from_config(config).await
+}
+
+/// Initialize `AppState` honoring a verbose flag used by CLI tools.
+pub async fn init_app_state_with_verbose(verbose: bool) -> crate::Result<crate::AppState> {
+    let config = init_logging_and_config_with_verbose(verbose)?;
     crate::AppState::from_config(config).await
 }
 
