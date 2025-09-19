@@ -74,7 +74,9 @@ fn append_env_file(path: &Path, priv_b64: &str, pub_b64: &str, force: bool) -> s
         create_env_file(path, priv_b64, pub_b64)
     } else {
         let content = fs::read_to_string(path)?;
-        if content.contains("BISCUIT_PRIVATE_KEY_B64=") || content.contains("BISCUIT_PUBLIC_KEY_B64=") {
+        if content.contains("BISCUIT_PRIVATE_KEY_B64=")
+            || content.contains("BISCUIT_PUBLIC_KEY_B64=")
+        {
             replace_env_entries(path, &content, priv_b64, pub_b64, force)
         } else {
             append_env_entries(path, priv_b64, pub_b64)
@@ -90,7 +92,13 @@ fn create_env_file(path: &Path, priv_b64: &str, pub_b64: &str) -> std::io::Resul
     Ok(())
 }
 
-fn replace_env_entries(path: &Path, content: &str, priv_b64: &str, pub_b64: &str, force: bool) -> std::io::Result<()> {
+fn replace_env_entries(
+    path: &Path,
+    content: &str,
+    priv_b64: &str,
+    pub_b64: &str,
+    force: bool,
+) -> std::io::Result<()> {
     if !force {
         return Err(std::io::Error::new(
             std::io::ErrorKind::AlreadyExists,
@@ -104,13 +112,18 @@ fn replace_env_entries(path: &Path, content: &str, priv_b64: &str, pub_b64: &str
 fn filter_out_biscuit_lines(content: &str) -> Vec<&str> {
     content
         .lines()
-        .filter(|line| !(
-            line.starts_with("BISCUIT_PRIVATE_KEY_B64=") || line.starts_with("BISCUIT_PUBLIC_KEY_B64=")
-        ))
+    .filter(|line| !(
+        line.starts_with("BISCUIT_PRIVATE_KEY_B64=") || line.starts_with("BISCUIT_PUBLIC_KEY_B64=")
+    ))
         .collect()
 }
 
-fn write_filtered_env_and_keys(path: &Path, lines: &[&str], priv_b64: &str, pub_b64: &str) -> std::io::Result<()> {
+fn write_filtered_env_and_keys(
+    path: &Path,
+    lines: &[&str],
+    priv_b64: &str,
+    pub_b64: &str,
+) -> std::io::Result<()> {
     let mut f = fs::File::create(path)?;
     for line in lines {
         writeln!(f, "{line}")?;
@@ -184,7 +197,9 @@ fn handle_files_output(ctx: &FilesOutputContext<'_>) -> cms_backend::Result<()> 
     gen_biscuit_keys_manifest::handle_files_output_full(ctx)
 }
 
-fn resolve_paths_and_write(ctx: &FilesOutputContext<'_>) -> (std::path::PathBuf, std::path::PathBuf) {
+fn resolve_paths_and_write(
+    ctx: &FilesOutputContext<'_>,
+) -> (std::path::PathBuf, std::path::PathBuf) {
     let (priv_path, pub_path) = resolve_output_paths(ctx.path, ctx.vopts.versioned);
     // Write files (with optional backups)
     write_files_flow(
@@ -218,7 +233,8 @@ fn create_dir_and_resolve_paths(path: &Path) -> cms_backend::Result<()> {
     if let Err(e) = fs::create_dir_all(path) {
         return Err(cms_backend::AppError::Internal(format!(
             "Failed to create out-dir {}: {}",
-            path.display(), e
+            path.display(),
+            e
         )));
     }
     Ok(())
@@ -364,15 +380,36 @@ fn maybe_backup_env(
     }
 }
 
-fn perform_env_write(path: &Path, priv_b64: &str, pub_b64: &str, force: bool) -> std::io::Result<()> {
+fn perform_env_write(
+    path: &Path,
+    priv_b64: &str,
+    pub_b64: &str,
+    force: bool,
+) -> std::io::Result<()> {
     append_env_file(path, priv_b64, pub_b64, force)
 }
 
-fn perform_env_write_and_report(path: &Path, priv_b64: &str, pub_b64: &str, force: bool, envfile: &str) {
+fn perform_env_write_and_report(
+    path: &Path,
+    priv_b64: &str,
+    pub_b64: &str,
+    force: bool,
+    envfile: &str,
+) {
     let res = perform_env_write(path, priv_b64, pub_b64, force);
     report_env_result(envfile, res, force);
 }
+// Backup orchestration is implemented in `gen_biscuit_keys_backup.rs`.
+// We call it directly where needed to avoid extra wrapper functions in this
+// binary, which keeps this file smaller and simpler.
 
+// alias updates are now handled by the manifest module; no local helper needed.
+// Backup related helpers moved to `gen_biscuit_keys_backup.rs` to reduce file size and complexity.
+// Thin wrappers delegate to the backup module functions.
+// Delegate backup orchestration to the backup module directly. The module
+// contains the implementation and helpers; keeping only delegations here
+// avoids duplicating complex logic in the binary's main file.
+// All call sites in this file call into the module directly now.
 // clap-based argument parsing is used; helper suggestion/levenshtein removed.
 
 #[derive(Parser)]
@@ -499,7 +536,10 @@ fn decide_and_perform_outputs(opts: OutputsOptions<'_>, args: &Args) -> cms_back
 fn do_perform_outputs(opts: OutputsOptions<'_>, args: &Args) -> cms_backend::Result<()> {
     // Normalize format to lowercase before dispatching
     let normalized = opts.format.map(|s| s.to_ascii_lowercase());
-    let opts = OutputsOptions { format: normalized.as_deref(), ..opts };
+    let opts = OutputsOptions {
+        format: normalized.as_deref(),
+        ..opts
+    };
     perform_outputs(opts, args)
 }
 
@@ -518,44 +558,123 @@ fn perform_outputs(opts: OutputsOptions<'_>, args: &Args) -> cms_backend::Result
     Ok(())
 }
 
-fn perform_outputs_with_format(f: &str, opts: OutputsOptions<'_>, args: &Args) -> cms_backend::Result<()> {
+fn perform_outputs_with_format(
+    f: &str,
+    opts: OutputsOptions<'_>,
+    args: &Args,
+) -> cms_backend::Result<()> {
     match f {
-        "files" => handle_files_for_dir(opts.out_dir.unwrap_or("keys"), args, opts.backup, opts.force, opts.priv_b64, opts.pub_b64)?,
+        "files" => handle_files_for_dir(
+            opts.out_dir.unwrap_or("keys"),
+            args,
+            opts.backup,
+            opts.force,
+            opts.priv_b64,
+            opts.pub_b64,
+        )?,
         "env" => {
             let env_path = opts.env_file.unwrap_or(".env");
-            handle_env_output(env_path, opts.backup, args.backup_dir.as_deref(), args.max_backups, args.backup_compress, opts.force, opts.priv_b64, opts.pub_b64);
+            handle_env_output(
+                env_path,
+                opts.backup,
+                args.backup_dir.as_deref(),
+                args.max_backups,
+                args.backup_compress,
+                opts.force,
+                opts.priv_b64,
+                opts.pub_b64,
+            );
         }
         "both" => {
-            handle_files_for_dir(opts.out_dir.unwrap_or("keys"), args, opts.backup, opts.force, opts.priv_b64, opts.pub_b64)?;
-            handle_env_output(opts.env_file.unwrap_or(".env"), opts.backup, args.backup_dir.as_deref(), args.max_backups, args.backup_compress, opts.force, opts.priv_b64, opts.pub_b64);
+            handle_files_for_dir(
+                opts.out_dir.unwrap_or("keys"),
+                args,
+                opts.backup,
+                opts.force,
+                opts.priv_b64,
+                opts.pub_b64,
+            )?;
+            handle_env_output(
+                opts.env_file.unwrap_or(".env"),
+                opts.backup,
+                args.backup_dir.as_deref(),
+                args.max_backups,
+                args.backup_compress,
+                opts.force,
+                opts.priv_b64,
+                opts.pub_b64,
+            );
         }
         _ => {}
     }
     Ok(())
 }
 
-fn perform_outputs_without_format(opts: OutputsOptions<'_>, args: &Args) -> cms_backend::Result<()> {
+fn perform_outputs_without_format(
+    opts: OutputsOptions<'_>,
+    args: &Args,
+) -> cms_backend::Result<()> {
     if let Some(dir) = opts.out_dir {
-        handle_files_for_dir(dir, args, opts.backup, opts.force, opts.priv_b64, opts.pub_b64)?;
+        handle_files_for_dir(
+            dir,
+            args,
+            opts.backup,
+            opts.force,
+            opts.priv_b64,
+            opts.pub_b64,
+        )?;
     }
     if let Some(envfile) = opts.env_file {
-        handle_env_output(envfile, opts.backup, args.backup_dir.as_deref(), args.max_backups, args.backup_compress, opts.force, opts.priv_b64, opts.pub_b64);
+        handle_env_output(
+            envfile,
+            opts.backup,
+            args.backup_dir.as_deref(),
+            args.max_backups,
+            args.backup_compress,
+            opts.force,
+            opts.priv_b64,
+            opts.pub_b64,
+        );
     }
     Ok(())
 }
 
 fn make_files_options(args: &Args, force: bool) -> FilesWriteOptions {
-    FilesWriteOptions { backup_dir: args.backup_dir.clone(), max_backups: args.max_backups, compress_opt: Some(args.backup_compress), force }
+    FilesWriteOptions {
+        backup_dir: args.backup_dir.clone(),
+        max_backups: args.max_backups,
+        compress_opt: Some(args.backup_compress),
+        force,
+    }
 }
 
 fn make_version_options(args: &Args) -> VersionOptions {
-    VersionOptions { versioned: args.versioned, latest_alias: args.latest_alias, no_manifest: args.no_manifest, prune: args.prune }
+    VersionOptions {
+        versioned: args.versioned,
+        latest_alias: args.latest_alias,
+        no_manifest: args.no_manifest,
+        prune: args.prune,
+    }
 }
 
-fn handle_files_for_dir(dir: &str, args: &Args, backup: bool, force: bool, priv_b64: &str, pub_b64: &str) -> cms_backend::Result<()> {
+fn handle_files_for_dir(
+    dir: &str,
+    args: &Args,
+    backup: bool,
+    force: bool,
+    priv_b64: &str,
+    pub_b64: &str,
+) -> cms_backend::Result<()> {
     let options = make_files_options(args, force);
     let vopts = make_version_options(args);
-    let ctx = FilesOutputContext { path: Path::new(dir), vopts: &vopts, options: &options, backup, priv_b64, pub_b64 };
+    let ctx = FilesOutputContext {
+        path: Path::new(dir),
+        vopts: &vopts,
+        options: &options,
+        backup,
+        priv_b64,
+        pub_b64,
+    };
     handle_files_output(&ctx)
 }
 
