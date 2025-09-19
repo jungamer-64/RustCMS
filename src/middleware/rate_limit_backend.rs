@@ -12,12 +12,16 @@ use tokio::time::interval;
 #[cfg(feature = "monitoring")]
 #[inline]
 #[allow(clippy::cast_precision_loss)]
-const fn u64_to_f64(n: u64) -> f64 { n as f64 }
+const fn u64_to_f64(n: u64) -> f64 {
+    n as f64
+}
 
 #[cfg(feature = "monitoring")]
 #[inline]
 #[allow(clippy::cast_precision_loss)]
-const fn usize_to_f64(n: usize) -> f64 { n as f64 }
+const fn usize_to_f64(n: usize) -> f64 {
+    n as f64
+}
 
 /// Trait abstraction for API Key failure-based rate limiting backends.
 /// `record_failure()` returns true if the caller should now be rate limited (i.e. block request).
@@ -93,7 +97,7 @@ impl InMemoryRateLimiter {
                         continue;
                     }
                     let win = this.window;
-                    let before_len = map.len(); // monitoring only
+                    let _before_len = map.len(); // monitoring only
                     map.retain(|_, (_c, ts)| now.duration_since(*ts) <= win);
                     // If still over max_tracked (pathological), drop oldest excess
                     if map.len() > this.max_tracked {
@@ -106,7 +110,7 @@ impl InMemoryRateLimiter {
                     }
                     #[cfg(feature = "monitoring")]
                     {
-                        if before_len != map.len() {
+                        if _before_len != map.len() {
                             gauge!("api_key_rate_limit_tracked_keys").set(usize_to_f64(map.len()));
                         }
                     }
@@ -249,6 +253,7 @@ impl RedisRateLimiter {
     }
     #[inline]
     #[allow(clippy::cast_precision_loss)]
+    #[cfg(feature = "monitoring")]
     const fn u64_to_f64(n: u64) -> f64 {
         n as f64
     }
@@ -266,8 +271,8 @@ impl ApiKeyRateLimiter for RedisRateLimiter {
         if self.disabled {
             return false;
         }
-    let k = self.key(key);
-    let window_secs = usize::try_from(self.window.as_secs()).unwrap_or(usize::MAX);
+        let k = self.key(key);
+        let window_secs = usize::try_from(self.window.as_secs()).unwrap_or(usize::MAX);
         // Redis atomic pattern: INCR then set EXPIRE if first
         // Using block_on not acceptable; function is sync. We use a dedicated runtime handle via tokio::runtime context.
         // SAFETY: This function called within async context (middleware) but trait signature is sync; we use block_in_place.
