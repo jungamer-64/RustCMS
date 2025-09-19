@@ -184,7 +184,7 @@ pub async fn get_user(
         crate::utils::cache_ttl::CACHE_TTL_LONG,
         move || async move {
             let user = state.db_get_user_by_id(id).await?;
-            Ok(UserInfo::from(&user))
+            Ok(UserInfo::from(user))
         },
     )
     .await?;
@@ -423,5 +423,5 @@ pub async fn change_user_role(
     #[cfg(feature = "cache")]
     state.invalidate_user_caches(id).await;
 
-    Ok(ApiOk(UserInfo::from(&user)))
+    Ok(ApiOk(UserInfo::from(user)))
 }
