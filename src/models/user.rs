@@ -39,6 +39,12 @@ pub enum UserRole {
     Subscriber,
 }
 
+impl Default for UserRole {
+    fn default() -> Self {
+        UserRole::Subscriber
+    }
+}
+
 impl UserRole {
     #[must_use]
     pub const fn as_str(&self) -> &'static str {
@@ -69,7 +75,7 @@ impl UserRole {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Validate, Default)]
 pub struct CreateUserRequest {
     #[validate(length(min = 3, max = 50))]
     pub username: String,
