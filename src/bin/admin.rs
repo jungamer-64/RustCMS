@@ -253,9 +253,15 @@ enum SecurityAction {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() {
     let cli = Cli::parse();
+    if let Err(err) = run(cli).await {
+        eprintln!("\x1b[31;1mError:\x1b[0m {}", err);
+        std::process::exit(1);
+    }
+}
 
+async fn run(cli: Cli) -> Result<()> {
     // Initialize full AppState (includes database when feature enabled)
     let app_state = cms_backend::utils::init::init_app_state().await?;
 
@@ -265,192 +271,190 @@ async fn main() -> Result<()> {
     }
 
     info!(
-        "🔧 Enterprise CMS Administration Tool v{}",
+        "🔧 CMS Administration Tool v{}",
         env!("CARGO_PKG_VERSION")
     );
 
     // Execute command
     match cli.command {
         Commands::User { action } => handle_user_action(action, &app_state).await?,
-    Commands::Content { action } => handle_content_action(action, &app_state),
-    Commands::System { action } => handle_system_action(action, &app_state),
-    Commands::Analytics { action } => handle_analytics_action(action, &app_state),
-    Commands::Security { action } => handle_security_action(action, &app_state),
+        Commands::Content { action } => handle_content_action(action, &app_state),
+        Commands::System { action } => handle_system_action(action, &app_state).await?,
+        Commands::Analytics { action } => handle_analytics_action(action, &app_state),
+        Commands::Security { action } => handle_security_action(action, &app_state),
     }
 
     Ok(())
 }
 
-#[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> {
     match action {
-        UserAction::List { role, active_only } => {
-            info!("📊 Listing users...");
-            let users = state
-                .database
-                .list_users(role.as_deref(), Some(active_only))
-                .await?;
-
-            println!(
-                "┌─────────────────────────────────────────┬──────────────┬─────────────────────────┬────────┬────────┐"
-            );
-            println!(
-                "│ ID                                      │ Username     │ Email                   │ Role   │ Active │"
-            );
-            println!(
-                "├─────────────────────────────────────────┼──────────────┼─────────────────────────┼────────┼────────┤"
-            );
-
-            for user in users {
-                println!(
-                    "│ {:39} │ {:12} │ {:23} │ {:6} │ {:6} │",
-                    user.id,
-                    truncate(&user.username, 12),
-                    truncate(&user.email, 23),
-                    user.role,
-                    if user.is_active { "Yes" } else { "No" }
-                );
-            }
-
-            println!(
-                "└─────────────────────────────────────────┴──────────────┴─────────────────────────┴────────┴────────┘"
-            );
+        UserAction::List { role, active_only } => user_list(&role, active_only, state).await?,
+        UserAction::Create { username, email, role, generate_password } => {
+            user_create(username, email, role, generate_password, state).await?
         }
-
-        UserAction::Create {
-            username,
-            email,
-            role,
-            generate_password,
-        } => {
-            let password = if generate_password {
-                generate_random_password()
-            } else {
-                prompt_password("Enter password for new user: ")?
-            };
-
-            let role_enum = UserRole::parse_str(&role)?;
-
-            let user = CreateUserRequest {
-                username: username.clone(),
-                email,
-                password: password.clone(),
-                first_name: Some(String::new()),
-                last_name: Some(String::new()),
-                role: role_enum,
-            };
-
-            let created_user = state.db_create_user(user).await?;
-
-            info!("✅ User created successfully:");
-            println!("  ID: {}", created_user.id);
-            println!("  Username: {}", created_user.username);
-            println!("  Email: {}", created_user.email);
-            println!("  Role: {}", created_user.role);
-
-            if generate_password {
-                warn!("🔑 Generated password: {}", password);
-                warn!("⚠️  Please save this password securely - it will not be shown again!");
-            }
+        UserAction::Update { user, email, role, active } => {
+            user_update(user, email, role, active, state).await?
         }
-
-        UserAction::Update {
-            user,
-            email,
-            role,
-            active,
-        } => {
-            let existing_user = if user.parse::<uuid::Uuid>().is_ok() {
-                let id = uuid::Uuid::parse_str(&user)
-                    .map_err(|e| cms_backend::AppError::BadRequest(e.to_string()))?;
-                state.db_get_user_by_id(id).await?
-            } else {
-                state.db_get_user_by_username(&user).await?
-            };
-
-            // Convert Option<String> -> Option<UserRole>
-            let role_enum_opt: Option<UserRole> = match role.clone() {
-                Some(r) => Some(UserRole::parse_str(&r)?),
-                None => None,
-            };
-
-            let update = UpdateUserRequest {
-                username: None,
-                email: email.clone(),
-                first_name: None,
-                last_name: None,
-                role: role_enum_opt,
-                is_active: active,
-            };
-
-            let updated_user = state.db_update_user(existing_user.id, update).await?;
-
-            info!("✅ User updated successfully:");
-            println!("  ID: {}", updated_user.id);
-            println!("  Username: {}", updated_user.username);
-            println!("  Email: {}", updated_user.email);
-            println!("  Role: {}", updated_user.role);
-            println!("  Active: {}", updated_user.is_active);
+        UserAction::Delete { user, force } => user_delete(user, force, state).await?,
+        UserAction::ResetPassword { user, password, generate_password } => {
+            user_reset_password(user, password, generate_password, state).await?
         }
+    }
 
-        UserAction::Delete { user, force } => {
-            let existing_user = if user.parse::<uuid::Uuid>().is_ok() {
-                let id = uuid::Uuid::parse_str(&user)
-                    .map_err(|e| cms_backend::AppError::BadRequest(e.to_string()))?;
-                state.db_get_user_by_id(id).await?
-            } else {
-                state.db_get_user_by_username(&user).await?
-            };
+    Ok(())
+}
 
-            if !force {
-                warn!(
-                    "⚠️  You are about to delete user: {} ({})",
-                    existing_user.username, existing_user.email
-                );
-                warn!("⚠️  This action cannot be undone!");
-                print!("Type 'DELETE' to confirm: ");
-                io::stdout().flush()?;
+async fn user_list(role: &Option<UserRole>, active_only: bool, state: &AppState) -> Result<()> {
+    info!("📊 Listing users...");
+    let role_filter: Option<&str> = role.as_ref().map(|r| r.as_str());
+    let active_filter = if active_only { Some(true) } else { None };
+    let users = state.database.list_users(role_filter, active_filter).await?;
 
-                let mut input = String::new();
-                io::stdin().read_line(&mut input)?;
+    if users.is_empty() {
+        println!("No users found matching the criteria.");
+        return Ok(());
+    }
 
-                if input.trim() != "DELETE" {
-                    info!("❌ User deletion cancelled");
-                    return Ok(());
-                }
-            }
+    let mut table = Table::new();
+    table.set_header(vec!["ID", "Username", "Email", "Role", "Active"]);
 
-            state.db_delete_user(existing_user.id).await?;
-            info!("✅ User deleted successfully");
+    for user in users {
+        table.add_row(vec![
+            Cell::new(user.id.to_string()),
+            Cell::new(user.username),
+            Cell::new(user.email),
+            Cell::new(user.role),
+            Cell::new(if user.is_active { "Yes" } else { "No" }),
+        ]);
+    }
+
+    println!("{table}");
+
+    Ok(())
+}
+
+async fn user_create(
+    username: String,
+    email: String,
+    role: UserRole,
+    generate_password: bool,
+    state: &AppState,
+) -> Result<()> {
+    let password = if generate_password {
+        generate_random_password()
+    } else {
+        prompt_password("Enter password for new user: ")?
+    };
+
+    let user = CreateUserRequest {
+        username: username.clone(),
+        email,
+        password: password.clone(),
+        first_name: Some(String::new()),
+        last_name: Some(String::new()),
+        role,
+    };
+
+    let created_user = state.db_create_user(user).await?;
+
+    info!("✅ User created successfully:");
+    println!("  ID: {}", created_user.id);
+    println!("  Username: {}", created_user.username);
+    println!("  Email: {}", created_user.email);
+    println!("  Role: {}", created_user.role);
+
+    if generate_password {
+        warn!("🔑 Generated password: {}", password);
+        warn!("⚠️  Please save this password securely - it will not be shown again!");
+    }
+
+    Ok(())
+}
+
+async fn user_update(
+    user: String,
+    email: Option<String>,
+    role: Option<UserRole>,
+    active: Option<bool>,
+    state: &AppState,
+) -> Result<()> {
+    let existing_user = find_user_by_id_or_username(state, &user).await?;
+
+    let update = UpdateUserRequest {
+        username: None,
+        email: email.clone(),
+        first_name: None,
+        last_name: None,
+        role,
+        is_active: active,
+    };
+
+    let updated_user = state.db_update_user(existing_user.id, update).await?;
+
+    info!("✅ User updated successfully:");
+    println!("  ID: {}", updated_user.id);
+    println!("  Username: {}", updated_user.username);
+    println!("  Email: {}", updated_user.email);
+    println!("  Role: {}", updated_user.role);
+    println!("  Active: {}", updated_user.is_active);
+
+    Ok(())
+}
+
+async fn user_delete(user: String, force: bool, state: &AppState) -> Result<()> {
+    let existing_user = find_user_by_id_or_username(state, &user).await?;
+
+    if !force {
+        warn!(
+            "⚠️  You are about to delete user: {} ({})",
+            existing_user.username, existing_user.email
+        );
+        warn!("⚠️  This action cannot be undone!");
+        print!("Type 'DELETE' to confirm: ");
+        io::stdout().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+
+        if input.trim() != "DELETE" {
+            info!("❌ User deletion cancelled");
+            return Ok(());
         }
+    }
 
-        UserAction::ResetPassword { user, password } => {
-            let existing_user = if user.parse::<uuid::Uuid>().is_ok() {
-                let id = uuid::Uuid::parse_str(&user)
-                    .map_err(|e| cms_backend::AppError::BadRequest(e.to_string()))?;
-                state.db_get_user_by_id(id).await?
-            } else {
-                state.db_get_user_by_username(&user).await?
-            };
+    state.db_delete_user(existing_user.id).await?;
+    info!("✅ User deleted successfully");
 
-            // Avoid cloning the Option itself; clone inner String only when present.
-            let new_password = password.clone().unwrap_or_else(|| {
-                prompt_password("Enter new password: ")
-                    .unwrap_or_else(|_| generate_random_password())
-            });
+    Ok(())
+}
 
-            state
-                .db_reset_user_password(existing_user.id, &new_password)
-                .await?;
+async fn user_reset_password(
+    user: String,
+    password: Option<String>,
+    generate_password: bool,
+    state: &AppState,
+) -> Result<()> {
+    let existing_user = find_user_by_id_or_username(state, &user).await?;
 
-            info!(
-                "✅ Password reset successfully for user: {}",
-                existing_user.username
-            );
-            if password.is_none() {
-                warn!("🔑 New password: {}", new_password);
-            }
-        }
+    // Clear, explicit intent handling
+    let new_password = match (password, generate_password) {
+        (Some(p), false) => p,
+        (None, true) => generate_random_password(),
+        (None, false) => prompt_password("Enter new password: ")?,
+        (Some(_), true) => unreachable!(),
+    };
+
+    state
+        .db_reset_user_password(existing_user.id, &new_password)
+        .await?;
+
+    info!(
+        "✅ Password reset successfully for user: {}",
+        existing_user.username
+    );
+    if generate_password {
+        warn!("🔑 Generated password: {}", new_password);
     }
 
     Ok(())
@@ -458,99 +462,113 @@ async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> 
 
 #[allow(clippy::cognitive_complexity)]
 fn handle_content_action(action: ContentAction, _state: &AppState) {
-    match action {
-        ContentAction::List {
-            status,
-            author,
-            limit,
-        } => {
-            info!(
-                "📊 Listing posts (status: {:?}, author: {:?}, limit: {})",
-                status, author, limit
-            );
-            // Implementation would list posts with filters
-        }
-
-        ContentAction::Create {
-            title,
-            file: _file,
-            author: _author,
-            status: _status,
-        } => {
-            info!("📝 Creating post: {}", title);
-            // Implementation would create post
-        }
-
-        ContentAction::PublishScheduled => {
-            info!("📅 Publishing scheduled posts...");
-            // Implementation would publish scheduled posts
-        }
-
-        ContentAction::ReindexSearch => {
-            info!("🔍 Rebuilding search index...");
-            // Implementation would rebuild search index
-        }
-
-        ContentAction::CleanupMedia => {
-            info!("🧹 Cleaning up orphaned media files...");
-            // Implementation would clean up media
-        }
-    }
-
+    // Indicate that content commands are not yet implemented. This makes
+    // running the CLI in development obvious when these commands are used.
+    warn!("'Content' command invoked but not implemented.");
+    // For stronger developer-time visibility you can replace the above
+    // with a `todo!()` when you want the process to panic until implemented:
+    // todo!("Implement content action: {:?}", action);
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn handle_system_action(action: SystemAction, _state: &AppState) {
+async fn handle_system_action(action: SystemAction, state: &AppState) -> Result<()> {
     match action {
-        SystemAction::Status => {
-            info!("📊 System Status:");
-            // Implementation would show comprehensive system status
-            println!("  🚀 Server: Running");
-            println!("  💾 Database: Connected");
-            println!("  🗄️  Cache: Active");
-            println!("  🔍 Search: Indexed");
-        }
-
-        SystemAction::Settings { key, value } => {
-            info!("⚙️  Updating setting: {} = {}", key, value);
-            // Implementation would update system setting
-        }
-
-        SystemAction::Cache { action } => {
-            match action {
-                CacheAction::Clear => {
-                    info!("🧹 Clearing cache...");
-                    // Implementation would clear cache
-                }
-                CacheAction::Stats => {
-                    info!("📊 Cache Statistics:");
-                    // Implementation would show cache stats
-                }
-                CacheAction::Warmup => {
-                    info!("🔥 Warming up cache...");
-                    // Implementation would warm up cache
-                }
-            }
-        }
-
-        SystemAction::Database { action } => {
-            match action {
-                DatabaseAction::Stats => {
-                    info!("📊 Database Statistics:");
-                    // Implementation would show database stats
-                }
-                DatabaseAction::Optimize => {
-                    info!("⚡ Optimizing database...");
-                    // Implementation would optimize database
-                }
-                DatabaseAction::Check => {
-                    info!("🔍 Checking database integrity...");
-                    // Implementation would check database
-                }
-            }
-        }
+        SystemAction::Status => system_status(state).await?,
+        SystemAction::Settings { key, value } => system_settings(&key, &value, state).await?,
+        SystemAction::Cache { action } => system_cache_action(action, state).await?,
+        SystemAction::Database { action } => system_database_action(action, state).await?,
     }
 
+    Ok(())
+}
+
+/// Retrieve the application's aggregated health status from `AppState`
+/// and render it using the shared `render_health_table_components` helper.
+async fn system_status(state: &AppState) -> Result<()> {
+    let health = state.health_check().await?;
+    let table = cms_backend::utils::bin_utils::render_health_table_components(
+        &health.status,
+        (&health.database.status, health.database.response_time_ms, health.database.error.as_deref()),
+        (&health.cache.status, health.cache.response_time_ms, health.cache.error.as_deref()),
+        (&health.search.status, health.search.response_time_ms, health.search.error.as_deref()),
+        (&health.auth.status, health.auth.response_time_ms, health.auth.error.as_deref()),
+    );
+    println!("{table}");
+
+    Ok(())
+}
+
+/// Render a HealthStatus into a comfy_table::Table and return its string form.
+// Leverage utils::bin_utils::render_health_table_components for rendering.
+
+#[cfg(test)]
+mod system_status_tests {
+    // no super imports required for this test
+
+    #[test]
+    fn render_health_table_basic() {
+        let overall = "healthy";
+        let db = ("up", 12.34_f64, None::<&str>);
+        let cache = ("up", 5.67_f64, None::<&str>);
+        let search = ("up", 7.89_f64, None::<&str>);
+        let auth = ("up", 3.21_f64, None::<&str>);
+
+    let table = cms_backend::utils::bin_utils::render_health_table_components(overall, db, cache, search, auth);
+        let s = format!("{table}");
+
+        // Basic assertions: header and a few component names
+        assert!(s.contains("Component"));
+        assert!(s.contains("Overall"));
+        assert!(s.contains("Database"));
+        assert!(s.contains("Cache"));
+        assert!(s.contains("Search"));
+        assert!(s.contains("Auth"));
+        // Check response times formatted
+        assert!(s.contains("12.34") || s.contains("12.3"));
+        assert!(s.contains("5.67") || s.contains("5.7"));
+    }
+}
+
+async fn system_settings(key: &str, value: &str, _state: &AppState) -> Result<()> {
+    info!("⚙️  Updating setting: {} = {}", key, value);
+    // Implementation would update system setting
+    Ok(())
+}
+
+async fn system_cache_action(action: CacheAction, _state: &AppState) -> Result<()> {
+    match action {
+        CacheAction::Clear => {
+            info!("🧹 Clearing cache...");
+            // Implementation would clear cache
+        }
+        CacheAction::Stats => {
+            info!("📊 Cache Statistics:");
+            // Implementation would show cache stats
+        }
+        CacheAction::Warmup => {
+            info!("🔥 Warming up cache...");
+            // Implementation would warm up cache
+        }
+    }
+    Ok(())
+}
+
+async fn system_database_action(action: DatabaseAction, _state: &AppState) -> Result<()> {
+    match action {
+        DatabaseAction::Stats => {
+            info!("📊 Database Statistics:");
+            // Implementation would show database stats
+        }
+        DatabaseAction::Optimize => {
+            info!("⚡ Optimizing database...");
+            // Implementation would optimize database
+        }
+        DatabaseAction::Check => {
+            info!("🔍 Checking database integrity...");
+            // Implementation would check database
+        }
+    }
+    Ok(())
 }
 
 fn handle_analytics_action(action: AnalyticsAction, _state: &AppState) {
@@ -613,35 +631,33 @@ fn handle_security_action(action: SecurityAction, _state: &AppState) {
 
 // Utility functions
 
-fn truncate(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        // Inline captured variables in formatting for clarity and clippy compliance
-        format!("{s:max_len$}")
-    } else {
-        let trunc = max_len.saturating_sub(3);
-        format!("{s:.trunc$}...")
-    }
-}
+    // utility helpers
 
 fn generate_random_password() -> String {
-    use ring::rand::{SecureRandom, SystemRandom};
-    const CHARSET: &[u8] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+    let charset_len = CHARSET.len() as u16;
+    let threshold: u16 = 256u16 - (256u16 % charset_len);
     let rng = SystemRandom::new();
-    let mut buf = [0u8; 16];
-    rng.fill(&mut buf).ok();
-    buf.iter()
-        .map(|b| CHARSET[*b as usize % CHARSET.len()] as char)
-        .collect()
+
+    let mut password = String::with_capacity(16);
+    let mut byte = [0u8; 1];
+    while password.len() < 16 {
+        // Fail fast if RNG can't produce bytes
+        rng.fill(&mut byte).expect("Failed to read from system's entropy source");
+        let v = byte[0] as u16;
+        if v < threshold {
+            let idx = (v % charset_len) as usize;
+            password.push(CHARSET[idx] as char);
+        }
+    }
+    password
 }
 
 fn prompt_password(prompt: &str) -> Result<String> {
-    print!("{prompt}");
-    io::stdout().flush()?;
-    let mut password = String::new();
-    io::stdin().read_line(&mut password)?;
+    // Use rpassword to securely read password without echoing to the terminal
+    let password = rpassword::prompt_password(prompt)
+    .map_err(|e| cms_backend::AppError::Internal(e.to_string().into()))?;
 
-    let password = password.trim().to_string();
     if password.is_empty() {
         return Err(cms_backend::AppError::BadRequest(
             "Password cannot be empty".to_string(),
@@ -650,3 +666,41 @@ fn prompt_password(prompt: &str) -> Result<String> {
 
     Ok(password)
 }
+
+/// Find user by UUID or username and return a NotFound AppError if missing
+async fn find_user_by_id_or_username(state: &AppState, identifier: &str) -> Result<cms_backend::models::User> {
+    let result = if let Ok(id) = uuid::Uuid::parse_str(identifier) {
+        state.db_get_user_by_id(id).await
+    } else {
+        state.db_get_user_by_username(identifier).await
+    };
+    result.map_err(|_| cms_backend::AppError::NotFound(format!("User '{}' not found", identifier).into()))
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_generate_random_password_length_and_charset() {
+        // Generate multiple passwords to reduce flakiness
+        for _ in 0..8 {
+            let pw = generate_random_password();
+            // length
+            assert_eq!(pw.len(), 16);
+
+            // allowed chars
+            for ch in pw.chars() {
+                let bytes = ch as u8;
+                // must be ASCII printable and in our CHARSET
+                let found = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*"
+                    .iter()
+                    .any(|&c| c == bytes);
+                assert!(found, "password contains invalid char: {}", ch);
+            }
+        }
+    }
+}
+
+
