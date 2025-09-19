@@ -46,7 +46,7 @@ enum Commands {
 #[tokio::main]
 #[allow(clippy::too_many_lines)]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
+    cms_backend::utils::init::init_env();
     let cli = Cli::parse();
 
     match cli.command {
@@ -70,8 +70,9 @@ async fn main() -> Result<()> {
                     }
                     return Ok(());
                 }
-                eprintln!("Invalid UUID provided for --delete-post");
-                std::process::exit(1);
+                return Err(cms_backend::AppError::BadRequest(
+                    "Invalid UUID provided for --delete-post".to_string().into(),
+                ));
             }
 
             let users_count: i64 = state.db_admin_users_count().await?;
@@ -128,16 +129,10 @@ async fn main() -> Result<()> {
             let sample_post = cms_backend::models::post::CreatePostRequest {
                 title: title.clone(),
                 content: "This is a sample post added by dev-tools".to_string(),
-                excerpt: Some("Dev tools sample post".to_string()),
-                slug: None,
                 published: Some(true),
-                tags: Some(vec!["dev".to_string(), "sample".to_string()]),
-                category: None,
-                featured_image: None,
-                meta_title: None,
-                meta_description: None,
-                published_at: None,
                 status: Some(cms_backend::models::PostStatus::Published),
+                tags: Some(vec!["dev".to_string(), "sample".to_string()]),
+                ..Default::default()
             };
 
             state.db_create_post(sample_post).await?;
@@ -185,9 +180,7 @@ async fn main() -> Result<()> {
             {
                 println!(
                     "\nFound {} schemas",
-                    schemas
-                        .as_object()
-                        .map_or(0, serde_json::Map::len)
+                    schemas.as_object().map_or(0, serde_json::Map::len)
                 );
                 println!("ApiResponse: {}", schemas.get("ApiResponse").is_some());
                 println!(
