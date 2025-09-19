@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use clap::ValueEnum;
 use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
@@ -27,7 +28,8 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema, ValueEnum)]
+#[clap(rename_all = "kebab_case")]
 pub enum UserRole {
     SuperAdmin,
     Admin,
@@ -202,7 +204,7 @@ impl User {
         conn: &mut crate::database::PooledConnection,
         user_username: &str,
     ) -> Result<Self, AppError> {
-        use crate::database::schema::users::dsl::{users, username};
+        use crate::database::schema::users::dsl::{username, users};
         users
             .filter(username.eq(user_username))
             .first(conn)
@@ -217,7 +219,7 @@ impl User {
         conn: &mut crate::database::PooledConnection,
         user_email: &str,
     ) -> Result<Self, AppError> {
-        use crate::database::schema::users::dsl::{users, email};
+        use crate::database::schema::users::dsl::{email, users};
         users
             .filter(email.eq(user_email))
             .first(conn)
@@ -312,9 +314,10 @@ impl User {
     /// # Errors
     /// パスワードハッシュの検証処理に失敗した場合、エラーを返します。
     pub fn verify_password(&self, password: &str) -> Result<bool, AppError> {
-        self.password_hash
-            .as_ref()
-            .map_or_else(|| Ok(false), |hash| password::verify_password(password, hash))
+        self.password_hash.as_ref().map_or_else(
+            || Ok(false),
+            |hash| password::verify_password(password, hash),
+        )
     }
 
     /// ログイン時刻を現在時刻で更新する
