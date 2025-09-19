@@ -1,9 +1,9 @@
-//! Enterprise CMS - Production-Grade Content Management System
+//! CMS - Production-Grade Content Management System
 //!
 //! A high-performance, horizontally scalable CMS built with modern Rust technologies
 //! for large-scale production environments supporting 10,000+ concurrent users:
 //!
-//! ## 🏢 Enterprise Architecture
+//! ## 🏢 Architecture
 //! - **`PostgreSQL` + Diesel ORM**: Type-safe database operations with connection pooling
 //! - **Tantivy**: Lightning-fast full-text search with advanced indexing (Pure Rust)
 //! - **biscuit-auth + `WebAuthn`**: Zero-trust security with passwordless authentication
@@ -13,7 +13,7 @@
 //!
 //! ## 🚀 Production Features
 //! - **5,000+ RPS**: High-throughput request handling with async Rust
-//! - **99.9% Uptime SLA**: Enterprise reliability with comprehensive monitoring
+//! - **99.9% Uptime SLA**: Reliability with comprehensive monitoring
 //! - **Horizontal Scaling**: Stateless design with load balancer support
 //! - **Advanced Security**: Rate limiting, CORS, security headers, audit logging
 //! - **Real-time Monitoring**: Prometheus metrics, OpenTelemetry tracing
@@ -28,13 +28,13 @@
 use axum::response::{IntoResponse, Json};
 use serde_json::json;
 
-// Core enterprise modules
+// Core modules
 pub mod app;
 pub mod config;
 pub mod error;
 pub mod telemetry;
 
-// Conditional feature modules for enterprise scalability
+// Conditional feature modules for scalability
 #[cfg(feature = "database")]
 pub mod database;
 
@@ -54,11 +54,12 @@ pub mod middleware;
 pub mod models;
 pub mod routes;
 pub mod utils; // unified rate limiting
+pub mod repositories;
 
 // OpenAPI documentation system
 pub mod openapi;
 
-// Re-export core types for enterprise API
+// Re-export core types for API
 pub use app::{AppMetrics, AppState};
 pub use config::Config;
 pub use error::{AppError, Result};
