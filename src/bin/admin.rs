@@ -253,22 +253,15 @@ enum SecurityAction {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     let cli = Cli::parse();
-    if let Err(err) = run(cli).await {
-        eprintln!("\x1b[31;1mError:\x1b[0m {}", err);
-        std::process::exit(1);
-    }
+    run(cli).await?;
+    Ok(())
 }
 
 async fn run(cli: Cli) -> Result<()> {
-    // Initialize full AppState (includes database when feature enabled)
-    let app_state = cms_backend::utils::init::init_app_state().await?;
-
-    // Apply CLI log level override (keep existing behavior)
-    if cli.verbose {
-        tracing::info!("Verbose logging enabled via CLI flag");
-    }
+    // Initialize full AppState, honoring the verbose flag
+    let app_state = cms_backend::utils::init::init_app_state_with_verbose(cli.verbose).await?;
 
     info!(
         "🔧 CMS Administration Tool v{}",
@@ -702,5 +695,3 @@ mod tests {
         }
     }
 }
-
-
