@@ -853,6 +853,22 @@ impl Database {
     }
 }
 
+impl UserRepository for Database {
+    fn get_user_by_email(&self, email: &str) -> crate::repositories::user_repository::BoxFuture<'_, Result<User>> {
+        let this = self.clone();
+        let email_owned = email.to_string();
+        Box::pin(async move { this.get_user_by_email(&email_owned).await })
+    }
+    fn get_user_by_id(&self, id: Uuid) -> crate::repositories::user_repository::BoxFuture<'_, Result<User>> {
+        let this = self.clone();
+        Box::pin(async move { this.get_user_by_id(id).await })
+    }
+    fn update_last_login(&self, id: Uuid) -> crate::repositories::user_repository::BoxFuture<'_, Result<()>> {
+        let this = self.clone();
+        Box::pin(async move { this.update_last_login(id) })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
