@@ -33,6 +33,24 @@ ls -la "$outdir"
 sed -n '1,200p' "$outdir/manifest.json"
 ```
 
+## Actual smoke test summary (local run)
+
+- `.env` test: `/tmp/biscuit_test.env` was created and contains `BISCUIT_PRIVATE_KEY_B64` and `BISCUIT_PUBLIC_KEY_B64` entries.
+- Versioned test: created `/tmp/biscuit_keys/biscuit_private_v1.b64`..`biscuit_private_v4.b64` across runs; `manifest.json` updated with `latest_version` = 4. Running with `--prune 2` removed v1 and v2 files as expected, leaving v3 and v4.
+
+Prune behavior: when `--prune 2` was used older v1/v2 files were removed and the manifest retained `latest_version` = 4.
+
+Sample manifest.json produced during the run (excerpt):
+
+```json
+{
+  "latest_version": 4,
+  "generated_at": "2025-09-19T21:09:53.046975217+00:00",
+  "private_fingerprint": "92c030120cc19c78856c1985fb7a609053bb56038b27247e774a8fdfa48b6501",
+  "public_fingerprint": "35bebe8c53c4fb16fc3be06e1333fd30fd8b3242e555da058b1471ffb4641674"
+}
+```
+
 ## Sample manifest.json (excerpt)
 
 ```json

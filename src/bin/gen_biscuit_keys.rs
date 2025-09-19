@@ -40,29 +40,21 @@ fn parse_version(name: &str) -> Option<u32> {
 
 fn next_version(dir: &Path) -> u32 {
     let mut max_v: u32 = 0;
-    if dir.exists()
-        && let Ok(read) = fs::read_dir(dir)
-    {
-        for entry in read.flatten() {
-            let name = entry.file_name();
-            if let Some(s) = name.to_str()
-                && let Some(v) = parse_version(s)
-                && v > max_v
-            {
-                max_v = v;
+    if dir.exists() {
+        if let Ok(read) = fs::read_dir(dir) {
+            for entry in read.flatten() {
+                let name = entry.file_name();
+                if let Some(s) = name.to_str() {
+                    if let Some(v) = parse_version(s) {
+                        if v > max_v {
+                            max_v = v;
+                        }
+                    }
+                }
             }
         }
     }
     max_v + 1
-}
-
-// Manifest and prune logic moved to `gen_biscuit_keys_manifest.rs` to reduce main file size.
-fn update_manifest(dir: &Path, version: u32, priv_fp: &str, pub_fp: &str) {
-    gen_biscuit_keys_manifest::update_manifest(dir, version, priv_fp, pub_fp)
-}
-
-fn prune_versions(dir: &Path, keep: usize) {
-    gen_biscuit_keys_manifest::prune_versions(dir, keep)
 }
 
 fn write_file_if_allowed(path: &Path, data: &str, force: bool) -> std::io::Result<()> {
@@ -120,10 +112,9 @@ fn replace_env_entries(
 fn filter_out_biscuit_lines(content: &str) -> Vec<&str> {
     content
         .lines()
-        .filter(|line| {
-            !(line.starts_with("BISCUIT_PRIVATE_KEY_B64=")
-                || line.starts_with("BISCUIT_PUBLIC_KEY_B64="))
-        })
+    .filter(|line| !(
+        line.starts_with("BISCUIT_PRIVATE_KEY_B64=") || line.starts_with("BISCUIT_PUBLIC_KEY_B64=")
+    ))
         .collect()
 }
 
@@ -408,7 +399,6 @@ fn perform_env_write_and_report(
     let res = perform_env_write(path, priv_b64, pub_b64, force);
     report_env_result(envfile, res, force);
 }
-
 // Backup orchestration is implemented in `gen_biscuit_keys_backup.rs`.
 // We call it directly where needed to avoid extra wrapper functions in this
 // binary, which keeps this file smaller and simpler.
@@ -420,7 +410,6 @@ fn perform_env_write_and_report(
 // contains the implementation and helpers; keeping only delegations here
 // avoids duplicating complex logic in the binary's main file.
 // All call sites in this file call into the module directly now.
-
 // clap-based argument parsing is used; helper suggestion/levenshtein removed.
 
 #[derive(Parser)]

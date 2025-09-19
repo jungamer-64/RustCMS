@@ -1,7 +1,7 @@
-use cms_backend::utils::hash;
-use serde::Serialize;
-use std::fs;
 use std::path::Path;
+use std::fs;
+use serde::Serialize;
+use cms_backend::utils::hash;
 
 #[derive(Serialize)]
 struct Manifest<'a> {
@@ -82,10 +82,7 @@ pub fn finalize_versioned(
         .and_then(|s| s.to_str())
         .and_then(super::parse_version)
         .unwrap_or_else(|| {
-            eprintln!(
-                "Could not determine version from path: {}",
-                priv_path.display()
-            );
+            eprintln!("Could not determine version from path: {}", priv_path.display());
             0
         });
     let priv_fp = hash::sha256_hex(priv_b64.as_bytes());
@@ -112,23 +109,9 @@ pub fn handle_files_output_full(ctx: &super::FilesOutputContext) -> cms_backend:
     // Resolve paths
     let (priv_path, pub_path) = super::resolve_output_paths(ctx.path, ctx.vopts.versioned);
     // Perform writes and backups
-    super::write_files_flow(
-        &priv_path,
-        &pub_path,
-        ctx.backup,
-        ctx.options,
-        ctx.priv_b64,
-        ctx.pub_b64,
-    );
+    super::write_files_flow(&priv_path, &pub_path, ctx.backup, ctx.options, ctx.priv_b64, ctx.pub_b64);
     // Finalize (manifest, prune, alias)
     // call into bin's finalize logic (apply alias/manifest/prune)
-    super::gen_biscuit_keys_manifest::finalize_versioned(
-        ctx.path,
-        &priv_path,
-        ctx.priv_b64,
-        ctx.pub_b64,
-        ctx.vopts.no_manifest,
-        ctx.vopts.prune,
-    );
+    super::gen_biscuit_keys_manifest::finalize_versioned(ctx.path, &priv_path, ctx.priv_b64, ctx.pub_b64, ctx.vopts.no_manifest, ctx.vopts.prune);
     Ok(())
 }
