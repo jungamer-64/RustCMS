@@ -59,7 +59,7 @@ pub fn get_file_extension(filename: &str) -> Option<String> {
     Path::new(filename)
         .extension()
         .and_then(|ext| ext.to_str())
-    .map(str::to_lowercase)
+        .map(str::to_lowercase)
 }
 
 /// ファイルタイプを検証
@@ -248,9 +248,7 @@ pub async fn delete_file_async(path: &Path) -> Result<(), FileError> {
 /// メタデータ取得やハッシュ計算に失敗した場合、`IoError` を返します。
 pub fn get_file_info(path: &Path) -> Result<FileInfo, FileError> {
     let metadata = fs::metadata(path)?;
-    build_file_info_from_parts(path, metadata.len(), || {
-        calculate_file_hash(path)
-    })
+    build_file_info_from_parts(path, metadata.len(), || calculate_file_hash(path))
 }
 
 /// 非同期でファイル情報を取得
@@ -341,7 +339,7 @@ pub fn format_file_size(bytes: u64) -> String {
         let rem = bytes % pow;
         // Scale remainder to hundredths
         let hundredths = (rem * 100 + (pow / 20)) / pow; // round to nearest
-        format!("{}.{}{:02} {}", whole, if hundredths < 10 { "0" } else { "" }, hundredths, UNITS[unit_index])
+        format!("{whole}.{hundredths:02} {}", UNITS[unit_index])
     }
 }
 
@@ -356,7 +354,7 @@ pub fn generate_upload_path(base_dir: &Path, category: &str, filename: &str) -> 
     base_dir
         .join(category)
         .join(year.to_string())
-    .join(format!("{month:02}"))
+        .join(format!("{month:02}"))
         .join(safe_filename)
 }
 
@@ -388,9 +386,11 @@ mod tests {
     #[test]
     fn test_generate_safe_filename() {
         let safe_name = generate_safe_filename("test file.jpg");
-        assert!(std::path::Path::new(&safe_name)
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("jpg")));
+        assert!(
+            std::path::Path::new(&safe_name)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("jpg"))
+        );
         assert!(!safe_name.contains(' '));
     }
 
@@ -404,7 +404,7 @@ mod tests {
     #[test]
     fn test_format_file_size() {
         assert_eq!(format_file_size(1024), "1.00 KB");
-    assert_eq!(format_file_size(1_048_576), "1.00 MB");
+        assert_eq!(format_file_size(1_048_576), "1.00 MB");
         assert_eq!(format_file_size(500), "500 B");
     }
 
