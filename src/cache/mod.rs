@@ -108,7 +108,7 @@ impl CacheService {
     {
         let serialized = serde_json::to_vec(value)?;
         let prefix = &self.config.key_prefix;
-    let full_key = format!("{prefix}{key}");
+        let full_key = format!("{prefix}{key}");
 
         // Set in Redis (multiplexed)
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
@@ -158,7 +158,7 @@ impl CacheService {
         T: DeserializeOwned,
     {
         let prefix = &self.config.key_prefix;
-    let full_key = format!("{prefix}{key}");
+        let full_key = format!("{prefix}{key}");
 
         // Try memory cache first
         let mut bytes: Option<Vec<u8>> = None;
@@ -218,7 +218,7 @@ impl CacheService {
     /// - Redis との通信に失敗した場合。
     pub async fn delete(&self, key: &str) -> Result<()> {
         let prefix = &self.config.key_prefix;
-    let full_key = format!("{prefix}{key}");
+        let full_key = format!("{prefix}{key}");
 
         // Remove from Redis
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
@@ -236,7 +236,7 @@ impl CacheService {
     /// - Redis との通信に失敗した場合。
     pub async fn exists(&self, key: &str) -> Result<bool> {
         let prefix = &self.config.key_prefix;
-    let full_key = format!("{prefix}{key}");
+        let full_key = format!("{prefix}{key}");
 
         // Check memory cache first
         {
@@ -267,10 +267,10 @@ impl CacheService {
         let full_key = format!("{}{key}", self.config.key_prefix);
 
         // Set TTL in Redis
-    let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
-    let secs = ttl.as_secs();
-    let secs_i64 = i64::try_from(secs).map_err(|_| CacheError::InvalidTtl(secs))?;
-    let _: () = conn.expire(&full_key, secs_i64).await?;
+        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        let secs = ttl.as_secs();
+        let secs_i64 = i64::try_from(secs).map_err(|_| CacheError::InvalidTtl(secs))?;
+        let _: () = conn.expire(&full_key, secs_i64).await?;
 
         // Update memory cache entry
         {
@@ -290,7 +290,7 @@ impl CacheService {
     pub async fn clear(&self) -> Result<()> {
         // Clear Redis with pattern
         let prefix = &self.config.key_prefix;
-    let pattern = format!("{prefix}*");
+        let pattern = format!("{prefix}*");
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
 
         let keys: Vec<String> = conn.keys(&pattern).await?;
@@ -428,21 +428,7 @@ impl CacheService {
         stats.total_operations += 1;
     }
 
-    #[inline]
-    #[allow(dead_code)]
-    async fn decode_and_record_memory_hit<T: DeserializeOwned>(
-        &self,
-        entry: &mut CacheEntry<Vec<u8>>,
-    ) -> Result<T> {
-        entry.hits += 1;
-        let value: T = serde_json::from_slice(&entry.value)?;
-        {
-            let mut stats = self.stats.write().await;
-            stats.memory_hits += 1;
-            stats.total_operations += 1;
-        }
-        Ok(value)
-    }
+    
 }
 
 impl Default for CacheStats {
