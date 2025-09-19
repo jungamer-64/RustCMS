@@ -18,6 +18,7 @@
 //!  - extract smaller submodules (connections, migrations, queries)
 //!  - add unit tests for extracted pieces
 //!  - consider repository/service patterns to reduce module size
+//!
 //! See: docs/REFACTORING_GUIDE.md for a suggested plan (create if needed)
 
 pub mod pool;
@@ -34,7 +35,9 @@ use crate::{
 };
 #[cfg(all(feature = "database", not(test)))]
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
+use secrecy::ExposeSecret;
 use uuid::Uuid;
+use crate::repositories::UserRepository;
 
 // Macros to DRY optional filter application for Diesel boxed queries
 macro_rules! apply_eq_filter {
@@ -277,7 +280,7 @@ impl Database {
     /// Returns an error if the pool cannot be created or if running migrations fails
     /// (when enabled). The error is wrapped in `crate::AppError`.
     pub async fn new(config: &DatabaseConfig) -> Result<Self> {
-        let pool = DatabasePool::new(&config.url, config.max_connections)?;
+        let pool = DatabasePool::new(config.url.expose_secret(), config.max_connections)?;
 
         #[cfg(all(feature = "database", not(test)))]
         if config.enable_migrations {
@@ -322,6 +325,16 @@ impl Database {
             "status": "healthy",
             "pool_size": 10, // self.pool.size(),
         }))
+    }
+
+    /// Best-effort close for database pool. Currently this is synchronous and
+    /// simply drops the inner pool reference; provided for API symmetry and
+    /// graceful shutdown hooks.
+    #[allow(dead_code)]
+    pub async fn close(&self) -> Result<()> {
+        // Dropping Arc clones will close pool when last reference is gone. If
+        // specific cleanup is needed, implement here.
+        Ok(())
     }
 
     // User CRUD operations
