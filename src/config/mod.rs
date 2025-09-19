@@ -20,6 +20,8 @@
 //!
 //! これらを `Config::from_env()` で統合し、`AppState` 構築時に使用します。
 
+use secrecy::ExposeSecret;
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::PathBuf;
@@ -61,7 +63,8 @@ pub struct ServerConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseConfig {
-    pub url: String,
+    #[serde(serialize_with = "serialize_secret_masked")]
+    pub url: SecretString,
     pub max_connections: u32,
     pub min_connections: u32,
     pub connection_timeout: u64,
@@ -89,12 +92,14 @@ pub struct SearchConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthConfig {
-    pub biscuit_root_key: String,
+    #[serde(serialize_with = "serialize_secret_masked")]
+    pub biscuit_root_key: SecretString,
     pub webauthn: WebAuthnConfig,
     pub bcrypt_cost: u32,
     pub session_timeout: u64,
     pub access_token_ttl_secs: u64,
     pub refresh_token_ttl_secs: u64,
+    pub remember_me_access_ttl_secs: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,7 +130,8 @@ pub struct EmailConfig {
     pub smtp_host: String,
     pub smtp_port: u16,
     pub smtp_username: String,
-    pub smtp_password: String,
+    #[serde(serialize_with = "serialize_secret_masked")]
+    pub smtp_password: SecretString,
     pub from_address: String,
     pub from_name: String,
 }
@@ -243,7 +249,7 @@ impl Default for ServerConfig {
 impl Default for DatabaseConfig {
     fn default() -> Self {
         Self {
-            url: String::from("postgresql://localhost/cms"),
+            url: SecretString::new("postgresql://localhost/cms".to_string()),
             max_connections: 20,
             min_connections: 5,
             connection_timeout: 30,
@@ -280,12 +286,13 @@ impl Default for SearchConfig {
 impl Default for AuthConfig {
     fn default() -> Self {
         Self {
-            biscuit_root_key: String::from("your-biscuit-root-key"),
+            biscuit_root_key: SecretString::new("your-biscuit-root-key".to_string()),
             webauthn: WebAuthnConfig::default(),
             bcrypt_cost: 12,
             session_timeout: 86_400, // 24 hours
             access_token_ttl_secs: 3_600,
             refresh_token_ttl_secs: 86_400,
+            remember_me_access_ttl_secs: 86_400, // 24 hours
         }
     }
 }
@@ -327,7 +334,7 @@ impl Default for EmailConfig {
             smtp_host: "localhost".to_string(),
             smtp_port: 587,
             smtp_username: String::new(),
-            smtp_password: String::new(),
+            smtp_password: SecretString::new(String::new()),
             from_address: "noreply@example.com".to_string(),
             from_name: "CMS".to_string(),
         }
