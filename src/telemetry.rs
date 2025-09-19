@@ -6,7 +6,7 @@
 // telemetry temporarily minimized; re-expand later
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
-/// Initialize comprehensive telemetry for enterprise monitoring
+/// Initialize comprehensive telemetry for monitoring
 ///
 /// # Errors
 ///
@@ -34,6 +34,36 @@ pub fn init_telemetry() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     // Initialize Prometheus metrics registry
+    #[cfg(feature = "monitoring")]
+    init_metrics();
+
+    Ok(())
+}
+
+/// Initialize telemetry with optional verbose mode. When `verbose` is true and
+/// RUST_LOG is not set, this uses a broader "debug" level; otherwise it
+/// defers to the environment configuration or sensible defaults.
+pub fn init_telemetry_with_verbose(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let has_env = std::env::var_os("RUST_LOG").is_some();
+    let env_filter = if verbose && !has_env {
+        EnvFilter::new("debug")
+    } else {
+        EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| EnvFilter::new("info,cms_backend=debug,axum=debug,tower=debug"))
+    };
+
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_target(true)
+                .with_thread_ids(true)
+                .with_file(true)
+                .with_line_number(true)
+                .json(),
+        )
+        .init();
+
     #[cfg(feature = "monitoring")]
     init_metrics();
 
