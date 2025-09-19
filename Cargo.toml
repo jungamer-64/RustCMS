@@ -3,7 +3,7 @@ name = "cms-backend"
 version = "2.0.0"
 edition = "2024"
 authors = ["CMS Development Team"]
-description = "Enterprise-grade scalable CMS backend with PostgreSQL, Diesel ORM, Tantivy search, biscuit-auth, WebAuthn, and rustls (Pure Rust)"
+description = "scalable CMS backend with PostgreSQL, Diesel ORM, Tantivy search, biscuit-auth, WebAuthn, and rustls (Pure Rust)"
 license = "MIT"
 repository = "https://github.com/jungamer-64/Rust-CMS"
 keywords = ["cms", "backend", "postgresql", "tantivy", "biscuit-auth", "webauthn", "rustls", "diesel", "axum", "rust"]
@@ -32,6 +32,8 @@ name = "cms-admin"
 path = "src/bin/admin.rs"
 
 [dependencies]
+rpassword = "7.3"
+comfy-table = "7.1"
 # ===== WEB FRAMEWORK =====
 axum = { version = "0.8", features = ["multipart", "ws", "macros", "form"] }
 axum-extra = { version = "0.10", features = ["typed-header", "cookie", "query", "form"] }
@@ -116,6 +118,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "regis
 clap = { version = "4.4", features = ["derive", "env"] }
 config = { version = "0.15", features = ["yaml", "toml", "json"] }
 dotenvy = "0.15"
+secrecy = { version = "0.8", features = ["serde"] }
 
 # ===== VALIDATION =====
 garde = { version = "0.22", features = ["derive"] }
@@ -185,7 +188,7 @@ http-body-util = { version = "0.1", package = "http-body-util" }
 num_cpus = "1.16"
 rpassword = "7.3"
 
-# ===== FEATURES (Enterprise Production) =====
+# ===== FEATURES (Production) =====
 [features]
 # Feature list (alphabetical keys). Arrays are sorted for consistency.
 auth = ["dep:argon2", "dep:biscuit-auth"]
