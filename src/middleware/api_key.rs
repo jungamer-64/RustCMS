@@ -57,7 +57,7 @@ pub const HEADER_NAME: &str = "X-API-Key";
 // NOTE: Actual rate limit configuration & state is handled by `rate_limit_backend::GLOBAL_RATE_LIMITER`.
 // This module focuses only on auth flow + metric emission.
 
-#[allow(dead_code)]
+#[cfg(feature = "auth")]
 /// API キーを用いた認証レイヤ。
 ///
 /// # Errors
@@ -123,10 +123,14 @@ pub async fn api_key_auth_layer(
     }
     let api_key = match state.db_get_api_key_by_lookup_hash(&lookup_hash).await {
         Ok(k) => k,
-        Err(_) => if let Some(k) = legacy_fallback_fetch(&state, raw).await { k } else {
-            record_fail("not_found");
-            return Err((StatusCode::UNAUTHORIZED, "Invalid API key"));
-        },
+        Err(_) => {
+            if let Some(k) = legacy_fallback_fetch(&state, raw).await {
+                k
+            } else {
+                record_fail("not_found");
+                return Err((StatusCode::UNAUTHORIZED, "Invalid API key"));
+            }
+        }
     };
 
     // 生キーと保存された Argon2 ハッシュを検証 (タイミング計測は wrapper 内で済み)
@@ -154,7 +158,8 @@ pub async fn api_key_auth_layer(
         permissions: api_key.get_permissions(),
     };
     #[cfg(feature = "monitoring")]
-    gauge!("api_key_rate_limit_tracked_keys").set(usize_to_f64(API_KEY_FAILURE_LIMITER.tracked_len()));
+    gauge!("api_key_rate_limit_tracked_keys")
+        .set(usize_to_f64(API_KEY_FAILURE_LIMITER.tracked_len()));
     #[cfg(feature = "monitoring")]
     counter!("api_key_auth_success_total").increment(1);
     debug!(api_key_id=%info.api_key_id, user_id=%info.user_id, perms=?info.permissions, "API key authenticated");
@@ -165,8 +170,11 @@ pub async fn api_key_auth_layer(
 
 #[inline]
 #[allow(clippy::cast_precision_loss)]
+#[cfg(feature = "monitoring")]
 /// `usize` をメトリクス用に `f64` へ変換します（ゲージ値設定のため）。
-const fn usize_to_f64(n: usize) -> f64 { n as f64 }
+const fn usize_to_f64(n: usize) -> f64 {
+    n as f64
+}
 
 #[cfg(all(feature = "database", feature = "auth"))]
 /// 既存データに `lookup_hash` が未設定なレガシーキーのためのフォールバック検索。
