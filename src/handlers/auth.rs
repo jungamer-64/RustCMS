@@ -54,7 +54,6 @@ pub struct RegisterRequest {
 
 #[cfg(feature = "legacy-auth-flat")]
 /// 旧 `LoginResponse` 型 (feature = `legacy-auth-flat` 有効時のみ公開) - 新規コードは `AuthSuccessResponse` を使用してください
-#[allow(dead_code)]
 #[allow(deprecated)]
 #[derive(Debug, Serialize, ToSchema)]
 pub struct LoginResponse {
