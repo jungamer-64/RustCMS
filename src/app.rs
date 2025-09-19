@@ -396,8 +396,7 @@ impl AppState {
             #[cfg(feature = "database")]
             {
                 app_state_builder.auth = Some(
-                    AuthService::new(&config.auth, app_state_builder.database.as_ref().unwrap())
-                        .await?,
+                    AuthService::new(&config.auth, app_state_builder.database.as_ref().unwrap())?
                 );
             }
             #[cfg(not(feature = "database"))]
@@ -423,8 +422,7 @@ impl AppState {
 
         let mut app_state = app_state_builder.build();
         // Override default limiter with configured values
-        let max_reqs = u32::try_from(config.security.rate_limit_requests)
-            .unwrap_or(u32::MAX);
+        let max_reqs = u32::try_from(config.security.rate_limit_requests).unwrap_or(u32::MAX);
         app_state.rate_limiter = Arc::new(FixedWindowLimiter::new(
             max_reqs,
             config.security.rate_limit_window,
@@ -628,8 +626,7 @@ impl AppState {
         // avg += (x - avg) / n
         #[allow(clippy::cast_precision_loss)]
         let n = m.search_queries as f64;
-        m.search_avg_response_time_ms +=
-            (response_time_ms - m.search_avg_response_time_ms) / n;
+        m.search_avg_response_time_ms += (response_time_ms - m.search_avg_response_time_ms) / n;
     }
 
     /// Update database metrics
@@ -890,7 +887,7 @@ impl AppState {
         &self,
         request: crate::models::CreateUserRequest,
     ) -> crate::Result<crate::models::User> {
-        timed_op!(self, "auth", self.auth.create_user(self, request))
+        timed_op!(self, "db", self.database.create_user(request))
     }
 
     #[cfg(feature = "auth")]
@@ -903,7 +900,7 @@ impl AppState {
         &self,
         request: crate::auth::LoginRequest,
     ) -> crate::Result<crate::models::User> {
-        timed_op!(self, "auth", self.auth.authenticate_user(self, request))
+        timed_op!(self, "auth", self.auth.authenticate_user(request))
     }
 
     #[cfg(feature = "auth")]
@@ -913,7 +910,7 @@ impl AppState {
     ///
     /// セッション発行時の保存や暗号化処理に失敗した場合にエラーを返します。
     pub async fn auth_create_session(&self, user_id: uuid::Uuid) -> crate::Result<String> {
-        timed_op!(self, "auth", self.auth.create_session(user_id, self))
+        timed_op!(self, "auth", self.auth.create_session(user_id))
     }
 
     #[cfg(feature = "auth")]
@@ -988,7 +985,7 @@ impl AppState {
     ///
     /// トークンが不正、または検証過程で失敗した場合にエラーを返します。
     pub async fn auth_validate_token(&self, token: &str) -> crate::Result<crate::models::User> {
-        timed_op!(self, "auth", self.auth.validate_token(self, token))
+        timed_op!(self, "auth", self.auth.validate_token(token))
     }
 
     #[cfg(feature = "auth")]
@@ -1001,7 +998,7 @@ impl AppState {
         &self,
         token: &str,
     ) -> crate::Result<crate::auth::AuthContext> {
-        timed_op!(self, "auth", self.auth.verify_biscuit(self, token))
+        timed_op!(self, "auth", self.auth.verify_biscuit(token))
     }
 
     /// Health check wrapper for `AuthService` that records timing
@@ -1103,7 +1100,9 @@ impl AppState {
         id: uuid::Uuid,
         request: crate::models::UpdateUserRequest,
     ) -> crate::Result<crate::models::User> {
-    let user = timed_op!(self, "db", async { self.database.update_user(id, &request) })?;
+        let user = timed_op!(self, "db", async {
+            self.database.update_user(id, &request)
+        })?;
         #[cfg(feature = "cache")]
         self.invalidate_user_caches(id).await;
         Ok(user)
@@ -1116,10 +1115,10 @@ impl AppState {
     ///
     /// データベース接続の取得や削除クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_delete_user(&self, id: uuid::Uuid) -> crate::Result<()> {
-    timed_op!(self, "db", async { self.database.delete_user(id) })?;
+        timed_op!(self, "db", async { self.database.delete_user(id) })?;
         #[cfg(feature = "cache")]
         self.invalidate_user_caches(id).await;
-    Ok(())
+        Ok(())
     }
 
     #[cfg(feature = "database")]
@@ -1133,11 +1132,9 @@ impl AppState {
         id: uuid::Uuid,
         new_password: &str,
     ) -> crate::Result<()> {
-        timed_op!(
-            self,
-            "db",
-            async { self.database.reset_user_password(id, new_password) }
-        )
+        timed_op!(self, "db", async {
+            self.database.reset_user_password(id, new_password)
+        })
     }
 
     #[cfg(feature = "database")]
@@ -1147,7 +1144,7 @@ impl AppState {
     ///
     /// 集計クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_count_users(&self) -> crate::Result<usize> {
-    timed_op!(self, "db", async { self.database.count_users() })
+        timed_op!(self, "db", async { self.database.count_users() })
     }
 
     #[cfg(feature = "database")]
@@ -1161,7 +1158,9 @@ impl AppState {
         role: Option<String>,
         active: Option<bool>,
     ) -> crate::Result<usize> {
-    timed_op!(self, "db", async { self.database.count_users_filtered(role, active) })
+        timed_op!(self, "db", async {
+            self.database.count_users_filtered(role, active)
+        })
     }
 
     #[cfg(feature = "database")]
@@ -1174,7 +1173,7 @@ impl AppState {
         &self,
         req: crate::models::CreatePostRequest,
     ) -> crate::Result<crate::models::Post> {
-    timed_op!(self, "db", async { self.database.create_post(req) })
+        timed_op!(self, "db", async { self.database.create_post(req) })
     }
 
     #[cfg(feature = "database")]
@@ -1184,7 +1183,7 @@ impl AppState {
     ///
     /// データベース接続の取得や取得クエリに失敗した場合にエラーを返します。
     pub async fn db_get_post_by_id(&self, id: uuid::Uuid) -> crate::Result<crate::models::Post> {
-    timed_op!(self, "db", async { self.database.get_post_by_id(id) })
+        timed_op!(self, "db", async { self.database.get_post_by_id(id) })
     }
 
     #[cfg(feature = "database")]
@@ -1202,12 +1201,10 @@ impl AppState {
         tag: Option<String>,
         sort: Option<String>,
     ) -> crate::Result<Vec<crate::models::Post>> {
-        timed_op!(
-            self,
-            "db",
-            async { self.database
-                .get_posts(page, limit, status, author, tag, sort) }
-        )
+        timed_op!(self, "db", async {
+            self.database
+                .get_posts(page, limit, status, author, tag, sort)
+        })
     }
 
     #[cfg(feature = "database")]
@@ -1221,7 +1218,7 @@ impl AppState {
         id: uuid::Uuid,
         req: crate::models::UpdatePostRequest,
     ) -> crate::Result<crate::models::Post> {
-    timed_op!(self, "db", async { self.database.update_post(id, &req) })
+        timed_op!(self, "db", async { self.database.update_post(id, &req) })
     }
 
     #[cfg(feature = "database")]
@@ -1231,7 +1228,7 @@ impl AppState {
     ///
     /// データベース接続の取得や削除クエリの実行に失敗した場合、または対象の投稿が見つからない場合にエラーを返します。
     pub async fn db_delete_post(&self, id: uuid::Uuid) -> crate::Result<()> {
-    timed_op!(self, "db", async { self.database.delete_post(id) })
+        timed_op!(self, "db", async { self.database.delete_post(id) })
     }
 
     #[cfg(feature = "database")]
@@ -1241,7 +1238,7 @@ impl AppState {
     ///
     /// データベース接続の取得や集計クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_count_posts(&self, tag: Option<&str>) -> crate::Result<usize> {
-    timed_op!(self, "db", async { self.database.count_posts(tag) })
+        timed_op!(self, "db", async { self.database.count_posts(tag) })
     }
 
     #[cfg(feature = "database")]
@@ -1251,7 +1248,9 @@ impl AppState {
     ///
     /// データベース接続の取得や集計クエリの実行に失敗した場合にエラーを返します。
     pub async fn db_count_posts_by_author(&self, author_id: uuid::Uuid) -> crate::Result<usize> {
-    timed_op!(self, "db", async { self.database.count_posts_by_author(author_id) })
+        timed_op!(self, "db", async {
+            self.database.count_posts_by_author(author_id)
+        })
     }
 
     #[cfg(feature = "database")]
@@ -1266,11 +1265,9 @@ impl AppState {
         author: Option<uuid::Uuid>,
         tag: Option<String>,
     ) -> crate::Result<usize> {
-        timed_op!(
-            self,
-            "db",
-            async { self.database.count_posts_filtered(status, author, tag) }
-        )
+        timed_op!(self, "db", async {
+            self.database.count_posts_filtered(status, author, tag)
+        })
     }
 
     // --- API Key wrappers ---
@@ -1331,8 +1328,7 @@ impl AppState {
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
             let affected =
-                diesel::delete(api_keys.filter(api_key_id.eq(key_id)))
-                    .execute(&mut conn)?;
+                diesel::delete(api_keys.filter(api_key_id.eq(key_id))).execute(&mut conn)?;
             if affected == 0 {
                 return Err(crate::AppError::NotFound("api key not found".into()));
             }
@@ -1410,10 +1406,9 @@ impl AppState {
         use diesel::prelude::*;
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
-            let affected = diesel::delete(
-                api_keys.filter(api_key_id.eq(key_id).and(user_id.eq(user))),
-            )
-            .execute(&mut conn)?;
+            let affected =
+                diesel::delete(api_keys.filter(api_key_id.eq(key_id).and(user_id.eq(user))))
+                    .execute(&mut conn)?;
             if affected == 0 {
                 let exists = ApiKey::find_by_id(&mut conn, key_id).ok();
                 if exists.is_some() {
@@ -1508,7 +1503,7 @@ impl AppState {
         &self,
         raw: &str,
     ) -> crate::Result<Option<crate::models::ApiKey>> {
-    use crate::database::schema::api_keys::dsl::{api_keys, api_key_lookup_hash};
+        use crate::database::schema::api_keys::dsl::{api_key_lookup_hash, api_keys};
         use crate::models::ApiKey as ApiKeyModel;
         use diesel::prelude::*;
 
@@ -1595,7 +1590,7 @@ impl AppState {
     pub async fn db_list_api_keys_missing_lookup(
         &self,
     ) -> crate::Result<Vec<crate::models::ApiKey>> {
-        use crate::database::schema::api_keys::dsl::{api_keys, api_key_lookup_hash};
+        use crate::database::schema::api_keys::dsl::{api_key_lookup_hash, api_keys};
         use diesel::prelude::*;
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
@@ -1616,7 +1611,7 @@ impl AppState {
         &self,
         now: chrono::DateTime<chrono::Utc>,
     ) -> crate::Result<usize> {
-        use crate::database::schema::api_keys::dsl::{api_keys, api_key_lookup_hash, expires_at};
+        use crate::database::schema::api_keys::dsl::{api_key_lookup_hash, api_keys, expires_at};
         use diesel::prelude::*;
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
@@ -1739,7 +1734,7 @@ impl AppState {
                     "SELECT version FROM __diesel_schema_migrations ORDER BY version ASC",
                 )
                 .load(&mut conn)
-                .map_err(|e| crate::AppError::Internal(e.to_string()))?,
+                .map_err(|e| crate::AppError::Internal(e.to_string().into()))?,
             };
             Ok(rows.into_iter().map(|r| r.version).collect())
         })
@@ -1774,7 +1769,7 @@ impl AppState {
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
             conn.run_pending_migrations(migrations)
-                .map_err(|e| crate::AppError::Internal(e.to_string()))?;
+                .map_err(|e| crate::AppError::Internal(e.to_string().into()))?;
             Ok(())
         })
     }
@@ -1793,7 +1788,7 @@ impl AppState {
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
             conn.revert_last_migration(migrations)
-                .map_err(|e| crate::AppError::Internal(e.to_string()))?;
+                .map_err(|e| crate::AppError::Internal(e.to_string().into()))?;
             Ok(())
         })
     }
@@ -1813,7 +1808,7 @@ impl AppState {
             let mut conn = self.database.get_connection()?;
             let list = conn
                 .pending_migrations(migrations)
-                .map_err(|e| crate::AppError::Internal(e.to_string()))?;
+                .map_err(|e| crate::AppError::Internal(e.to_string().into()))?;
             Ok(list.into_iter().map(|m| m.name().to_string()).collect())
         })
     }
