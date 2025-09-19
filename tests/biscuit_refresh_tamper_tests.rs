@@ -14,7 +14,7 @@ async fn build_db() -> Option<Database> {
         return None;
     }
     let cfg = DatabaseConfig {
-        url,
+        url: url.into(),
         max_connections: 2,
         min_connections: 1,
         connection_timeout: 5,
@@ -49,12 +49,12 @@ async fn build_auth(db: &Database) -> AuthService {
     let kp = KeyPair::new();
     let priv_b64 = base64::engine::general_purpose::STANDARD.encode(kp.private().to_bytes());
     let cfg = AuthConfig {
-        biscuit_root_key: priv_b64,
+        biscuit_root_key: priv_b64.into(),
         access_token_ttl_secs: 60,
         refresh_token_ttl_secs: 300,
         ..Default::default()
     };
-    AuthService::new(&cfg, db).await.expect("auth init")
+    AuthService::new(&cfg, db).expect("auth init")
 }
 
 fn naive_tamper(b64: &str) -> String {
