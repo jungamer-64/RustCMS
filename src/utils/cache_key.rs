@@ -9,7 +9,7 @@
 //! let key = CacheKeyBuilder::new("posts")
 //!   .kv("page", 1)
 //!   .kv("limit", 20)
-//!   .kv_opt("status", None)
+//!   .kv_opt::<String>("status", None)
 //!   .build();
 //! assert_eq!(key, "posts:page:1:limit:20:status:all");
 //! ```
@@ -116,7 +116,7 @@ impl CacheKeyBuilder {
         );
         self.used_labels.insert(key.to_string());
         // use inlined formatting shorthand
-    self.segs.push(format!("{key}:{val}"));
+        self.segs.push(format!("{key}:{val}"));
     }
     #[must_use]
     pub fn kv(mut self, key: &str, value: impl std::fmt::Display) -> Self {
