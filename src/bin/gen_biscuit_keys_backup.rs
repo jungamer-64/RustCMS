@@ -18,7 +18,7 @@ pub(crate) fn make_backup_destination(path: &Path, backup_dir: Option<&Path>) ->
     let ts = timestamp();
     let file_name = path
         .file_name()
-        .map_or_else(|| "backup".into(), |s| s.to_string_lossy().into_owned());
+    .map_or_else(|| "backup".to_string(), |s| s.to_string_lossy().into_owned());
     let bak_name = format!("{file_name}.bak.{ts}");
     let bak = if let Some(dir) = backup_dir {
         dir.join(bak_name)

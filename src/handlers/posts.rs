@@ -114,7 +114,7 @@ pub(crate) async fn paginate_posts(
                 state.db_count_posts_filtered(status, author, tag).await
             }
         },
-    |p| PostDto::from(p),
+        |p| PostDto::from(p),
     )
     .await?;
     Ok(response)

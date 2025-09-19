@@ -2,9 +2,9 @@
 
 #[cfg(test)]
 mod tests {
+    use diesel::PgConnection;
     use diesel::prelude::*;
     use diesel::r2d2::{ConnectionManager, Pool};
-    use diesel::PgConnection;
     use diesel::sql_query;
     use std::env;
 
@@ -17,7 +17,10 @@ mod tests {
         };
 
         let manager = ConnectionManager::<PgConnection>::new(database_url);
-        let pool = Pool::builder().max_size(2).build(manager).expect("failed to build pool");
+        let pool = Pool::builder()
+            .max_size(2)
+            .build(manager)
+            .expect("failed to build pool");
         let mut conn = pool.get().expect("failed to get connection from pool");
 
         // Simple smoke query to assert DB is reachable

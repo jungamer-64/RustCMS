@@ -53,7 +53,7 @@ pub fn encode_url_param(input: &str) -> String {
 pub fn decode_url_param(input: &str) -> crate::Result<String> {
     percent_decode_str(input)
         .decode_utf8()
-        .map_err(|e| AppError::BadRequest(format!("Invalid URL encoding: {e}").into()))
+    .map_err(|e| AppError::BadRequest(format!("Invalid URL encoding: {e}")))
         .map(std::borrow::Cow::into_owned)
 }
 
@@ -74,7 +74,7 @@ pub fn encode_slug(input: &str) -> String {
 pub fn decode_slug(input: &str) -> crate::Result<String> {
     percent_decode_str(input)
         .decode_utf8()
-        .map_err(|e| AppError::BadRequest(format!("Invalid slug encoding: {e}").into()))
+    .map_err(|e| AppError::BadRequest(format!("Invalid slug encoding: {e}")))
         .map(std::borrow::Cow::into_owned)
 }
 
@@ -90,7 +90,7 @@ pub fn url_encode(input: &str) -> String {
 /// 入力が不正なエンコードでUTF-8として解釈できない場合、`BadRequest` を返します。
 pub fn url_decode(input: &str) -> crate::Result<String> {
     decode(input)
-        .map_err(|e| AppError::BadRequest(format!("URL decode error: {e}").into()))
+    .map_err(|e| AppError::BadRequest(format!("URL decode error: {e}")))
         .map(std::borrow::Cow::into_owned)
 }
 
@@ -125,7 +125,7 @@ pub fn validate_param_length(
             param_name,
             param.len(),
             max_length
-        ).into()));
+        )));
     }
     Ok(())
 }
@@ -167,13 +167,13 @@ pub fn generate_safe_slug(title: &str) -> String {
 pub fn validate_url_param(input: &str) -> crate::Result<()> {
     // 最大長チェック
     if input.len() > 2048 {
-        return Err(AppError::BadRequest("URL parameter too long".to_string().into()));
+    return Err(AppError::BadRequest("URL parameter too long".to_string()));
     }
 
     // 無効な文字パターンチェック
     if input.contains('\0') || input.contains('\u{FFFF}') {
         return Err(AppError::BadRequest(
-            "Invalid characters in URL parameter".to_string().into(),
+            "Invalid characters in URL parameter".to_string(),
         ));
     }
 
@@ -192,18 +192,18 @@ pub fn validate_url_param(input: &str) -> crate::Result<()> {
 pub fn validate_slug(input: &str) -> crate::Result<()> {
     // 最大長チェック
     if input.len() > 255 {
-        return Err(AppError::BadRequest("Slug too long".to_string().into()));
+    return Err(AppError::BadRequest("Slug too long".to_string()));
     }
 
     // 空文字チェック
     if input.trim().is_empty() {
-        return Err(AppError::BadRequest("Slug cannot be empty".to_string().into()));
+    return Err(AppError::BadRequest("Slug cannot be empty".to_string()));
     }
 
     // 無効な文字パターンチェック
     if input.contains('\0') || input.contains('\u{FFFF}') {
         return Err(AppError::BadRequest(
-            "Invalid characters in slug".to_string().into(),
+            "Invalid characters in slug".to_string(),
         ));
     }
 

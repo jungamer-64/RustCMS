@@ -1,4 +1,7 @@
 use regex::Regex;
+use once_cell::sync::Lazy;
+
+static HTML_TAG_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"<[^>]*>").unwrap());
 
 /// Strip HTML tags and collapse whitespace.
 ///
@@ -6,10 +9,7 @@ use regex::Regex;
 /// 正規表現のコンパイルに失敗した場合にパニックします（固定のリテラルのため通常は発生しません）。
 #[must_use]
 pub fn strip_html(content: &str) -> String {
-    // Basic HTML tag removal - keep the simple implementation used by models
-    // but centralize it so other modules can reuse it.
-    let tag_regex = Regex::new(r"<[^>]*>").unwrap();
-    tag_regex
+    HTML_TAG_REGEX
         .replace_all(content, " ")
         .split_whitespace()
         .collect::<Vec<_>>()

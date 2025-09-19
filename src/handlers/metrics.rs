@@ -20,23 +20,43 @@ pub async fn metrics(State(state): State<AppState>) -> Result<impl IntoResponse>
     let m = state.get_metrics().await; // snapshot
     // Basic text format (Prometheus 0.0.4)
     let mut out = String::with_capacity(512);
-    writeln!(&mut out, "# HELP cms_total_requests Total number of HTTP requests handled.").unwrap();
+    writeln!(
+        &mut out,
+        "# HELP cms_total_requests Total number of HTTP requests handled."
+    )
+    .unwrap();
     writeln!(&mut out, "# TYPE cms_total_requests counter").unwrap();
     writeln!(&mut out, "cms_total_requests {}", m.total_requests).unwrap();
 
-    writeln!(&mut out, "# HELP cms_active_connections Active connections (gauge).").unwrap();
+    writeln!(
+        &mut out,
+        "# HELP cms_active_connections Active connections (gauge)."
+    )
+    .unwrap();
     writeln!(&mut out, "# TYPE cms_active_connections gauge").unwrap();
     writeln!(&mut out, "cms_active_connections {}", m.active_connections).unwrap();
 
-    writeln!(&mut out, "# HELP cms_cache_hits Total cache hits (combined layers).").unwrap();
+    writeln!(
+        &mut out,
+        "# HELP cms_cache_hits Total cache hits (combined layers)."
+    )
+    .unwrap();
     writeln!(&mut out, "# TYPE cms_cache_hits counter").unwrap();
     writeln!(&mut out, "cms_cache_hits {}", m.cache_hits).unwrap();
 
-    writeln!(&mut out, "# HELP cms_cache_misses Total cache misses (combined layers).").unwrap();
+    writeln!(
+        &mut out,
+        "# HELP cms_cache_misses Total cache misses (combined layers)."
+    )
+    .unwrap();
     writeln!(&mut out, "# TYPE cms_cache_misses counter").unwrap();
     writeln!(&mut out, "cms_cache_misses {}", m.cache_misses).unwrap();
 
-    writeln!(&mut out, "# HELP cms_search_queries Number of search queries executed.").unwrap();
+    writeln!(
+        &mut out,
+        "# HELP cms_search_queries Number of search queries executed."
+    )
+    .unwrap();
     writeln!(&mut out, "# TYPE cms_search_queries counter").unwrap();
     writeln!(&mut out, "cms_search_queries {}", m.search_queries).unwrap();
 
@@ -46,17 +66,34 @@ pub async fn metrics(State(state): State<AppState>) -> Result<impl IntoResponse>
     )
     .unwrap();
     writeln!(&mut out, "# TYPE cms_search_avg_response_time_ms gauge").unwrap();
-    writeln!(&mut out, "cms_search_avg_response_time_ms {}", m.search_avg_response_time_ms).unwrap();
+    writeln!(
+        &mut out,
+        "cms_search_avg_response_time_ms {}",
+        m.search_avg_response_time_ms
+    )
+    .unwrap();
 
-    writeln!(&mut out, "# HELP cms_auth_attempts Authentication attempts.").unwrap();
+    writeln!(
+        &mut out,
+        "# HELP cms_auth_attempts Authentication attempts."
+    )
+    .unwrap();
     writeln!(&mut out, "# TYPE cms_auth_attempts counter").unwrap();
     writeln!(&mut out, "cms_auth_attempts {}", m.auth_attempts).unwrap();
 
-    writeln!(&mut out, "# HELP cms_auth_successes Successful authentication attempts.").unwrap();
+    writeln!(
+        &mut out,
+        "# HELP cms_auth_successes Successful authentication attempts."
+    )
+    .unwrap();
     writeln!(&mut out, "# TYPE cms_auth_successes counter").unwrap();
     writeln!(&mut out, "cms_auth_successes {}", m.auth_successes).unwrap();
 
-    writeln!(&mut out, "# HELP cms_auth_failures Failed authentication attempts.").unwrap();
+    writeln!(
+        &mut out,
+        "# HELP cms_auth_failures Failed authentication attempts."
+    )
+    .unwrap();
     writeln!(&mut out, "# TYPE cms_auth_failures counter").unwrap();
     writeln!(&mut out, "cms_auth_failures {}", m.auth_failures).unwrap();
 
@@ -64,11 +101,24 @@ pub async fn metrics(State(state): State<AppState>) -> Result<impl IntoResponse>
     writeln!(&mut out, "# TYPE cms_db_queries counter").unwrap();
     writeln!(&mut out, "cms_db_queries {}", m.db_queries).unwrap();
 
-    writeln!(&mut out, "# HELP cms_db_avg_response_time_ms Rolling average DB query time (ms).").unwrap();
+    writeln!(
+        &mut out,
+        "# HELP cms_db_avg_response_time_ms Rolling average DB query time (ms)."
+    )
+    .unwrap();
     writeln!(&mut out, "# TYPE cms_db_avg_response_time_ms gauge").unwrap();
-    writeln!(&mut out, "cms_db_avg_response_time_ms {}", m.db_avg_response_time_ms).unwrap();
+    writeln!(
+        &mut out,
+        "cms_db_avg_response_time_ms {}",
+        m.db_avg_response_time_ms
+    )
+    .unwrap();
 
-    writeln!(&mut out, "# HELP cms_errors_total Total errors encountered.").unwrap();
+    writeln!(
+        &mut out,
+        "# HELP cms_errors_total Total errors encountered."
+    )
+    .unwrap();
     writeln!(&mut out, "# TYPE cms_errors_total counter").unwrap();
     writeln!(&mut out, "cms_errors_total {}", m.errors_total).unwrap();
 
@@ -88,7 +138,11 @@ pub async fn metrics(State(state): State<AppState>) -> Result<impl IntoResponse>
     writeln!(&mut out, "# TYPE cms_errors_search counter").unwrap();
     writeln!(&mut out, "cms_errors_search {}", m.errors_search).unwrap();
 
-    writeln!(&mut out, "# HELP cms_active_sessions Current active auth sessions.").unwrap();
+    writeln!(
+        &mut out,
+        "# HELP cms_active_sessions Current active auth sessions."
+    )
+    .unwrap();
     writeln!(&mut out, "# TYPE cms_active_sessions gauge").unwrap();
     writeln!(&mut out, "cms_active_sessions {}", m.active_sessions).unwrap();
 

@@ -9,7 +9,7 @@ use crate::telemetry;
 /// 環境変数の読み込みや設定値の検証に失敗した場合、エラーを返します。
 pub fn init_logging_and_config() -> Result<Config> {
     // Initialize tracing subscriber (idempotent)
-    let _ = telemetry::init_telemetry();
+    let _ = telemetry::init_telemetry(false);
 
     // Load configuration
     let config = Config::from_env()?;
@@ -21,7 +21,7 @@ pub fn init_logging_and_config() -> Result<Config> {
 /// Prefer this from CLI binaries that accept a --verbose flag.
 pub fn init_logging_and_config_with_verbose(verbose: bool) -> Result<Config> {
     // Initialize tracing subscriber (idempotent)
-    let _ = telemetry::init_telemetry_with_verbose(verbose);
+    let _ = telemetry::init_telemetry(verbose);
 
     // Load configuration
     let config = Config::from_env()?;
@@ -35,7 +35,7 @@ pub fn init_env() {
     let _ = dotenvy::dotenv();
 
     // Initialize telemetry/logging (best-effort)
-    let _ = telemetry::init_telemetry();
+    let _ = telemetry::init_telemetry(false);
 }
 
 /// Initialize `AppState` from environment via `Config`

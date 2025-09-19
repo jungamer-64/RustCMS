@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing
-    tracing_subscriber::fmt::init();
+    cms_backend::utils::init::init_env();
 
     // Simple health check endpoint
     let app = Router::new()

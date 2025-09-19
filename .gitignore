@@ -103,3 +103,6 @@ uploads/*
 
 # Log files (temporary)
 *.log
+
+.gemini/
+gha-creds-*.json

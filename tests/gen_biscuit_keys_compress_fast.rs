@@ -1,8 +1,6 @@
 // mod helpers; // Remove duplicate
 mod helpers;
-use helpers::common::{
-    find_gz_in_dir, make_temp_dirs, run_compressed_backup_sequence,
-};
+use helpers::common::{find_gz_in_dir, make_temp_dirs, run_compressed_backup_sequence};
 
 // Fast path compression test gated by env flag to skip full two-run sequence.
 #[test]
