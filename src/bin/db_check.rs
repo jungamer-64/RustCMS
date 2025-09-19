@@ -20,7 +20,6 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
     let args = Args::parse();
 
     // Initialize common app state (includes database)
@@ -28,18 +27,18 @@ async fn main() -> Result<()> {
 
     // If delete_post provided, attempt deletion and exit
     if let Some(id_str) = args.delete_post {
-        if let Ok(uuid) = uuid::Uuid::parse_str(&id_str) {
-            state.db_admin_delete_post(uuid).await?;
+        let uuid = uuid::Uuid::parse_str(&id_str).map_err(|_| {
+            cms_backend::AppError::BadRequest("Invalid UUID provided for --delete-post".to_string().into())
+        })?;
 
-            if args.json {
-                println!("{}", json!({"deleted": true, "post_id": uuid }));
-            } else {
-                println!("Deleted post id {uuid}");
-            }
-            return Ok(());
+        state.db_admin_delete_post(uuid).await?;
+
+        if args.json {
+            println!("{}", json!({"deleted": true, "post_id": uuid }));
+        } else {
+            println!("Deleted post id {uuid}");
         }
-        eprintln!("Invalid UUID provided for --delete-post");
-        std::process::exit(1);
+        return Ok(());
     }
 
     // Count users
