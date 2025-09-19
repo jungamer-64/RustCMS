@@ -91,7 +91,7 @@ pub struct NewPost {
     pub published_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Deserialize, Validate, ToSchema)]
+#[derive(Debug, Deserialize, Validate, ToSchema, Default)]
 pub struct CreatePostRequest {
     #[validate(length(
         min = 1,
@@ -394,20 +394,28 @@ impl CreatePostRequest {
         } else {
             "draft".to_string()
         };
+        // compute derived collections before moving self fields
+        let tags = self.clean_tags();
+        let categories = self.clean_categories();
+        let excerpt = self.excerpt;
+        let content = self.content;
+        let title = self.title;
+        let meta_title = self.meta_title;
+        let meta_description = self.meta_description;
 
         NewPost {
             id: Uuid::new_v4(),
-            title: self.title.clone(),
+            title,
             slug,
-            content: self.content.clone(),
-            excerpt: self.excerpt.clone(),
+            content,
+            excerpt,
             author_id,
             status,
             featured_image_id: None, // Will be set separately if needed
-            tags: self.clean_tags(),
-            categories: self.clean_categories(),
-            meta_title: self.meta_title.clone(),
-            meta_description: self.meta_description.clone(),
+            tags,
+            categories,
+            meta_title,
+            meta_description,
             published_at: if self.published.unwrap_or(false) {
                 Some(Utc::now())
             } else {
