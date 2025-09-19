@@ -365,94 +365,187 @@ impl Config {
     /// もしくは `DATABASE_URL` プレースホルダーが設定内にあり環境変数が未設定の場合にエラーを返します。
     pub fn from_env() -> Result<Self, crate::AppError> {
         dotenvy::dotenv().ok();
-        // プロファイル (development / production / staging など) を環境変数から取得
-        let profile = env::var("CMS_PROFILE")
-            .or_else(|_| env::var("RUN_MODE"))
-            .unwrap_or_else(|_| "development".to_string());
-        // 基本: default → {profile}.toml → local.toml → env(CMS_*) の順で上書き
-        let mut builder = config::Config::builder()
-            .add_source(config::File::with_name("config/default").required(false));
-        if profile != "development" {
-            builder = builder.add_source(
-                config::File::with_name(&format!("config/{profile}")).required(false),
-            );
-        }
-        builder = builder
-            .add_source(config::File::with_name("config/local").required(false))
-            .add_source(config::Environment::with_prefix("CMS").separator("_"));
 
-        let raw = builder
-            .build()
-            .map_err(|e| crate::AppError::Config(e.to_string()))?;
-        let mut cfg: Self = raw
-            .try_deserialize()
-            .map_err(|e| crate::AppError::Config(e.to_string()))?;
+        let profile = read_profile();
+        let builder = build_builder(&profile);
+        let raw = builder.build()?;
+        let mut cfg: Self = raw.try_deserialize()?;
         cfg.environment = profile;
 
-        // If the config contains the literal "${DATABASE_URL}", expand it from the environment
-        // This keeps secrets out of the repo while allowing config files to reference the env var.
         #[cfg(feature = "database")]
+        apply_database_url(&mut cfg)?;
+        apply_log_env_overrides(&mut cfg);
+        apply_legacy_env_overrides(&mut cfg);
+        sanitize_cors(&mut cfg);
+        warn_deprecated_envs();
+
+        // Validation: fail fast if settings are semantically invalid
+        cfg.validate()?;
+
+        Ok(cfg)
+    }
+
+    /// 設定値が論理的に正しいか検証します。
+    fn validate(&self) -> Result<(), crate::AppError> {
+        #[cfg(feature = "database")]
+        if self.database.min_connections > self.database.max_connections {
+            return Err(crate::AppError::ConfigValidationError(
+                "database.min_connections cannot be greater than max_connections".to_string(),
+            ));
+        }
+
+        #[cfg(feature = "auth")]
         {
-            // If DATABASE_URL is present in the environment (for example from a .env file),
-            // prefer it over values from config files. This allows developers to set
-            // DATABASE_URL in `.env` during local development.
-            if let Ok(real) = env::var("DATABASE_URL") {
-                if !real.is_empty() {
-                    cfg.database.url = real;
-                }
-            } else if cfg.database.url.contains("${DATABASE_URL}") {
-                // If the config explicitly references the placeholder, fail if env var is missing.
-                return Err(crate::AppError::Config(
-                    "DATABASE_URL must be set when referenced in config".to_string(),
+            if !(10..=16).contains(&self.auth.bcrypt_cost) {
+                return Err(crate::AppError::ConfigValidationError(
+                    "auth.bcrypt_cost must be between 10 and 16 for security and performance reasons".to_string(),
                 ));
             }
         }
 
-        // 追加: LOG_LEVEL / LOG_FORMAT 環境変数があれば上書き
-        if let Ok(lvl) = env::var("LOG_LEVEL") && !lvl.is_empty() {
+        if self.security.rate_limit_window == 0 {
+            return Err(crate::AppError::ConfigValidationError(
+                "security.rate_limit_window must be greater than 0".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+// ==========================
+// Constants for defaults (scoped into structs)
+// ==========================
+const MEGABYTE: usize = 1024 * 1024;
+
+impl ServerConfig {
+    pub const DEFAULT_HOST: &'static str = "0.0.0.0";
+    pub const DEFAULT_PORT: u16 = 3000;
+    pub const DEFAULT_REQUEST_TIMEOUT: u64 = 30;
+    pub const DEFAULT_MAX_REQUEST_SIZE: usize = 10 * MEGABYTE; // 10MB
+}
+
+impl SearchConfig {
+    pub const DEFAULT_WRITER_MEMORY: usize = 50 * MEGABYTE; // 50MB
+    pub const DEFAULT_MAX_RESULTS: usize = 100;
+}
+
+// Placeholder constants
+#[cfg(feature = "database")]
+const DATABASE_URL_PLACEHOLDER: &str = "${DATABASE_URL}";
+
+// ==========================
+// Private helpers
+// ==========================
+fn read_profile() -> String {
+    env::var("CMS_PROFILE")
+        .or_else(|_| env::var("RUN_MODE"))
+        .unwrap_or_else(|_| "development".to_string())
+}
+
+fn build_builder(profile: &str) -> config::ConfigBuilder<config::builder::DefaultState> {
+    let mut builder = config::Config::builder()
+        .add_source(config::File::with_name("config/default").required(false));
+    if profile != "development" {
+        builder = builder
+            .add_source(config::File::with_name(&format!("config/{profile}")).required(false));
+    }
+    builder
+        .add_source(config::File::with_name("config/local").required(false))
+        .add_source(config::Environment::with_prefix("CMS").separator("_"))
+}
+
+#[cfg(feature = "database")]
+fn apply_database_url(cfg: &mut Config) -> Result<(), crate::AppError> {
+    if let Ok(real) = env::var("DATABASE_URL") {
+        if !real.is_empty() {
+            cfg.database.url = SecretString::new(real);
+            return Ok(());
+        }
+    }
+    // SecretString doesn't implement PartialEq/PartialOrd; compare inner values explicitly
+    if cfg.database.url.expose_secret() == DATABASE_URL_PLACEHOLDER {
+        return Err(crate::AppError::ConfigValueMissing(
+            "DATABASE_URL".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn apply_log_env_overrides(cfg: &mut Config) {
+    if let Ok(lvl) = env::var("LOG_LEVEL") {
+        if !lvl.is_empty() {
             cfg.logging.level = lvl;
         }
-        if let Ok(fmt) = env::var("LOG_FORMAT") && !fmt.is_empty() {
-            cfg.logging.format = fmt;
-        }
-
-        // 旧 production_config.rs / simple_config.rs 由来の変数を一部マッピング (後方互換)
-        if let Ok(v) = env::var("ACCESS_TOKEN_TTL_SECS")
-            && let Ok(n) = v.parse()
-        {
-            cfg.auth.access_token_ttl_secs = n;
-        }
-        if let Ok(v) = env::var("REFRESH_TOKEN_TTL_SECS")
-            && let Ok(n) = v.parse()
-        {
-            cfg.auth.refresh_token_ttl_secs = n;
-        }
-
-        // sanitize cors origins (toml で文字列カンマ列だった場合をケア) ※ production.toml 古い形式互換
-        if cfg.security.cors_origins.len() == 1 && cfg.security.cors_origins[0].contains(',') {
-            let joined = cfg.security.cors_origins[0].clone();
-            cfg.security.cors_origins = joined
-                .split(',')
-                .map(str::trim)
-                .map(str::to_string)
-                .filter(|s| !s.is_empty())
-                .collect();
-        }
-
-        // warn if deprecated envs used
-        for k in [
-            "PORT",
-            "HOST",
-            "RATE_LIMIT_REQUESTS",
-            "RATE_LIMIT_WINDOW_SECONDS",
-        ] {
-            if env::var(k).is_ok() {
-                warn!(
-                    "deprecated env var '{k}' detected; use CMS_SERVER__* or CMS_SECURITY__* via prefixed config"
-                );
+    }
+    if let Ok(fmt) = env::var("LOG_FORMAT") {
+        if !fmt.is_empty() {
+            match fmt.to_lowercase().as_str() {
+                "json" => cfg.logging.format = LogFormat::Json,
+                "text" => cfg.logging.format = LogFormat::Text,
+                other => warn!(
+                    "invalid LOG_FORMAT '{}' detected; expected 'text' or 'json' — keeping default",
+                    other
+                ),
             }
         }
-
-        Ok(cfg)
     }
+}
+
+fn apply_legacy_env_overrides(cfg: &mut Config) {
+    // Back-compat overrides: legacy env names from older deployments
+    if let Ok(v) = env::var("ACCESS_TOKEN_TTL_SECS") {
+        match v.parse() {
+            Ok(n) => cfg.auth.access_token_ttl_secs = n,
+            Err(_) => warn!(
+                "Failed to parse ACCESS_TOKEN_TTL_SECS: '{v}'. Using configured/default value."
+            ),
+        }
+    }
+    if let Ok(v) = env::var("REFRESH_TOKEN_TTL_SECS") {
+        match v.parse() {
+            Ok(n) => cfg.auth.refresh_token_ttl_secs = n,
+            Err(_) => warn!(
+                "Failed to parse REFRESH_TOKEN_TTL_SECS: '{v}'. Using configured/default value."
+            ),
+        }
+    }
+}
+
+fn sanitize_cors(cfg: &mut Config) {
+    if cfg.security.cors_origins.len() == 1 && cfg.security.cors_origins[0].contains(',') {
+        let joined = cfg.security.cors_origins[0].clone();
+        cfg.security.cors_origins = joined
+            .split(',')
+            .map(str::trim)
+            .map(str::to_string)
+            .filter(|s| !s.is_empty())
+            .collect();
+    }
+}
+
+fn warn_deprecated_envs() {
+    for k in [
+        "PORT",
+        "HOST",
+        "RATE_LIMIT_REQUESTS",
+        "RATE_LIMIT_WINDOW_SECONDS",
+    ] {
+        if env::var(k).is_ok() {
+            warn!(
+                "deprecated env var '{k}' detected; use CMS_SERVER__* or CMS_SECURITY__* via prefixed config"
+            );
+        }
+    }
+}
+
+// ==========================
+// Serde helpers
+// ==========================
+fn serialize_secret_masked<S>(_: &SecretString, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    // Do not expose secrets in serialized output; mask with fixed placeholder
+    serializer.serialize_str("******")
 }
