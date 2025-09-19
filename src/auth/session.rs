@@ -5,10 +5,7 @@ use crate::{
     Result,
 };
 use chrono::{DateTime, Utc};
-<<<<<<< HEAD
 use async_trait::async_trait;
-=======
->>>>>>> 811b64f (Refactor gen_biscuit_keys outputs: OutputsOptions and manifest/backup helpers)
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
@@ -26,11 +23,7 @@ pub struct SessionData {
     pub refresh_version: u32, // 現在有効な refresh token version
 }
 
-<<<<<<< HEAD
 #[async_trait]
-=======
-#[allow(async_fn_in_trait)]
->>>>>>> 811b64f (Refactor gen_biscuit_keys outputs: OutputsOptions and manifest/backup helpers)
 pub trait SessionStore: Send + Sync {
     async fn insert(&self, id: SessionId, data: SessionData);
     async fn remove(&self, id: SessionId);
@@ -67,10 +60,7 @@ impl InMemorySessionStore {
 }
 
 #[allow(clippy::significant_drop_tightening)]
-<<<<<<< HEAD
 #[async_trait]
-=======
->>>>>>> 811b64f (Refactor gen_biscuit_keys outputs: OutputsOptions and manifest/backup helpers)
 impl SessionStore for InMemorySessionStore {
     async fn insert(&self, id: SessionId, data: SessionData) {
         self.inner.write().await.insert(id, data);

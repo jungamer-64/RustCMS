@@ -19,16 +19,9 @@ pub(crate) fn make_backup_destination(
     backup_dir: Option<&Path>,
 ) -> (std::path::PathBuf, String) {
     let ts = timestamp();
-<<<<<<< HEAD
-    let file_name = path.file_name().map_or_else(
-        || "backup".to_string(),
-        |s| s.to_string_lossy().into_owned(),
-    );
-=======
     let file_name = path
         .file_name()
-    .map_or_else(|| "backup".to_string(), |s| s.to_string_lossy().into_owned());
->>>>>>> 811b64f (Refactor gen_biscuit_keys outputs: OutputsOptions and manifest/backup helpers)
+        .map_or_else(|| "backup".to_string(), |s| s.to_string_lossy().into_owned());
     let bak_name = format!("{file_name}.bak.{ts}");
     let bak = if let Some(dir) = backup_dir {
         dir.join(bak_name)
@@ -39,10 +32,10 @@ pub(crate) fn make_backup_destination(
 }
 
 pub(crate) fn ensure_parent_dir(parent: Option<&Path>) {
-    if let Some(parent) = parent
-        && let Err(e) = fs::create_dir_all(parent)
-    {
-        eprintln!("Failed to create backup dir {}: {e}", parent.display());
+    if let Some(parent) = parent {
+        if let Err(e) = fs::create_dir_all(parent) {
+            eprintln!("Failed to create backup dir {}: {e}", parent.display());
+        }
     }
 }
 
