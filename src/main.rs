@@ -9,6 +9,8 @@
 //! 2. 依存サービスの初期化（DB/認証/キャッシュ/検索など、featureに応じて）
 //! 3. ルータの構築と状態(AppState)の注入
 //! 4. HTTPサーバーの待受開始
+//!
+//! English:
 //! This server supports both production mode (with database) and development mode (in-memory).
 //! It serves as the main unified entry point for the `RustCMS` backend.
 
@@ -16,7 +18,11 @@ use axum::Router as AxumRouter;
 use std::net::SocketAddr;
 use tracing::info;
 
+use thiserror::Error;
+
+use cms_backend::error::AppError as BackendAppError;
 use cms_backend::routes::create_router;
+use hyper::Error as HyperError;
 
 /// Unified CMS server entrypoint（統合CMSサーバー起動）
 ///
@@ -27,8 +33,23 @@ use cms_backend::routes::create_router;
 ///
 /// This replaces the need for separate CMS binaries by providing a single,
 /// unified entry point that can operate in different modes.
+#[derive(Debug, Error)]
+enum ServerError {
+    #[error("Failed to initialize application state: {0}")]
+    Init(#[from] BackendAppError),
+
+    #[error("Invalid socket address: {0}")]
+    AddrParse(#[from] std::net::AddrParseError),
+
+    #[error("Failed to bind TCP listener: {0}")]
+    Bind(#[from] std::io::Error),
+
+    #[error("Server error: {0}")]
+    Serve(#[from] HyperError),
+}
+
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), ServerError> {
     // 概要: アプリケーション状態を初期化し、アドレスへバインドしてHTTPサーバーを起動します。
     // 入力: 環境変数/設定ファイル（bind host/port、有効化featureに依存）
     // 返り値: 起動成功で Ok(())、初期化やバインドに失敗すると Err
@@ -41,11 +62,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("   Integrating cms-lightweight + cms-simple + cms-unified functionality");
 
     // Compute address from config before moving state
-    let addr: SocketAddr =
-    format!("{}:{}", state.config.server.host, state.config.server.port).parse()?;
+    let addr: SocketAddr = format!("{}:{}", state.config.server.host, state.config.server.port).parse()?;
 
-    // Build router and attach state (state is moved into router)
-    let router: AxumRouter = create_router().with_state(state);
+    // Build router and attach state (we keep a clone to call shutdown later)
+    let state_clone_for_router = state.clone();
+    let router: AxumRouter = create_router().with_state(state_clone_for_router);
 
     // Actually start the HTTP server (this was missing in the original implementation)
     let listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -71,8 +92,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "search")]
     info!("🔍 Search endpoints available at /api/v1/search/*");
 
-    // Start the server
-    axum::serve(listener, router).await?;
+    // Start the server with graceful shutdown handling. When the shutdown
+    // signal is received, ensure AppState is asked to shutdown background
+    // tasks and flush resources before exiting.
+    let server = axum::serve(listener, router).with_graceful_shutdown(shutdown_signal());
+    server.await?;
+
+    // After server returns (graceful shutdown triggered), run AppState shutdown
+    state.shutdown().await;
 
     Ok(())
+}
+
+/// Listens for shutdown signals (Ctrl+C and SIGTERM on Unix) and returns
+/// once one is received so the server can start graceful shutdown.
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        () = ctrl_c => {},
+        () = terminate => {},
+    }
+
+    info!("🔌 Signal received, starting graceful shutdown");
 }
