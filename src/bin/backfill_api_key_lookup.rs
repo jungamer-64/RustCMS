@@ -46,9 +46,10 @@ struct RowReport {
 
 #[derive(serde::Serialize)]
 struct Report {
-    scanned: usize,
-    legacy_missing_lookup: usize,
-    expired_marked: usize,
+    // Number of affected keys found (rows with empty lookup)
+    affected_keys_count: usize,
+    // Number of keys that were marked expired by this run
+    expired_marked_count: usize,
     rows: Vec<RowReport>,
     expire_mode: bool,
     dry_run: bool,
@@ -69,23 +70,20 @@ async fn main() -> anyhow::Result<()> {
     {
         let state = cms_backend::utils::init::init_app_state().await?;
 
-        // 取得: 空 lookup_hash の行（AppState ラッパー）
+        // Fetch rows with an empty lookup_hash via AppState wrapper
         let rows: Vec<cms_backend::models::ApiKey> =
             state.db_list_api_keys_missing_lookup().await?;
-        let scanned_count = rows.len();
-        let expired_marked = if args.expire && !args.dry_run {
+        let affected_keys_count = rows.len();
+        let expired_marked_count = if args.expire && !args.dry_run {
             let now = Utc::now();
-            state
-                .db_expire_api_keys_missing_lookup(now)
-                .await?
+            state.db_expire_api_keys_missing_lookup(now).await?
         } else {
             0usize
         };
 
         let report = Report {
-            scanned: scanned_count,
-            legacy_missing_lookup: scanned_count,
-            expired_marked,
+            affected_keys_count,
+            expired_marked_count,
             rows: rows
                 .into_iter()
                 .map(|r| RowReport {
