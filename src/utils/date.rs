@@ -69,17 +69,17 @@ pub fn humanize_duration(datetime: &DateTime<Utc>) -> String {
     if duration.num_seconds() < 60 {
         "just now".to_string()
     } else if duration.num_minutes() < 60 {
-    format!("{} minutes ago", duration.num_minutes())
+        format!("{} minutes ago", duration.num_minutes())
     } else if duration.num_hours() < 24 {
-    format!("{} hours ago", duration.num_hours())
+        format!("{} hours ago", duration.num_hours())
     } else if duration.num_days() < 7 {
-    format!("{} days ago", duration.num_days())
+        format!("{} days ago", duration.num_days())
     } else if duration.num_days() < 30 {
-    format!("{} weeks ago", duration.num_days() / 7)
+        format!("{} weeks ago", duration.num_days() / 7)
     } else if duration.num_days() < 365 {
-    format!("{} months ago", duration.num_days() / 30)
+        format!("{} months ago", duration.num_days() / 30)
     } else {
-    format!("{} years ago", duration.num_days() / 365)
+        format!("{} years ago", duration.num_days() / 365)
     }
 }
 
@@ -227,7 +227,7 @@ mod tests {
     #[test]
     fn test_date_parsing() {
         let date_str = "2023-12-25";
-        let parsed = parse_date(date_str).unwrap();
+        let parsed = parse_date(date_str).expect("should parse valid date string");
         assert_eq!(parsed.year(), 2023);
         assert_eq!(parsed.month(), 12);
         assert_eq!(parsed.day(), 25);
@@ -236,7 +236,7 @@ mod tests {
     #[test]
     fn test_datetime_formatting() {
         let dt = DateTime::parse_from_rfc3339("2023-12-25T15:30:45Z")
-            .unwrap()
+            .expect("should parse valid rfc3339 string")
             .with_timezone(&Utc);
         let formatted = format_datetime(&dt);
         assert_eq!(formatted, "2023-12-25 15:30:45");

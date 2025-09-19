@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use biscuit_auth::{KeyPair, UnverifiedBiscuit, PublicKey};
+    use biscuit_auth::{KeyPair, PublicKey, UnverifiedBiscuit};
 
     #[test]
     fn invalid_biscuit_token_rejected() {
@@ -35,6 +35,9 @@ mod tests {
 
         let unverified = UnverifiedBiscuit::from_base64(&b64).expect("parse base64");
         let res = unverified.verify(key_provider);
-        assert!(res.is_err(), "Expected verification to fail with wrong public key");
+        assert!(
+            res.is_err(),
+            "Expected verification to fail with wrong public key"
+        );
     }
 }

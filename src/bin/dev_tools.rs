@@ -71,7 +71,7 @@ async fn main() -> Result<()> {
                     return Ok(());
                 }
                 return Err(cms_backend::AppError::BadRequest(
-                    "Invalid UUID provided for --delete-post".to_string().into(),
+                    "Invalid UUID provided for --delete-post".to_string(),
                 ));
             }
 

@@ -68,11 +68,15 @@ mod tests {
         let original = env::var("ADMIN_TOKEN").ok();
 
         // Test with no environment variable
-    unsafe { env::remove_var("ADMIN_TOKEN"); }
+        unsafe {
+            env::remove_var("ADMIN_TOKEN");
+        }
         assert!(!check_admin_token("any_token"));
 
         // Test with matching token
-    unsafe { env::set_var("ADMIN_TOKEN", "test_token"); }
+        unsafe {
+            env::set_var("ADMIN_TOKEN", "test_token");
+        }
         assert!(check_admin_token("test_token"));
 
         // Test with non-matching token
@@ -94,7 +98,9 @@ mod tests {
         let original = env::var("ADMIN_TOKEN").ok();
 
         // Test with empty token in environment
-    unsafe { env::set_var("ADMIN_TOKEN", ""); }
+        unsafe {
+            env::set_var("ADMIN_TOKEN", "");
+        }
         assert!(check_admin_token(""));
         assert!(!check_admin_token("not_empty"));
 
@@ -114,16 +120,22 @@ mod tests {
         let original = env::var("ADMIN_TOKEN").ok();
 
         // Test with no environment variable
-    unsafe { env::remove_var("ADMIN_TOKEN"); }
+        unsafe {
+            env::remove_var("ADMIN_TOKEN");
+        }
         assert!(get_admin_token().is_none());
 
         // Test with set token
-    unsafe { env::set_var("ADMIN_TOKEN", "test_admin_token"); }
+        unsafe {
+            env::set_var("ADMIN_TOKEN", "test_admin_token");
+        }
         assert_eq!(get_admin_token(), Some("test_admin_token".to_string()));
 
         // Test with empty token
-    unsafe { env::set_var("ADMIN_TOKEN", ""); }
-    assert_eq!(get_admin_token(), Some(String::new()));
+        unsafe {
+            env::set_var("ADMIN_TOKEN", "");
+        }
+        assert_eq!(get_admin_token(), Some(String::new()));
 
         // Restore original value
         match original {
@@ -141,7 +153,9 @@ mod tests {
         let original = env::var("ADMIN_TOKEN").ok();
 
         let special_token = "token!@#$%^&*(){}[]|\\:;\"'<>,.?/~`";
-    unsafe { env::set_var("ADMIN_TOKEN", special_token); }
+        unsafe {
+            env::set_var("ADMIN_TOKEN", special_token);
+        }
 
         assert!(check_admin_token(special_token));
         assert!(!check_admin_token("different_token"));
@@ -162,7 +176,9 @@ mod tests {
         let original = env::var("ADMIN_TOKEN").ok();
 
         let unicode_token = "トークン123🔑";
-    unsafe { env::set_var("ADMIN_TOKEN", unicode_token); }
+        unsafe {
+            env::set_var("ADMIN_TOKEN", unicode_token);
+        }
 
         assert!(check_admin_token(unicode_token));
         assert!(!check_admin_token("regular_token"));

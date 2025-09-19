@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
     // If delete_post provided, attempt deletion and exit
     if let Some(id_str) = args.delete_post {
         let uuid = uuid::Uuid::parse_str(&id_str).map_err(|_| {
-            cms_backend::AppError::BadRequest("Invalid UUID provided for --delete-post".to_string().into())
+            cms_backend::AppError::BadRequest("Invalid UUID provided for --delete-post".to_string())
         })?;
 
         state.db_admin_delete_post(uuid).await?;

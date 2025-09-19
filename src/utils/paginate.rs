@@ -91,16 +91,7 @@ where
     let fitems = build_items(filters.clone());
     let fcount = build_count(filters.clone());
 
-    fetch_paginated_cached(
-        state,
-        cache_key,
-        ttl_seconds,
-        page,
-        limit,
-        fitems,
-        fcount,
-    )
-    .await
+    fetch_paginated_cached(state, cache_key, ttl_seconds, page, limit, fitems, fcount).await
 }
 
 /// Variant where the item fetch returns raw models `M` and a separate mapper converts them to `T`.

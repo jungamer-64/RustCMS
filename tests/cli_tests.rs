@@ -4,7 +4,7 @@ use std::process::Command;
 
 #[test]
 fn help_shows_commands() {
-    let mut cmd = Command::cargo_bin("cms-migrate").unwrap();
+    let mut cmd = Command::cargo_bin("cms-migrate").expect("should find cms-migrate binary");
     cmd.arg("--help");
     let output = cmd.output().expect("failed to run cms-migrate");
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -34,7 +34,7 @@ fn help_shows_commands() {
 
 #[test]
 fn migrate_allows_no_seed_flag() {
-    let mut cmd = Command::cargo_bin("cms-migrate").unwrap();
+    let mut cmd = Command::cargo_bin("cms-migrate").expect("should find cms-migrate binary");
     cmd.args(["migrate", "--no-seed"]);
     let output = cmd.output().expect("failed to run cms-migrate");
 

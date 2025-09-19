@@ -28,7 +28,7 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema, ValueEnum)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema, ValueEnum, Default)]
 #[clap(rename_all = "kebab_case")]
 pub enum UserRole {
     SuperAdmin,
@@ -36,14 +36,11 @@ pub enum UserRole {
     Editor,
     Author,
     Contributor,
+    #[default]
     Subscriber,
 }
 
-impl Default for UserRole {
-    fn default() -> Self {
-        UserRole::Subscriber
-    }
-}
+// Default derive used; Subscriber is the default variant via `#[default]` below.
 
 impl UserRole {
     #[must_use]

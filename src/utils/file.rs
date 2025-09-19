@@ -410,10 +410,10 @@ mod tests {
 
     #[test]
     fn test_calculate_file_hash() {
-        let mut temp_file = NamedTempFile::new().unwrap();
-        writeln!(temp_file, "test content").unwrap();
+        let mut temp_file = NamedTempFile::new().expect("should create temp file");
+        writeln!(temp_file, "test content").expect("should write to temp file");
 
-        let hash = calculate_file_hash(temp_file.path()).unwrap();
+        let hash = calculate_file_hash(temp_file.path()).expect("should calculate hash");
         assert_eq!(hash.len(), 64); // SHA256は64文字
     }
 }

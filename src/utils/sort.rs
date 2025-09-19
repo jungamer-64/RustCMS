@@ -43,19 +43,19 @@ mod tests {
         let allowed = ["created_at", "updated_at", "title"];
         assert_eq!(
             parse_sort(None, "created_at", true, &allowed),
-            ("created_at".into(), true)
+            ("created_at".to_string(), true)
         );
         assert_eq!(
-            parse_sort(Some("title".into()), "created_at", true, &allowed),
-            ("title".into(), false)
+            parse_sort(Some("title".to_string()), "created_at", true, &allowed),
+            ("title".to_string(), false)
         );
         assert_eq!(
-            parse_sort(Some("-title".into()), "created_at", true, &allowed),
-            ("title".into(), true)
+            parse_sort(Some("-title".to_string()), "created_at", true, &allowed),
+            ("title".to_string(), true)
         );
         assert_eq!(
-            parse_sort(Some("unknown".into()), "created_at", true, &allowed),
-            ("created_at".into(), true)
+            parse_sort(Some("unknown".to_string()), "created_at", true, &allowed),
+            ("created_at".to_string(), true)
         );
     }
 }

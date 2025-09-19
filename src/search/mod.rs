@@ -269,7 +269,7 @@ impl SearchService {
         let mut writer = self.writer.write().await;
         writer
             .commit()
-            .map_err(|e| crate::AppError::Internal(format!("Search commit failed: {e}").into()))?;
+            .map_err(|e| crate::AppError::Internal(format!("Search commit failed: {e}")))?;
         Ok(())
     }
 }

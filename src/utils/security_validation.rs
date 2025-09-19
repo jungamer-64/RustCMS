@@ -148,7 +148,10 @@ pub fn validate_username_secure(username: &str) -> Result<String, ValidationErro
 
     // Prevent reserved usernames
     let reserved = ["admin", "root", "system", "null", "undefined", "api", "www"];
-    if reserved.iter().any(|&reserved| trimmed.eq_ignore_ascii_case(reserved)) {
+    if reserved
+        .iter()
+        .any(|&reserved| trimmed.eq_ignore_ascii_case(reserved))
+    {
         return Err(ValidationError::new("username_reserved"));
     }
 

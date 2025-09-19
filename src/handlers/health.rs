@@ -96,7 +96,6 @@ pub async fn health_check(State(state): State<AppState>) -> Result<impl IntoResp
     // Delegate to centralized AppState health_check for unified logic and metrics
     let h = state.health_check().await?;
 
-
     let services = ServiceHealthDetails {
         database: map_service(&h.database),
         cache: map_service(&h.cache),

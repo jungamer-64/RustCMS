@@ -1,70 +1,17 @@
 //! Biscuit token rotation & invalidation test (requires database + auth features).
 #![cfg(all(feature = "auth", feature = "database"))]
 
-use chrono::Utc;
-use cms_backend::auth::AuthService;
-use cms_backend::config::{AuthConfig, DatabaseConfig};
-use cms_backend::database::Database;
-use cms_backend::models::{User, UserRole};
-use uuid::Uuid;
-
-async fn build_db() -> Option<Database> {
-    let url = std::env::var("DATABASE_URL").ok()?;
-    if url.is_empty() {
-        return None;
-    }
-    let cfg = DatabaseConfig {
-        url: url.into(),
-        max_connections: 2,
-        min_connections: 1,
-        connection_timeout: 5,
-        idle_timeout: 30,
-        max_lifetime: 300,
-        enable_migrations: false, // テスト: 既存テーブル想定 / 速度優先
-    };
-    Database::new(&cfg).await.ok()
-}
-
-async fn build_auth(db: &Database) -> AuthService {
-    use base64::Engine;
-    use biscuit_auth::KeyPair;
-    let kp = KeyPair::new();
-    let priv_b64 = base64::engine::general_purpose::STANDARD.encode(kp.private().to_bytes());
-    let cfg = AuthConfig {
-        biscuit_root_key: priv_b64.into(),
-        access_token_ttl_secs: 30, // short TTL for test
-        refresh_token_ttl_secs: 300,
-        ..Default::default()
-    };
-    AuthService::new(&cfg, db).expect("auth init")
-}
-
-fn dummy_user() -> User {
-    let now = Utc::now();
-    User {
-        id: Uuid::new_v4(),
-        username: format!("user_{}", Uuid::new_v4().simple()),
-        email: format!("test+{}@example.com", Uuid::new_v4()),
-        password_hash: Some("$argon2id$v=19$m=65536,t=3,p=4$YWJj$YWJj".into()),
-        first_name: None,
-        last_name: None,
-        role: UserRole::Subscriber.as_str().to_string(),
-        is_active: true,
-        email_verified: false,
-        last_login: None,
-        created_at: now,
-        updated_at: now,
-    }
-}
+mod common;
 
 #[tokio::test]
 async fn biscuit_refresh_rotation_invalidate_old() {
-    let Some(db) = build_db().await else {
+    common::setup();
+    let Some(db) = common::build_db().await else {
         eprintln!("SKIP biscuit_refresh_rotation_invalidate_old: DATABASE_URL not set");
         return;
     };
-    let auth = build_auth(&db).await;
-    let user = dummy_user();
+    let auth = common::build_auth(&db, 30, 300).await;
+    let user = common::dummy_user();
 
     let issued = auth
         .create_auth_response(user.clone(), false)

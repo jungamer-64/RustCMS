@@ -56,9 +56,7 @@ where
         // Add request ID to headers
         let header_value = HeaderValue::from_str(&request_id)
             .unwrap_or_else(|_| HeaderValue::from_static("unknown"));
-        request
-            .headers_mut()
-            .insert("X-Request-ID", header_value);
+        request.headers_mut().insert("X-Request-ID", header_value);
 
         let mut service = self.service.clone();
         Box::pin(async move {

@@ -406,13 +406,13 @@ pub async fn change_user_role(
 ) -> Result<impl IntoResponse> {
     let new_role = request["role"]
     .as_str()
-    .ok_or_else(|| crate::AppError::BadRequest("Missing role field".to_string().into()))?;
+    .ok_or_else(|| crate::AppError::BadRequest("Missing role field".to_string()))?;
 
     let role_enum = match new_role {
         "admin" => crate::models::UserRole::Admin,
         "editor" => crate::models::UserRole::Editor,
         "subscriber" => crate::models::UserRole::Subscriber,
-    _ => return Err(crate::AppError::BadRequest("Invalid role".to_string().into())),
+    _ => return Err(crate::AppError::BadRequest("Invalid role".to_string())),
     };
 
     let update_request = UpdateUserRequest::with_role(role_enum);

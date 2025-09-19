@@ -152,16 +152,16 @@ fn map_diesel_result<T>(
         Ok(v) => Ok(v),
         Err(e) => match e {
             diesel::result::Error::NotFound => {
-                Err(crate::AppError::NotFound(not_found_msg.into()))
+                Err(crate::AppError::NotFound(not_found_msg.to_string()))
             }
-            other => Err(crate::AppError::Internal(format!("{ctx}: {other}").into())),
+            other => Err(crate::AppError::Internal(format!("{ctx}: {other}"))),
         },
     }
 }
 
 fn ensure_affected_nonzero(affected: usize, not_found_msg: &str) -> Result<()> {
     if affected == 0 {
-    Err(crate::AppError::NotFound(not_found_msg.into()))
+    Err(crate::AppError::NotFound(not_found_msg.to_string()))
     } else {
         Ok(())
     }
@@ -172,7 +172,7 @@ fn map_internal_err<T, E: std::fmt::Display>(
     res: std::result::Result<T, E>,
     ctx: &str,
 ) -> Result<T> {
-    res.map_err(|e| crate::AppError::Internal(format!("{ctx}: {e}").into()))
+    res.map_err(|e| crate::AppError::Internal(format!("{ctx}: {e}")))
 }
 
 // Data holder for post update fields to keep update_post lean and testable
@@ -508,7 +508,7 @@ impl Database {
                 "Failed to count users (filtered)",
             )?;
             usize::try_from(total)
-                .map_err(|_| crate::AppError::Internal("users count overflow".into()))
+                .map_err(|_| crate::AppError::Internal("users count overflow".to_string()))
         })
     }
 
@@ -732,7 +732,7 @@ impl Database {
                 "Failed to count posts (filtered)",
             )?;
             usize::try_from(total)
-                .map_err(|_| crate::AppError::Internal("posts count overflow".into()))
+                .map_err(|_| crate::AppError::Internal("posts count overflow".to_string()))
         })
     }
 

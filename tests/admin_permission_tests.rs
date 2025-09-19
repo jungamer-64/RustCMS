@@ -3,8 +3,11 @@ use cms_backend::models::UserRole;
 use cms_backend::utils::common_types::SessionId;
 use uuid::Uuid;
 
+mod common;
+
 #[test]
 fn test_admin_permission_super_admin() {
+    common::setup();
     let auth_context = AuthContext {
         user_id: Uuid::new_v4(),
         username: "superadmin".to_string(),
@@ -24,6 +27,7 @@ fn test_admin_permission_super_admin() {
 
 #[test]
 fn test_admin_permission_admin() {
+    common::setup();
     let auth_context = AuthContext {
         user_id: Uuid::new_v4(),
         username: "admin".to_string(),
@@ -46,6 +50,7 @@ fn test_admin_permission_admin() {
 #[test]
 fn test_admin_permission_admin_with_permission() {
     // This test shows that if we manually grant admin permission to an Admin role user, it works
+    common::setup();
     let auth_context = AuthContext {
         user_id: Uuid::new_v4(),
         username: "admin".to_string(),
@@ -65,6 +70,7 @@ fn test_admin_permission_admin_with_permission() {
 
 #[test]
 fn test_admin_permission_editor() {
+    common::setup();
     let auth_context = AuthContext {
         user_id: Uuid::new_v4(),
         username: "editor".to_string(),
@@ -79,6 +85,7 @@ fn test_admin_permission_editor() {
 
 #[test]
 fn test_admin_permission_author() {
+    common::setup();
     let auth_context = AuthContext {
         user_id: Uuid::new_v4(),
         username: "author".to_string(),

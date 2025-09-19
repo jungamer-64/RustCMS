@@ -11,9 +11,9 @@ fn api_ok_wraps_value() {
     let body_bytes = futures::executor::block_on(async {
         axum::body::to_bytes(resp.into_body(), usize::MAX)
             .await
-            .unwrap()
+            .expect("should read body bytes")
     });
-    let v: Value = serde_json::from_slice(&body_bytes).unwrap();
+    let v: Value = serde_json::from_slice(&body_bytes).expect("should parse json from body");
     assert_eq!(v["success"], true);
     assert_eq!(v["data"]["foo"], "bar");
     assert!(v["error"].is_null());
@@ -27,9 +27,9 @@ fn api_ok_created_status_tuple() {
     let body_bytes = futures::executor::block_on(async {
         axum::body::to_bytes(resp.into_body(), usize::MAX)
             .await
-            .unwrap()
+            .expect("should read body bytes")
     });
-    let v: Value = serde_json::from_slice(&body_bytes).unwrap();
+    let v: Value = serde_json::from_slice(&body_bytes).expect("should parse json from body");
     assert_eq!(v["success"], true);
     assert_eq!(v["data"]["id"], 123);
 }

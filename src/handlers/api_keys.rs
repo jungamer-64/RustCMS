@@ -115,9 +115,7 @@ pub async fn revoke_api_key(
 ) -> Result<impl axum::response::IntoResponse> {
     // 所有者検証込みでの失効（DB レイヤで所有者チェック）
     let fut = async move {
-        state
-            .db_revoke_api_key_owned(id, auth.user_id)
-            .await?;
+        state.db_revoke_api_key_owned(id, auth.user_id).await?;
         Ok::<(), crate::AppError>(())
     };
     delete_with(fut, "API key revoked").await

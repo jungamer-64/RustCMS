@@ -227,7 +227,7 @@ where
 #[allow(dead_code)]
 fn service_not_configured(msg: &str) -> ServiceHealth {
     ServiceHealth {
-        status: "not_configured".into(),
+    status: "not_configured".to_string(),
         response_time_ms: 0.0,
         error: None,
         details: serde_json::json!({"message": msg}),
@@ -508,8 +508,8 @@ impl AppState {
         // Check database health
         let db_health = self.check_database_health().await;
 
-        // Check cache health
-        let cache_health = self.check_cache_health().await;
+    // Check cache health
+    let cache_health = self.check_cache_health().await;
 
         // Check search health
         let search_health = self.check_search_health().await;
@@ -1330,7 +1330,7 @@ impl AppState {
             let affected =
                 diesel::delete(api_keys.filter(api_key_id.eq(key_id))).execute(&mut conn)?;
             if affected == 0 {
-                return Err(crate::AppError::NotFound("api key not found".into()));
+                return Err(crate::AppError::NotFound("api key not found".to_string()));
             }
             Ok(())
         })
@@ -1412,9 +1412,9 @@ impl AppState {
             if affected == 0 {
                 let exists = ApiKey::find_by_id(&mut conn, key_id).ok();
                 if exists.is_some() {
-                    return Err(crate::AppError::Authorization("not owner".into()));
+                    return Err(crate::AppError::Authorization("not owner".to_string()));
                 }
-                return Err(crate::AppError::NotFound("api key not found".into()));
+                return Err(crate::AppError::NotFound("api key not found".to_string()));
             }
             Ok(())
         })
@@ -1637,7 +1637,7 @@ impl AppState {
             let affected = diesel::delete(posts_dsl::posts.filter(posts_dsl::id.eq(post_id)))
                 .execute(&mut conn)?;
             if affected == 0 {
-                return Err(crate::AppError::NotFound("post not found".into()));
+                return Err(crate::AppError::NotFound("post not found".to_string()));
             }
             Ok(())
         })
@@ -1734,7 +1734,7 @@ impl AppState {
                     "SELECT version FROM __diesel_schema_migrations ORDER BY version ASC",
                 )
                 .load(&mut conn)
-                .map_err(|e| crate::AppError::Internal(e.to_string().into()))?,
+                .map_err(|e| crate::AppError::Internal(e.to_string()))?,
             };
             Ok(rows.into_iter().map(|r| r.version).collect())
         })
@@ -1749,7 +1749,7 @@ impl AppState {
     pub async fn db_ensure_schema_migrations_compat(&self) -> crate::Result<()> {
         let create_sql = "CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());";
         let copy_sql = "INSERT INTO schema_migrations(version, applied_at) SELECT version, run_on FROM __diesel_schema_migrations WHERE version NOT IN (SELECT version FROM schema_migrations);";
-        let _ = self.db_execute_sql(create_sql).await?;
+            let _ = self.db_execute_sql(create_sql).await?;
         let _ = self.db_execute_sql(copy_sql).await?;
         Ok(())
     }
@@ -1769,7 +1769,7 @@ impl AppState {
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
             conn.run_pending_migrations(migrations)
-                .map_err(|e| crate::AppError::Internal(e.to_string().into()))?;
+                .map_err(|e| crate::AppError::Internal(e.to_string()))?;
             Ok(())
         })
     }
@@ -1788,7 +1788,7 @@ impl AppState {
         timed_op!(self, "db", async {
             let mut conn = self.database.get_connection()?;
             conn.revert_last_migration(migrations)
-                .map_err(|e| crate::AppError::Internal(e.to_string().into()))?;
+                .map_err(|e| crate::AppError::Internal(e.to_string()))?;
             Ok(())
         })
     }
@@ -1808,7 +1808,7 @@ impl AppState {
             let mut conn = self.database.get_connection()?;
             let list = conn
                 .pending_migrations(migrations)
-                .map_err(|e| crate::AppError::Internal(e.to_string().into()))?;
+                .map_err(|e| crate::AppError::Internal(e.to_string()))?;
             Ok(list.into_iter().map(|m| m.name().to_string()).collect())
         })
     }

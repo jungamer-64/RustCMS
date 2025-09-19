@@ -24,6 +24,7 @@ use secrecy::ExposeSecret;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tracing::warn;
 
@@ -100,6 +101,8 @@ pub struct AuthConfig {
     pub access_token_ttl_secs: u64,
     pub refresh_token_ttl_secs: u64,
     pub remember_me_access_ttl_secs: u64,
+    #[serde(default = "default_role_permissions")]
+    pub role_permissions: HashMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -239,6 +242,35 @@ impl Default for MonitoringConfig {
     }
 }
 
+fn default_role_permissions() -> HashMap<String, Vec<String>> {
+    let mut perms = HashMap::new();
+    perms.insert(
+        "super_admin".to_string(),
+        vec!["admin".to_string(), "read".to_string(), "write".to_string(), "delete".to_string()],
+    );
+    perms.insert(
+        "admin".to_string(),
+        vec!["read".to_string(), "write".to_string(), "delete".to_string()],
+    );
+    perms.insert(
+        "editor".to_string(),
+        vec!["read".to_string(), "write".to_string()],
+    );
+    perms.insert(
+        "author".to_string(),
+        vec!["read".to_string(), "write_own".to_string()],
+    );
+    perms.insert(
+        "contributor".to_string(),
+        vec!["read".to_string()],
+    );
+    perms.insert(
+        "subscriber".to_string(),
+        vec!["read".to_string()],
+    );
+    perms
+}
+
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
@@ -298,6 +330,7 @@ impl Default for AuthConfig {
             access_token_ttl_secs: 3_600,
             refresh_token_ttl_secs: 86_400,
             remember_me_access_ttl_secs: 86_400, // 24 hours
+            role_permissions: default_role_permissions(),
         }
     }
 }

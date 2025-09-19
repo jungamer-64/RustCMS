@@ -165,7 +165,7 @@ impl ApiKey {
         conn: &mut crate::database::PooledConnection,
         lookup: &str,
     ) -> Result<Self, AppError> {
-        use crate::database::schema::api_keys::dsl::{api_keys, api_key_lookup_hash};
+        use crate::database::schema::api_keys::dsl::{api_key_lookup_hash, api_keys};
         api_keys
             .filter(api_key_lookup_hash.eq(lookup))
             .first(conn)
@@ -210,9 +210,7 @@ impl ApiKey {
         target_user_id: Uuid,
         include_expired: bool,
     ) -> Result<Vec<Self>, AppError> {
-        use crate::database::schema::api_keys::dsl::{
-            api_keys, created_at, expires_at, user_id,
-        };
+        use crate::database::schema::api_keys::dsl::{api_keys, created_at, expires_at, user_id};
         let mut query = api_keys.filter(user_id.eq(target_user_id)).into_boxed();
         if !include_expired {
             let now = Utc::now();
@@ -321,6 +319,6 @@ impl ApiKey {
         if raw.len() <= 10 {
             return "***".into();
         }
-    format!("{}…{}", &raw[..6], &raw[raw.len() - 4..])
+        format!("{}…{}", &raw[..6], &raw[raw.len() - 4..])
     }
 }

@@ -9,8 +9,8 @@ use axum::{
 };
 use serde_json::Value as JsonValue;
 use serde_json::json;
-use utoipa::OpenApi;
 use std::collections::HashSet;
+use utoipa::OpenApi;
 
 pub mod admin;
 pub mod api_keys;
