@@ -38,6 +38,8 @@ sed -n '1,200p' "$outdir/manifest.json"
 - `.env` test: `/tmp/biscuit_test.env` was created and contains `BISCUIT_PRIVATE_KEY_B64` and `BISCUIT_PUBLIC_KEY_B64` entries.
 - Versioned test: created `/tmp/biscuit_keys/biscuit_private_v1.b64`..`biscuit_private_v4.b64` across runs; `manifest.json` updated with `latest_version` = 4. Running with `--prune 2` removed v1 and v2 files as expected, leaving v3 and v4.
 
+Prune behavior: when `--prune 2` was used older v1/v2 files were removed and the manifest retained `latest_version` = 4.
+
 Sample manifest.json produced during the run (excerpt):
 
 ```json
