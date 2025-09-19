@@ -11,8 +11,6 @@ use tracing::{info, warn};
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize simple logging for CLI
-    tracing_subscriber::fmt::init();
-
     info!(
         "🔧 Running Postgres setup CLI v{}",
         env!("CARGO_PKG_VERSION")
@@ -40,8 +38,7 @@ async fn main() -> Result<()> {
         email: "admin@example.com".to_string(),
         password: "admin123".to_string(),
         role: UserRole::Admin,
-    first_name: Some(String::new()),
-    last_name: Some(String::new()),
+        ..Default::default()
     };
 
     let created_admin = state.db_create_user(admin_user).await?;
@@ -58,16 +55,10 @@ async fn main() -> Result<()> {
         title: "Welcome to Enterprise CMS".to_string(),
         content: "This is a high-performance, scalable CMS built with Rust and PostgreSQL."
             .to_string(),
-        excerpt: Some("Welcome to the future of content management.".to_string()),
-        slug: None,
         published: Some(true),
-        tags: Some(vec!["welcome".to_string(), "cms".to_string()]),
-        category: None,
-        featured_image: None,
-        meta_title: Some("Welcome to Enterprise CMS".to_string()),
-        meta_description: Some("A production-ready CMS built for scale.".to_string()),
-        published_at: None,
         status: Some(PostStatus::Published),
+        tags: Some(vec!["welcome".to_string(), "cms".to_string()]),
+        ..Default::default()
     };
 
     let _post = state.db_create_post(sample_post).await?;

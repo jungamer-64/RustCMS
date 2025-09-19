@@ -48,6 +48,9 @@ futures-util = "0.3"
 tokio = { version = "1.47", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["full"] }
 
+# Async trait helper for ergonomic async in traits
+async-trait = "0.1"
+
 # ===== SERIALIZATION =====
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }

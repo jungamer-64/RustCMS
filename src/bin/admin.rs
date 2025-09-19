@@ -649,7 +649,7 @@ fn generate_random_password() -> String {
 fn prompt_password(prompt: &str) -> Result<String> {
     // Use rpassword to securely read password without echoing to the terminal
     let password = rpassword::prompt_password(prompt)
-    .map_err(|e| cms_backend::AppError::Internal(e.to_string().into()))?;
+    .map_err(|e| cms_backend::AppError::Internal(e.to_string()))?;
 
     if password.is_empty() {
         return Err(cms_backend::AppError::BadRequest(
@@ -667,7 +667,7 @@ async fn find_user_by_id_or_username(state: &AppState, identifier: &str) -> Resu
     } else {
         state.db_get_user_by_username(identifier).await
     };
-    result.map_err(|_| cms_backend::AppError::NotFound(format!("User '{}' not found", identifier).into()))
+    result.map_err(|_| cms_backend::AppError::NotFound(format!("User '{}' not found", identifier)))
 }
 
 

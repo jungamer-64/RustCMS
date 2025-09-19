@@ -52,14 +52,14 @@ async fn snapshot_health_endpoint() {
         .oneshot(
             Request::get("/health")
                 .body(axum::body::Body::empty())
-                .unwrap(),
+                .expect("should build request"),
         )
         .await
-        .unwrap();
+        .expect("request should succeed");
 
     assert_eq!(response.status(), StatusCode::OK);
-    let body_bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let mut json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+    let body_bytes = to_bytes(response.into_body(), usize::MAX).await.expect("should read body");
+    let mut json: serde_json::Value = serde_json::from_slice(&body_bytes).expect("should parse body as json");
     // timestamp は可変なのでマスク
     if let Some(ts) = json.get_mut("data").and_then(|d| d.get_mut("timestamp")) {
         *ts = serde_json::Value::String("<redacted>".into());

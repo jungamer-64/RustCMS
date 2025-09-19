@@ -62,7 +62,10 @@ impl ApiResponse<()> {
     }
 
     #[must_use]
-    pub const fn error_with_validation(error: String, validation_errors: Vec<ValidationError>) -> Self {
+    pub const fn error_with_validation(
+        error: String,
+        validation_errors: Vec<ValidationError>,
+    ) -> Self {
         Self {
             success: false,
             data: None,

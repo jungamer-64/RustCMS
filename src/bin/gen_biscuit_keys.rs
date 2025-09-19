@@ -1,15 +1,28 @@
+#![allow(dead_code)]
+
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use biscuit_auth::KeyPair;
 use clap::{Parser, ValueEnum};
-use flate2::{Compression, write::GzEncoder};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
-// use crate when available (binary is in the same crate)
-use cms_backend::utils::hash;
-use serde::Serialize;
+
+mod gen_biscuit_keys_backup;
+mod gen_biscuit_keys_manifest;
+
+// Grouped options for outputs to reduce argument count
+#[derive(Clone, Copy)]
+struct OutputsOptions<'a> {
+    format: Option<&'a str>,
+    out_dir: Option<&'a str>,
+    env_file: Option<&'a str>,
+    backup: bool,
+    force: bool,
+    priv_b64: &'a str,
+    pub_b64: &'a str,
+}
 
 // Extract version number from filenames like biscuit_private_v12.b64
 fn parse_version(name: &str) -> Option<u32> {
@@ -27,10 +40,15 @@ fn parse_version(name: &str) -> Option<u32> {
 
 fn next_version(dir: &Path) -> u32 {
     let mut max_v: u32 = 0;
-    if dir.exists() && let Ok(read) = fs::read_dir(dir) {
+    if dir.exists()
+        && let Ok(read) = fs::read_dir(dir)
+    {
         for entry in read.flatten() {
             let name = entry.file_name();
-            if let Some(s) = name.to_str() && let Some(v) = parse_version(s) && v > max_v {
+            if let Some(s) = name.to_str()
+                && let Some(v) = parse_version(s)
+                && v > max_v
+            {
                 max_v = v;
             }
         }
@@ -38,82 +56,20 @@ fn next_version(dir: &Path) -> u32 {
     max_v + 1
 }
 
-// replaced by utils::hash::sha256_hex
-
-#[derive(Serialize)]
-struct Manifest<'a> {
-    latest_version: u32,
-    generated_at: String,
-    private_fingerprint: &'a str,
-    public_fingerprint: &'a str,
-}
-
+// Manifest and prune logic moved to `gen_biscuit_keys_manifest.rs` to reduce main file size.
 fn update_manifest(dir: &Path, version: u32, priv_fp: &str, pub_fp: &str) {
-    let manifest_path = dir.join("manifest.json");
-    let manifest = Manifest {
-        latest_version: version,
-        generated_at: chrono::Utc::now().to_rfc3339(),
-        private_fingerprint: priv_fp,
-        public_fingerprint: pub_fp,
-    };
-    if let Ok(json) = serde_json::to_string_pretty(&manifest) {
-        if let Err(e) = fs::write(&manifest_path, json) {
-            eprintln!(
-                "Failed to write manifest {}: {e}",
-                manifest_path.display(),
-            );
-        } else {
-            println!("Updated manifest at {}", manifest_path.display());
-        }
-    }
+    gen_biscuit_keys_manifest::update_manifest(dir, version, priv_fp, pub_fp)
 }
 
 fn prune_versions(dir: &Path, keep: usize) {
-    if keep == 0 {
-        return;
-    }
-    let mut versions: Vec<u32> = Vec::new();
-    if let Ok(read) = fs::read_dir(dir) {
-        for entry in read.flatten() {
-            if let Some(name) = entry.file_name().to_str()
-                && name.starts_with("biscuit_private_v")
-                && std::path::Path::new(name)
-                    .extension()
-                    .is_some_and(|ext| ext.eq_ignore_ascii_case("b64"))
-                && let Some(v) = parse_version(name)
-            {
-                versions.push(v);
-            }
-        }
-    }
-    if versions.len() <= keep {
-        return;
-    }
-    versions.sort_unstable(); // ascending
-    let to_remove: Vec<u32> = versions
-        .iter()
-        .copied()
-        .take(versions.len() - keep)
-        .collect();
-    for v in to_remove {
-        for prefix in ["biscuit_private_v", "biscuit_public_v"] {
-            let path = dir.join(format!("{prefix}{v}.b64"));
-            if path.exists() {
-                if let Err(e) = fs::remove_file(&path) {
-                    eprintln!("Failed to remove old version {}: {e}", path.display());
-                } else {
-                    println!("Pruned old version file {}", path.display());
-                }
-            }
-        }
-    }
+    gen_biscuit_keys_manifest::prune_versions(dir, keep)
 }
 
 fn write_file_if_allowed(path: &Path, data: &str, force: bool) -> std::io::Result<()> {
     if path.exists() && !force {
         return Err(std::io::Error::new(
             std::io::ErrorKind::AlreadyExists,
-                format!("{} already exists", path.display()),
+            format!("{} already exists", path.display()),
         ));
     }
     let mut f = fs::File::create(path)?;
@@ -122,45 +78,75 @@ fn write_file_if_allowed(path: &Path, data: &str, force: bool) -> std::io::Resul
 }
 
 fn append_env_file(path: &Path, priv_b64: &str, pub_b64: &str, force: bool) -> std::io::Result<()> {
-    // If file doesn't exist, create and write header
-    let create = !path.exists();
-
-    if create {
-        let mut f = fs::File::create(path)?;
-        writeln!(f, "# Generated biscuit keys")?;
-        writeln!(f, "BISCUIT_PRIVATE_KEY_B64={priv_b64}")?;
-        writeln!(f, "BISCUIT_PUBLIC_KEY_B64={pub_b64}")?;
+    if !path.exists() {
+        create_env_file(path, priv_b64, pub_b64)
     } else {
-        // If exists, check if it already contains the variables
         let content = fs::read_to_string(path)?;
-        if content.contains("BISCUIT_PRIVATE_KEY_B64=") || content.contains("BISCUIT_PUBLIC_KEY_B64=") {
-            if !force {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::AlreadyExists,
-                    format!("{} already contains biscuit entries", path.display()),
-                ));
-            }
-            // Remove existing lines and append fresh ones
-            let filtered: Vec<&str> = content
-                .lines()
-                .filter(|l| {
-                    !l.starts_with("BISCUIT_PRIVATE_KEY_B64=")
-                        && !l.starts_with("BISCUIT_PUBLIC_KEY_B64=")
-                })
-                .collect();
-            let mut f = fs::File::create(path)?;
-            for line in filtered {
-                writeln!(f, "{line}")?;
-            }
-            writeln!(f, "BISCUIT_PRIVATE_KEY_B64={priv_b64}")?;
-            writeln!(f, "BISCUIT_PUBLIC_KEY_B64={pub_b64}")?;
+        if content.contains("BISCUIT_PRIVATE_KEY_B64=")
+            || content.contains("BISCUIT_PUBLIC_KEY_B64=")
+        {
+            replace_env_entries(path, &content, priv_b64, pub_b64, force)
         } else {
-            let mut f = fs::OpenOptions::new().append(true).open(path)?;
-            writeln!(f, "\n# Generated biscuit keys")?;
-            writeln!(f, "BISCUIT_PRIVATE_KEY_B64={priv_b64}")?;
-            writeln!(f, "BISCUIT_PUBLIC_KEY_B64={pub_b64}")?;
+            append_env_entries(path, priv_b64, pub_b64)
         }
     }
+}
+
+fn create_env_file(path: &Path, priv_b64: &str, pub_b64: &str) -> std::io::Result<()> {
+    let mut f = fs::File::create(path)?;
+    writeln!(f, "# Generated biscuit keys")?;
+    writeln!(f, "BISCUIT_PRIVATE_KEY_B64={priv_b64}")?;
+    writeln!(f, "BISCUIT_PUBLIC_KEY_B64={pub_b64}")?;
+    Ok(())
+}
+
+fn replace_env_entries(
+    path: &Path,
+    content: &str,
+    priv_b64: &str,
+    pub_b64: &str,
+    force: bool,
+) -> std::io::Result<()> {
+    if !force {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!("{} already contains biscuit entries", path.display()),
+        ));
+    }
+    let filtered = filter_out_biscuit_lines(content);
+    write_filtered_env_and_keys(path, &filtered, priv_b64, pub_b64)
+}
+
+fn filter_out_biscuit_lines(content: &str) -> Vec<&str> {
+    content
+        .lines()
+        .filter(|line| {
+            !(line.starts_with("BISCUIT_PRIVATE_KEY_B64=")
+                || line.starts_with("BISCUIT_PUBLIC_KEY_B64="))
+        })
+        .collect()
+}
+
+fn write_filtered_env_and_keys(
+    path: &Path,
+    lines: &[&str],
+    priv_b64: &str,
+    pub_b64: &str,
+) -> std::io::Result<()> {
+    let mut f = fs::File::create(path)?;
+    for line in lines {
+        writeln!(f, "{line}")?;
+    }
+    writeln!(f, "BISCUIT_PRIVATE_KEY_B64={priv_b64}")?;
+    writeln!(f, "BISCUIT_PUBLIC_KEY_B64={pub_b64}")?;
+    Ok(())
+}
+
+fn append_env_entries(path: &Path, priv_b64: &str, pub_b64: &str) -> std::io::Result<()> {
+    let mut f = fs::OpenOptions::new().append(true).open(path)?;
+    writeln!(f, "\n# Generated biscuit keys")?;
+    writeln!(f, "BISCUIT_PRIVATE_KEY_B64={priv_b64}")?;
+    writeln!(f, "BISCUIT_PUBLIC_KEY_B64={pub_b64}")?;
     Ok(())
 }
 
@@ -198,28 +184,108 @@ fn report_env_result(envfile: &str, res: std::io::Result<()>, force: bool) {
 
 // --- DRY helpers for output flows ---
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-fn handle_files_output(
-    dir: &str,
+struct VersionOptions {
     versioned: bool,
     latest_alias: bool,
     no_manifest: bool,
     prune: Option<usize>,
-    backup: bool,
-    backup_dir: Option<&Path>,
+}
+
+struct FilesWriteOptions {
+    backup_dir: Option<PathBuf>,
     max_backups: Option<usize>,
-    backup_compress: bool,
+    compress_opt: Option<bool>,
     force: bool,
+}
+
+fn handle_files_output(ctx: &FilesOutputContext<'_>) -> cms_backend::Result<()> {
+    // Delegate the full files output flow (create dir, write files, backups,
+    // and finalization) to the manifest helper which centralizes the
+    // end-to-end behavior. This keeps the binary thin and reduces local
+    // complexity metrics.
+    gen_biscuit_keys_manifest::handle_files_output_full(ctx)
+}
+
+fn resolve_paths_and_write(
+    ctx: &FilesOutputContext<'_>,
+) -> (std::path::PathBuf, std::path::PathBuf) {
+    let (priv_path, pub_path) = resolve_output_paths(ctx.path, ctx.vopts.versioned);
+    // Write files (with optional backups)
+    write_files_flow(
+        &priv_path,
+        &pub_path,
+        ctx.backup,
+        ctx.options,
+        ctx.priv_b64,
+        ctx.pub_b64,
+    );
+    (priv_path, pub_path)
+}
+
+fn finalize_versioned_flow(ctx: &FilesOutputContext<'_>, priv_path: &Path, _pub_path: &Path) {
+    if ctx.vopts.versioned {
+        // Delegate alias/manifest/prune handling to the manifest module which will
+        // update manifest.json, prune old versions and also manage the latest alias.
+        gen_biscuit_keys_manifest::finalize_versioned(
+            ctx.path,
+            priv_path,
+            ctx.priv_b64,
+            ctx.pub_b64,
+            ctx.vopts.no_manifest,
+            ctx.vopts.prune,
+        );
+    }
+}
+
+/// Ensure the output directory exists; returns Err on failure.
+fn create_dir_and_resolve_paths(path: &Path) -> cms_backend::Result<()> {
+    if let Err(e) = fs::create_dir_all(path) {
+        return Err(cms_backend::AppError::Internal(format!(
+            "Failed to create out-dir {}: {}",
+            path.display(),
+            e
+        )));
+    }
+    Ok(())
+}
+
+/// Encapsulate the write + backup flow so the main function stays small.
+fn write_files_flow(
+    priv_path: &Path,
+    pub_path: &Path,
+    backup: bool,
+    options: &FilesWriteOptions,
     priv_b64: &str,
     pub_b64: &str,
 ) {
-    let path = Path::new(dir);
-    if let Err(e) = fs::create_dir_all(path) {
-        eprintln!("Failed to create out-dir {dir}: {e}");
-        std::process::exit(1);
-    }
+    perform_files_write(priv_path, pub_path, backup, options, priv_b64, pub_b64);
+}
 
-    let (priv_path, pub_path) = if versioned {
-    let v = next_version(path);
+/// Handle the versioned-specific post steps (alias/manifest/prune).
+fn post_versioned_flow(
+    path: &Path,
+    vopts: &VersionOptions,
+    priv_path: &Path,
+    priv_b64: &str,
+    pub_b64: &str,
+) {
+    if vopts.versioned {
+        apply_versioned_post(path, vopts, priv_path, priv_b64, pub_b64);
+    }
+}
+
+struct FilesOutputContext<'a> {
+    path: &'a Path,
+    vopts: &'a VersionOptions,
+    options: &'a FilesWriteOptions,
+    backup: bool,
+    priv_b64: &'a str,
+    pub_b64: &'a str,
+}
+
+fn resolve_output_paths(path: &Path, versioned: bool) -> (std::path::PathBuf, std::path::PathBuf) {
+    if versioned {
+        let v = next_version(path);
         (
             path.join(format!("biscuit_private_v{v}.b64")),
             path.join(format!("biscuit_public_v{v}.b64")),
@@ -229,68 +295,64 @@ fn handle_files_output(
             path.join("biscuit_private.b64"),
             path.join("biscuit_public.b64"),
         )
-    };
+    }
+}
 
-    if let Err(e) = maybe_backup_file(
-        &priv_path,
+/// Perform the actual file writes for the private/public files and handle backups.
+fn perform_files_write(
+    priv_path: &Path,
+    pub_path: &Path,
+    backup: bool,
+    options: &FilesWriteOptions,
+    priv_b64: &str,
+    pub_b64: &str,
+) {
+    // Attempt backups first (if requested). Errors are non-fatal for the write operation.
+    if let Err(e) = gen_biscuit_keys_backup::maybe_backup_file(
+        priv_path,
         backup,
-        backup_dir,
-        max_backups,
-        Some(backup_compress),
+        options.backup_dir.as_deref(),
+        options.max_backups,
+        options.compress_opt,
     ) {
         eprintln!("Backup failed: {e}");
     }
-    if let Err(e) = maybe_backup_file(
-        &pub_path,
+    if let Err(e) = gen_biscuit_keys_backup::maybe_backup_file(
+        pub_path,
         backup,
-        backup_dir,
-        max_backups,
-        Some(backup_compress),
+        options.backup_dir.as_deref(),
+        options.max_backups,
+        options.compress_opt,
     ) {
         eprintln!("Backup failed: {e}");
     }
 
-    report_write_file_result(
-        &priv_path,
-        write_file_if_allowed(&priv_path, priv_b64, force),
-        "private key",
-        force,
-    );
-    report_write_file_result(
-        &pub_path,
-        write_file_if_allowed(&pub_path, pub_b64, force),
-        "public key",
-        force,
-    );
+    // Write private key
+    let res_priv = write_file_if_allowed(priv_path, priv_b64, options.force);
+    report_write_file_result(priv_path, res_priv, "private key file", options.force);
 
-    if versioned && latest_alias {
-        let latest_priv = path.join("biscuit_private.b64");
-        let latest_pub = path.join("biscuit_public.b64");
-        if let Err(e) = fs::write(&latest_priv, priv_b64) {
-            let latest_priv_disp = latest_priv.display().to_string();
-            eprintln!("Failed to update latest alias {latest_priv_disp}: {e}");
-        }
-        if let Err(e) = fs::write(&latest_pub, pub_b64) {
-            let latest_pub_disp = latest_pub.display().to_string();
-            eprintln!("Failed to update latest alias {latest_pub_disp}: {e}");
-        }
-    }
+    // Write public key
+    let res_pub = write_file_if_allowed(pub_path, pub_b64, options.force);
+    report_write_file_result(pub_path, res_pub, "public key file", options.force);
+}
 
-    if versioned {
-        let v =
-            parse_version(priv_path.file_name().unwrap().to_string_lossy().as_ref()).unwrap_or(0);
-        let priv_fp = hash::sha256_hex(priv_b64.as_bytes());
-        let pub_fp = hash::sha256_hex(pub_b64.as_bytes());
-        println!(
-            "private_fingerprint_sha256={priv_fp} public_fingerprint_sha256={pub_fp}"
-        );
-        if !no_manifest {
-            update_manifest(path, v, &priv_fp, &pub_fp);
-        }
-        if let Some(keep) = prune {
-            prune_versions(path, keep);
-        }
-    }
+fn apply_versioned_post(
+    path: &Path,
+    vopts: &VersionOptions,
+    priv_path: &Path,
+    priv_b64: &str,
+    pub_b64: &str,
+) {
+    // Finalization (manifest update, pruning, alias updates) delegated to manifest
+    // module which centralizes this behavior.
+    gen_biscuit_keys_manifest::finalize_versioned(
+        path,
+        priv_path,
+        priv_b64,
+        pub_b64,
+        vopts.no_manifest,
+        vopts.prune,
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -305,90 +367,8 @@ fn handle_env_output(
     pub_b64: &str,
 ) {
     let path = Path::new(envfile);
-    if let Err(e) = maybe_backup_env(path, backup, backup_dir, max_backups, Some(backup_compress)) {
-        eprintln!("Backup failed: {e}");
-    }
-    report_env_result(
-        envfile,
-        append_env_file(path, priv_b64, pub_b64, force),
-        force,
-    );
-}
-
-fn timestamp() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let start = SystemTime::now();
-    let since = start.duration_since(UNIX_EPOCH).unwrap_or_default();
-    since.as_secs().to_string()
-}
-
-fn maybe_backup_file(
-    path: &Path,
-    backup: bool,
-    backup_dir: Option<&Path>,
-    max_backups: Option<usize>,
-    compress_opt: Option<bool>,
-) -> std::io::Result<()> {
-    if !backup || !path.exists() {
-        return Ok(());
-    }
-
-    let ts = timestamp();
-    let file_name = path
-        .file_name()
-        .map_or_else(|| "backup".into(), |s| s.to_string_lossy());
-    let bak_name = format!("{file_name}.bak.{ts}");
-    let bak = if let Some(dir) = backup_dir {
-        dir.join(bak_name)
-    } else {
-        path.with_file_name(bak_name)
-    };
-
-    if let Some(parent) = bak.parent()
-        && let Err(e) = fs::create_dir_all(parent)
-    {
-    eprintln!("Failed to create backup dir {}: {e}", parent.display());
-    }
-
-    let post_backup = |bak_path: &Path| {
-        if let Some(n) = max_backups
-            && n > 0
-            && let Some(parent) = bak_path.parent()
-            && let Err(e) = enforce_backup_retention(parent, &file_name, n)
-        {
-            eprintln!("Failed to enforce backup retention for {file_name}: {e}");
-        }
-        if compress_opt == Some(true) && let Err(e) = compress_file(bak_path) {
-            eprintln!("Failed to compress backup {}: {}", bak_path.display(), e);
-        }
-    };
-
-    if matches!(fs::rename(path, &bak), Ok(())) {
-        println!("Backed up {} -> {}", path.display(), bak.display());
-    } else {
-        fs::copy(path, &bak)?;
-        println!("Backed up (copied) {} -> {}", path.display(), bak.display());
-    }
-    post_backup(&bak);
-    Ok(())
-}
-
-fn compress_file(path: &Path) -> std::io::Result<()> {
-    let data = fs::read(path)?;
-    let file_name = path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("backup");
-    let gz_name = format!("{file_name}.gz");
-    let gz_path = path.with_file_name(gz_name);
-    let f = fs::File::create(&gz_path)?;
-    let mut encoder = GzEncoder::new(f, Compression::default());
-    encoder.write_all(&data)?;
-    encoder.finish()?;
-    // Optionally remove original uncompressed file
-    fs::remove_file(path)?;
-    println!("Compressed backup to {}", gz_path.display());
-    Ok(())
+    maybe_backup_env(path, backup, backup_dir, max_backups, backup_compress);
+    perform_env_write_and_report(path, priv_b64, pub_b64, force, envfile);
 }
 
 fn maybe_backup_env(
@@ -396,50 +376,50 @@ fn maybe_backup_env(
     backup: bool,
     backup_dir: Option<&Path>,
     max_backups: Option<usize>,
-    compress: Option<bool>,
-) -> std::io::Result<()> {
-    maybe_backup_file(path, backup, backup_dir, max_backups, compress)
+    backup_compress: bool,
+) {
+    if let Err(e) = gen_biscuit_keys_backup::maybe_backup_file(
+        path,
+        backup,
+        backup_dir,
+        max_backups,
+        Some(backup_compress),
+    ) {
+        eprintln!("Backup failed: {e}");
+    }
 }
 
-fn enforce_backup_retention(dir: &Path, file_name: &str, keep: usize) -> std::io::Result<()> {
-    // Collect backup files that match pattern: <file_name>.bak.<ts>
-    let mut entries: Vec<(u64, std::path::PathBuf)> = Vec::new();
-    if !dir.exists() {
-        return Ok(());
-    }
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
-        let p = entry.path();
-        if let Some(name_os) = p.file_name() {
-            let name = name_os.to_string_lossy();
-            // match prefix
-            if name.starts_with(file_name) && name.contains(".bak.") {
-                // try to parse timestamp as the suffix after last dot
-                if let Some(idx) = name.rfind('.') {
-                    let ts_str = &name[idx + 1..];
-                    if let Ok(ts) = ts_str.parse::<u64>() {
-                        entries.push((ts, p.clone()));
-                    }
-                }
-            }
-        }
-    }
-    // If number of backups <= keep, nothing to do
-    if entries.len() <= keep {
-        return Ok(());
-    }
-    // Sort descending by timestamp (newest first)
-    entries.sort_by(|a, b| b.0.cmp(&a.0));
-    // Keep the first `keep` entries, remove the rest
-    for (_ts, path) in entries.into_iter().skip(keep) {
-        if let Err(e) = fs::remove_file(&path) {
-            eprintln!("Failed to remove old backup {}: {e}", path.display());
-        } else {
-            println!("Removed old backup {}", path.display());
-        }
-    }
-    Ok(())
+fn perform_env_write(
+    path: &Path,
+    priv_b64: &str,
+    pub_b64: &str,
+    force: bool,
+) -> std::io::Result<()> {
+    append_env_file(path, priv_b64, pub_b64, force)
 }
+
+fn perform_env_write_and_report(
+    path: &Path,
+    priv_b64: &str,
+    pub_b64: &str,
+    force: bool,
+    envfile: &str,
+) {
+    let res = perform_env_write(path, priv_b64, pub_b64, force);
+    report_env_result(envfile, res, force);
+}
+
+// Backup orchestration is implemented in `gen_biscuit_keys_backup.rs`.
+// We call it directly where needed to avoid extra wrapper functions in this
+// binary, which keeps this file smaller and simpler.
+
+// alias updates are now handled by the manifest module; no local helper needed.
+// Backup related helpers moved to `gen_biscuit_keys_backup.rs` to reduce file size and complexity.
+// Thin wrappers delegate to the backup module functions.
+// Delegate backup orchestration to the backup module directly. The module
+// contains the implementation and helpers; keeping only delegations here
+// avoids duplicating complex logic in the binary's main file.
+// All call sites in this file call into the module directly now.
 
 // clap-based argument parsing is used; helper suggestion/levenshtein removed.
 
@@ -510,7 +490,7 @@ enum OutputFormat {
 }
 
 #[allow(clippy::too_many_lines)]
-fn main() {
+fn main() -> cms_backend::Result<()> {
     let args = Args::parse();
     let out_dir: Option<String> = args
         .out_dir
@@ -529,31 +509,10 @@ fn main() {
     let force = args.force;
     let backup = args.backup;
 
+    // If user requested the list of versions, handle that and exit early
     if args.list {
-        let dir = out_dir.as_deref().unwrap_or("keys");
-        let path = Path::new(dir);
-        match fs::read_dir(path) {
-            Ok(read) => {
-                let mut versions: Vec<(u32, String)> = Vec::new();
-                for entry in read.flatten() {
-                    let name = entry.file_name().to_string_lossy().into_owned();
-                    if let Some(v) = parse_version(&name) {
-                        versions.push((v, name));
-                    }
-                }
-                if versions.is_empty() {
-                    println!("No versioned keys found in {}", path.display());
-                } else {
-                    versions.sort_by_key(|x| x.0);
-                    println!("Found versions (oldest -> newest):");
-                    for (v, name) in versions {
-                        println!("v{v} => {name}");
-                    }
-                }
-            }
-            Err(e) => eprintln!("Cannot read directory {}: {e}", path.display()),
-        }
-        return;
+        handle_list_versions(out_dir.as_deref().unwrap_or("keys"));
+        return Ok(());
     }
 
     let kp = KeyPair::new();
@@ -564,103 +523,193 @@ fn main() {
     println!("BISCUIT_PRIVATE_KEY_B64={priv_b64}");
     println!("BISCUIT_PUBLIC_KEY_B64={pub_b64}");
 
-    // Decide outputs based on explicit format or provided targets
-    let format = format.map(|s| s.to_ascii_lowercase());
+    // Consolidate output options into a struct to simplify downstream calls
+    let opts = OutputsOptions {
+        format: format.as_deref(),
+        out_dir: out_dir.as_deref(),
+        env_file: env_file.as_deref(),
+        backup,
+        force,
+        priv_b64: &priv_b64,
+        pub_b64: &pub_b64,
+    };
 
-    if let Some(ref f) = format {
-        if f == "files" {
-            let dir = out_dir.as_deref().unwrap_or("keys");
-            handle_files_output(
-                dir,
-                args.versioned,
-                args.latest_alias,
-                args.no_manifest,
-                args.prune,
-                backup,
-                args.backup_dir.as_deref(),
-                args.max_backups,
-                args.backup_compress,
-                force,
-                &priv_b64,
-                &pub_b64,
-            );
-        } else if f == "env" {
-            let env_path = env_file.as_deref().unwrap_or(".env");
-            handle_env_output(
-                env_path,
-                backup,
-                args.backup_dir.as_deref(),
-                args.max_backups,
-                args.backup_compress,
-                force,
-                &priv_b64,
-                &pub_b64,
-            );
-        } else if f == "both" {
-            let dir = out_dir.as_deref().unwrap_or("keys");
-            let env_path = env_file.as_deref().unwrap_or(".env");
-            handle_files_output(
-                dir,
-                args.versioned,
-                args.latest_alias,
-                args.no_manifest,
-                args.prune,
-                backup,
-                args.backup_dir.as_deref(),
-                args.max_backups,
-                args.backup_compress,
-                force,
-                &priv_b64,
-                &pub_b64,
-            );
-            handle_env_output(
-                env_path,
-                backup,
-                args.backup_dir.as_deref(),
-                args.max_backups,
-                args.backup_compress,
-                force,
-                &priv_b64,
-                &pub_b64,
-            );
-        } else if f == "stdout" {
-            // explicit stdout only: already printed
-        }
-    } else {
-        // no explicit format: previous behavior - write if targets provided
-        if let Some(ref dir) = out_dir {
-            handle_files_output(
-                dir,
-                args.versioned,
-                args.latest_alias,
-                args.no_manifest,
-                args.prune,
-                backup,
-                args.backup_dir.as_deref(),
-                args.max_backups,
-                args.backup_compress,
-                force,
-                &priv_b64,
-                &pub_b64,
-            );
-        }
+    decide_and_perform_outputs(opts, &args)?;
+    Ok(())
+}
 
-        if let Some(ref envfile) = env_file {
-            handle_env_output(
-                envfile,
-                backup,
-                args.backup_dir.as_deref(),
-                args.max_backups,
-                args.backup_compress,
-                force,
-                &priv_b64,
-                &pub_b64,
-            );
-        }
-    }
+fn decide_and_perform_outputs(opts: OutputsOptions<'_>, args: &Args) -> cms_backend::Result<()> {
+    do_perform_outputs(opts, args)?;
+    notify_if_no_output(opts.format, opts.out_dir, opts.env_file);
+    Ok(())
+}
 
-    // If nothing was written and no explicit format is stdout, notify user
+fn do_perform_outputs(opts: OutputsOptions<'_>, args: &Args) -> cms_backend::Result<()> {
+    // Normalize format to lowercase before dispatching
+    let normalized = opts.format.map(|s| s.to_ascii_lowercase());
+    let opts = OutputsOptions {
+        format: normalized.as_deref(),
+        ..opts
+    };
+    perform_outputs(opts, args)
+}
+
+fn notify_if_no_output(format: Option<&str>, out_dir: Option<&str>, env_file: Option<&str>) {
     if format.is_none() && out_dir.is_none() && env_file.is_none() {
         println!("No output target specified; keys were only printed to stdout.");
+    }
+}
+
+fn perform_outputs(opts: OutputsOptions<'_>, args: &Args) -> cms_backend::Result<()> {
+    if let Some(f) = opts.format {
+        perform_outputs_with_format(f, opts, args)?;
+    } else {
+        perform_outputs_without_format(opts, args)?;
+    }
+    Ok(())
+}
+
+fn perform_outputs_with_format(
+    f: &str,
+    opts: OutputsOptions<'_>,
+    args: &Args,
+) -> cms_backend::Result<()> {
+    match f {
+        "files" => handle_files_for_dir(
+            opts.out_dir.unwrap_or("keys"),
+            args,
+            opts.backup,
+            opts.force,
+            opts.priv_b64,
+            opts.pub_b64,
+        )?,
+        "env" => {
+            let env_path = opts.env_file.unwrap_or(".env");
+            handle_env_output(
+                env_path,
+                opts.backup,
+                args.backup_dir.as_deref(),
+                args.max_backups,
+                args.backup_compress,
+                opts.force,
+                opts.priv_b64,
+                opts.pub_b64,
+            );
+        }
+        "both" => {
+            handle_files_for_dir(
+                opts.out_dir.unwrap_or("keys"),
+                args,
+                opts.backup,
+                opts.force,
+                opts.priv_b64,
+                opts.pub_b64,
+            )?;
+            handle_env_output(
+                opts.env_file.unwrap_or(".env"),
+                opts.backup,
+                args.backup_dir.as_deref(),
+                args.max_backups,
+                args.backup_compress,
+                opts.force,
+                opts.priv_b64,
+                opts.pub_b64,
+            );
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn perform_outputs_without_format(
+    opts: OutputsOptions<'_>,
+    args: &Args,
+) -> cms_backend::Result<()> {
+    if let Some(dir) = opts.out_dir {
+        handle_files_for_dir(
+            dir,
+            args,
+            opts.backup,
+            opts.force,
+            opts.priv_b64,
+            opts.pub_b64,
+        )?;
+    }
+    if let Some(envfile) = opts.env_file {
+        handle_env_output(
+            envfile,
+            opts.backup,
+            args.backup_dir.as_deref(),
+            args.max_backups,
+            args.backup_compress,
+            opts.force,
+            opts.priv_b64,
+            opts.pub_b64,
+        );
+    }
+    Ok(())
+}
+
+fn make_files_options(args: &Args, force: bool) -> FilesWriteOptions {
+    FilesWriteOptions {
+        backup_dir: args.backup_dir.clone(),
+        max_backups: args.max_backups,
+        compress_opt: Some(args.backup_compress),
+        force,
+    }
+}
+
+fn make_version_options(args: &Args) -> VersionOptions {
+    VersionOptions {
+        versioned: args.versioned,
+        latest_alias: args.latest_alias,
+        no_manifest: args.no_manifest,
+        prune: args.prune,
+    }
+}
+
+fn handle_files_for_dir(
+    dir: &str,
+    args: &Args,
+    backup: bool,
+    force: bool,
+    priv_b64: &str,
+    pub_b64: &str,
+) -> cms_backend::Result<()> {
+    let options = make_files_options(args, force);
+    let vopts = make_version_options(args);
+    let ctx = FilesOutputContext {
+        path: Path::new(dir),
+        vopts: &vopts,
+        options: &options,
+        backup,
+        priv_b64,
+        pub_b64,
+    };
+    handle_files_output(&ctx)
+}
+
+fn handle_list_versions(dir: &str) {
+    let path = Path::new(dir);
+    match fs::read_dir(path) {
+        Ok(read) => {
+            let mut versions: Vec<(u32, String)> = Vec::new();
+            for entry in read.flatten() {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if let Some(v) = parse_version(&name) {
+                    versions.push((v, name));
+                }
+            }
+            if versions.is_empty() {
+                println!("No versioned keys found in {}", path.display());
+            } else {
+                versions.sort_by_key(|x| x.0);
+                println!("Found versions (oldest -> newest):");
+                for (v, name) in versions {
+                    println!("v{v} => {name}");
+                }
+            }
+        }
+        Err(e) => eprintln!("Cannot read directory {}: {e}", path.display()),
     }
 }

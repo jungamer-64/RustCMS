@@ -3,8 +3,6 @@ use cms_backend::AppState;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize logging
-    tracing_subscriber::fmt::init();
-
     // Initialize AppState from environment
     let state = AppState::from_env().await?;
 

@@ -34,8 +34,8 @@ fn versioned_keys_manifest_and_prune() {
 
     // Collect versioned private key files.
     let mut versions: Vec<u32> = Vec::new();
-    for entry in fs::read_dir(&out_dir).unwrap() {
-        let entry = entry.unwrap();
+    for entry in fs::read_dir(&out_dir).expect("should read test output dir") {
+        let entry = entry.expect("should read dir entry");
         let name = entry.file_name().to_string_lossy().to_string();
         if let Some(v) = parse_version(&name) {
             versions.push(v);
@@ -50,7 +50,7 @@ fn versioned_keys_manifest_and_prune() {
     assert!(!distinct.is_empty(), "expected some versioned files");
     let mut distinct_vec: Vec<u32> = distinct.into_iter().collect();
     distinct_vec.sort_unstable();
-    let max_version = *distinct_vec.last().unwrap();
+    let max_version = *distinct_vec.last().expect("should have at least one version");
 
     // Validate latest alias files exist.
     assert!(
@@ -65,16 +65,19 @@ fn versioned_keys_manifest_and_prune() {
     // Read manifest.json and validate JSON fields.
     let manifest_path = out_dir.join("manifest.json");
     assert!(manifest_path.exists(), "manifest.json not written");
-    let mut mf = fs::File::open(&manifest_path).unwrap();
+    let mut mf = fs::File::open(&manifest_path).expect("should open manifest");
     let mut buf = String::new();
-    mf.read_to_string(&mut buf).unwrap();
+    mf.read_to_string(&mut buf).expect("should read manifest to string");
     let v: Value = serde_json::from_str(&buf).expect("manifest.json invalid JSON");
     let latest_version_u64 = v["latest_version"]
         .as_u64()
         .expect("latest_version missing / not number");
-    let latest_version = u32::try_from(latest_version_u64)
-        .expect("latest_version value too large for u32");
-    assert_eq!(latest_version, max_version, "manifest latest_version mismatch");
+    let latest_version =
+        u32::try_from(latest_version_u64).expect("latest_version value too large for u32");
+    assert_eq!(
+        latest_version, max_version,
+        "manifest latest_version mismatch"
+    );
     assert!(
         v["private_fingerprint"].as_str().unwrap_or("").len() >= 32,
         "private_fingerprint too short"
