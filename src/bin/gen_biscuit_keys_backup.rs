@@ -19,10 +19,16 @@ pub(crate) fn make_backup_destination(
     backup_dir: Option<&Path>,
 ) -> (std::path::PathBuf, String) {
     let ts = timestamp();
+<<<<<<< HEAD
     let file_name = path.file_name().map_or_else(
         || "backup".to_string(),
         |s| s.to_string_lossy().into_owned(),
     );
+=======
+    let file_name = path
+        .file_name()
+    .map_or_else(|| "backup".to_string(), |s| s.to_string_lossy().into_owned());
+>>>>>>> 811b64f (Refactor gen_biscuit_keys outputs: OutputsOptions and manifest/backup helpers)
     let bak_name = format!("{file_name}.bak.{ts}");
     let bak = if let Some(dir) = backup_dir {
         dir.join(bak_name)

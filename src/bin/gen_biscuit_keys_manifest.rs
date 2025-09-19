@@ -1,7 +1,14 @@
+<<<<<<< HEAD
 use cms_backend::utils::hash;
 use serde::Serialize;
 use std::fs;
 use std::path::Path;
+=======
+use std::path::Path;
+use std::fs;
+use serde::Serialize;
+use cms_backend::utils::hash;
+>>>>>>> 811b64f (Refactor gen_biscuit_keys outputs: OutputsOptions and manifest/backup helpers)
 
 #[derive(Serialize)]
 struct Manifest<'a> {
@@ -82,10 +89,14 @@ pub fn finalize_versioned(
         .and_then(|s| s.to_str())
         .and_then(super::parse_version)
         .unwrap_or_else(|| {
+<<<<<<< HEAD
             eprintln!(
                 "Could not determine version from path: {}",
                 priv_path.display()
             );
+=======
+            eprintln!("Could not determine version from path: {}", priv_path.display());
+>>>>>>> 811b64f (Refactor gen_biscuit_keys outputs: OutputsOptions and manifest/backup helpers)
             0
         });
     let priv_fp = hash::sha256_hex(priv_b64.as_bytes());
@@ -103,15 +114,20 @@ pub fn finalize_versioned(
 pub fn handle_files_output_full(ctx: &super::FilesOutputContext) -> cms_backend::Result<()> {
     // Ensure directory exists
     if let Err(e) = std::fs::create_dir_all(ctx.path) {
+<<<<<<< HEAD
         return Err(cms_backend::AppError::Internal(format!(
             "Failed to create out-dir {}: {}",
             ctx.path.display(),
             e
         )));
+=======
+    return Err(cms_backend::AppError::Internal(format!("Failed to create out-dir {}: {}", ctx.path.display(), e)));
+>>>>>>> 811b64f (Refactor gen_biscuit_keys outputs: OutputsOptions and manifest/backup helpers)
     }
     // Resolve paths
     let (priv_path, pub_path) = super::resolve_output_paths(ctx.path, ctx.vopts.versioned);
     // Perform writes and backups
+<<<<<<< HEAD
     super::write_files_flow(
         &priv_path,
         &pub_path,
@@ -130,5 +146,11 @@ pub fn handle_files_output_full(ctx: &super::FilesOutputContext) -> cms_backend:
         ctx.vopts.no_manifest,
         ctx.vopts.prune,
     );
+=======
+    super::write_files_flow(&priv_path, &pub_path, ctx.backup, ctx.options, ctx.priv_b64, ctx.pub_b64);
+    // Finalize (manifest, prune, alias)
+    // call into bin's finalize logic (apply alias/manifest/prune)
+    super::gen_biscuit_keys_manifest::finalize_versioned(ctx.path, &priv_path, ctx.priv_b64, ctx.pub_b64, ctx.vopts.no_manifest, ctx.vopts.prune);
+>>>>>>> 811b64f (Refactor gen_biscuit_keys outputs: OutputsOptions and manifest/backup helpers)
     Ok(())
 }
