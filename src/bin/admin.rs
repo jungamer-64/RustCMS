@@ -461,7 +461,7 @@ async fn user_reset_password(
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn handle_content_action(action: ContentAction, _state: &AppState) {
+fn handle_content_action(_action: ContentAction, _state: &AppState) {
     // Indicate that content commands are not yet implemented. This makes
     // running the CLI in development obvious when these commands are used.
     warn!("'Content' command invoked but not implemented.");
