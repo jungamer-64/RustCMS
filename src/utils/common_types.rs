@@ -25,6 +25,29 @@ pub struct UserInfo {
     pub updated_at: DateTime<Utc>,
 }
 
+// Strongly-typed session identifier to avoid mixing with other strings
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct SessionId(pub String);
+
+impl SessionId {
+    #[must_use]
+    pub fn new() -> Self {
+        Self(uuid::Uuid::new_v4().to_string())
+    }
+}
+
+impl Default for SessionId {
+    fn default() -> Self { Self::new() }
+}
+
+impl From<String> for SessionId {
+    fn from(s: String) -> Self { Self(s) }
+}
+
+impl AsRef<str> for SessionId {
+    fn as_ref(&self) -> &str { &self.0 }
+}
+
 dto_from_model!(UserInfo, User, |u| UserInfo {
     id: u.id.to_string(),
     username: u.username.clone(),
