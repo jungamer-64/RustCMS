@@ -345,13 +345,12 @@ impl AuthService {
         std::fs::write(dir.join("biscuit_public.b64"), &pub_b64).map_err(|e| {
             crate::AppError::Internal(format!("Failed to write biscuit public key file: {e}"))
         })?;
-        Ok((kp.private(), kp.public()))
+        Ok(kp)
+    }
+    fn generate_ephemeral() -> KeyPair {
+        KeyPair::new()
     }
 
-    fn generate_ephemeral() -> (PrivateKey, PublicKey) {
-        let kp = KeyPair::new();
-        (kp.private(), kp.public())
-    }
     #[inline]
     fn ensure_active(user: &User) -> Result<()> {
         if !user.is_active {
@@ -471,113 +470,135 @@ impl AuthService {
             .ok_or(AuthError::InvalidToken)
             .map_err(Into::into)
     }
-
-    #[allow(clippy::unused_self)]
     fn biscuit_query_session(
-        &self,
         authz: &mut biscuit_auth::Authorizer,
         dsl: &str,
         ctx: &str,
-    ) -> Result<(String, u32)> {
+    ) -> Result<(SessionId, u32)> {
         let v: Vec<(String, i64)> = authz
             .query_all(dsl)
             .map_err(|e| AuthError::Biscuit(format!("Failed to query {ctx}: {e}")))?;
         let (sid, ver_i) = v.into_iter().next().ok_or(AuthError::InvalidToken)?;
         let ver_u32 = u32::try_from(ver_i).map_err(|_| AuthError::InvalidToken)?;
-        Ok((sid, ver_u32))
+        Ok((SessionId::from(sid), ver_u32))
     }
 
-    /// Create new authentication service (Biscuit 専用)
+    /// コンフィグと DB からサービスを初期化する。
     ///
     /// # Errors
-    /// - 鍵素材の読み込み/生成に失敗した場合。
-    /// - 設定値の検証に失敗した場合。
-    #[allow(clippy::unused_async)]
-    pub async fn new(config: &AuthConfig, database: &Database) -> Result<Self> {
-        // Attempt to load biscuit keypair from environment (base64 encoded), otherwise generate.
-        // Assumption: `PrivateKey` and `PublicKey` provide byte (de)serialization APIs.
-        // If the biscuit-auth types differ, adapt loading to the concrete API (e.g. from_pem/from_slice).
-        // Determine biscuit keys via env, config directory, or generation and persist when appropriate
-        let (biscuit_private_key, biscuit_public_key) =
-            if let Some(pair) = Self::try_load_env_keys() {
-                pair
-            } else {
-                let path = std::path::Path::new(&config.biscuit_root_key);
-                if !config.biscuit_root_key.is_empty() && path.exists() && path.is_dir() {
-                    if path.join("biscuit_private.b64").exists()
-                        && path.join("biscuit_public.b64").exists()
-                    {
-                        let priv_key = read_biscuit_private_key(&path.join("biscuit_private.b64"))?;
-                        let pub_key = read_biscuit_public_key(&path.join("biscuit_public.b64"))?;
-                        (priv_key, pub_key)
-                    } else {
-                        Self::generate_and_persist(path)?
-                    }
-                } else {
-                    Self::generate_ephemeral()
-                }
-            };
-
-        // Initialize Argon2
-        let argon2 = Argon2::default();
-
-        Ok(Self {
-            biscuit_private_key,
-            biscuit_public_key,
-            database: database.clone(),
+    /// キーロード/生成、または設定値変換で失敗した場合 `AppError` を返す。
+    pub fn new_with_repo(config: &AuthConfig, user_repo: Arc<dyn UserRepository>) -> Result<Self> {
+        let keypair = Self::load_or_generate_keypair(config)?; // complexity: 分離済み
+        let argon2 = Arc::new(Argon2::default());
+        let access_ttl_secs = i64::try_from(config.access_token_ttl_secs).map_err(|_| {
+            crate::AppError::ConfigValidationError(
+                "auth.access_token_ttl_secs is too large for i64".to_string(),
+            )
+        })?;
+        let refresh_ttl_secs = i64::try_from(config.refresh_token_ttl_secs).map_err(|_| {
+            crate::AppError::ConfigValidationError(
+                "auth.refresh_token_ttl_secs is too large for i64".to_string(),
+            )
+        })?;
+        let public_key = keypair.public();
+    Ok(Self {
+            biscuit_public_key: public_key,
+            biscuit_keypair: Arc::new(keypair),
+            user_repo,
             config: config.clone(),
-            sessions: Arc::new(RwLock::new(HashMap::new())),
+            session_store: Arc::new(InMemorySessionStore::new()) as Arc<dyn SessionStore>,
             argon2,
+            access_ttl_secs,
+            refresh_ttl_secs,
         })
     }
 
-    /// Authenticate user with username/password using `AppState` for DB access
+    /// Backward-compatible constructor from Database
+    pub fn new(config: &AuthConfig, database: &crate::database::Database) -> Result<Self> {
+        let repo: Arc<dyn UserRepository> = Arc::new(database.clone()) as Arc<dyn UserRepository>;
+        Self::new_with_repo(config, repo)
+    }
+
+    // keypair ロードロジックを分離し cyclomatic complexity を低減
+    fn load_or_generate_keypair(config: &AuthConfig) -> Result<KeyPair> {
+        if let Some(kp) = Self::try_load_env_keys() {
+            return Ok(kp);
+        }
+        let key_str = config.biscuit_root_key.expose_secret();
+        let path = std::path::Path::new(key_str);
+        if !key_str.is_empty() && path.exists() && path.is_dir() {
+            if path.join("biscuit_private.b64").exists() && path.join("biscuit_public.b64").exists()
+            {
+                let priv_key = read_biscuit_private_key(&path.join("biscuit_private.b64"))?;
+                let pub_key = read_biscuit_public_key(&path.join("biscuit_public.b64"))?;
+                let kp = KeyPair::from(&priv_key);
+                if kp.public().to_bytes() != pub_key.to_bytes() {
+                    return Err(crate::AppError::Internal(
+                        "Mismatched biscuit key pair (public key differs from private)".into(),
+                    ));
+                }
+                Ok(kp)
+            } else {
+                Self::generate_and_persist(path)
+            }
+        } else {
+            Ok(Self::generate_ephemeral())
+        }
+    }
+
+    /// メールアドレスとパスワードでユーザを認証し `User` を返す。
     ///
     /// # Errors
-    /// ユーザーが見つからない、無効、パスワード不一致、あるいは最終ログイン更新に失敗した場合にエラーを返します。
+    /// - 資格情報が不正 / ユーザが存在しない / パスワードハッシュ検証失敗時。
     pub async fn authenticate_user(
         &self,
-        state: &crate::AppState,
         request: LoginRequest,
-    ) -> Result<crate::models::User> {
-        // Lookup user via AppState DB wrapper
-        let user = state
-            .db_get_user_by_email(request.email.as_str())
+    ) -> Result<User> {
+        info!(target: "auth", "login_attempt");
+        let user = self
+            .user_repo
+            .get_user_by_email(request.email.as_str())
             .await
-            .map_err(|_| AuthError::UserNotFound)?;
-    Self::ensure_active(&user)?;
-
-        // Verify password
+            .map_err(|_| {
+                warn!(target: "auth", "login_failed: user_not_found");
+                AuthError::UserNotFound
+            })?;
+        Self::ensure_active(&user)?;
         if let Some(password_hash) = &user.password_hash {
             match password::verify_password(&request.password, password_hash) {
                 Ok(true) => {}
-                Ok(false) => return Err(AuthError::InvalidCredentials.into()),
-                Err(e) => return Err(AuthError::PasswordHash(e.to_string()).into()),
+                Ok(false) => {
+                    warn!(target: "auth", user_id=%user.id, "login_failed: invalid_credentials");
+                    return Err(AuthError::InvalidCredentials.into());
+                }
+                Err(e) => {
+                    error!(target: "auth", user_id=%user.id, err=%e, "password_verify_error");
+                    return Err(AuthError::PasswordHash(e.to_string()).into());
+                }
             }
         } else {
+            warn!(target: "auth", user_id=%user.id, "login_failed: no_password_hash");
             return Err(AuthError::InvalidCredentials.into());
         }
-
-        // Update last login via AppState wrapper
-        state
-            .db_update_last_login(user.id)
+        self
+            .user_repo
+            .update_last_login(user.id)
             .await
             .map_err(|e| AuthError::Database(e.to_string()))?;
-
-        // Return user (handlers will call create_session via AppState wrapper)
+        info!(target: "auth", user_id=%user.id, "login_success");
         Ok(user)
     }
 
-    /// Create authentication response with Biscuit access & refresh tokens
+    /// 認証後にセッションとトークンを生成して `AuthResponse` を返す。
     ///
     /// # Errors
-    /// トークン生成や署名に失敗した場合にエラーを返します。
+    /// Biscuit 署名やキー不整合などで失敗した場合。
     pub async fn create_auth_response(
         &self,
         user: User,
         remember_me: bool,
     ) -> Result<AuthResponse> {
-        let session_id = Uuid::new_v4().to_string();
+        let session_id = SessionId::new();
         let (access_exp, refresh_exp) = self.compute_expiries(remember_me);
         let refresh_version = 1u32;
         self.insert_session(&user, &session_id, refresh_exp, refresh_version)
