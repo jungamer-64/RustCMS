@@ -20,7 +20,7 @@ pub fn hash_password(password: &str) -> Result<String> {
 
     let password_hash = argon2
         .hash_password(password.as_bytes(), &salt)
-        .map_err(|e| AppError::Internal(format!("Password hashing failed: {e}")))?;
+    .map_err(|e| AppError::Internal(format!("Password hashing failed: {e}").into()))?;
 
     Ok(password_hash.to_string())
 }
@@ -33,7 +33,7 @@ pub fn hash_password(password: &str) -> Result<String> {
 /// format and cannot be parsed.
 pub fn verify_password(password: &str, hash: &str) -> Result<bool> {
     let parsed_hash = PasswordHash::new(hash)
-        .map_err(|e| AppError::Internal(format!("Invalid password hash format: {e}")))?;
+        .map_err(|e| AppError::Internal(format!("Invalid password hash format: {e}").into()))?;
 
     let argon2 = Argon2::default();
     Ok(argon2
@@ -136,8 +136,11 @@ mod tests {
             "Hash should be in Argon2 format"
         );
 
-    // Should contain proper sections separated by $
-    assert!(hash.split('$').count() >= 5, "Argon2 hash should have at least 5 parts");
+        // Should contain proper sections separated by $
+        assert!(
+            hash.split('$').count() >= 5,
+            "Argon2 hash should have at least 5 parts"
+        );
     }
 
     #[test]
