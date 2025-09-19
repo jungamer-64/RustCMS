@@ -1,4 +1,4 @@
-//! Enterprise CMS Administration CLI Tool
+//! CMS Administration CLI Tool
 //!
 //! Comprehensive command-line interface for managing users, content,
 //! system settings, and performing administrative tasks.
@@ -10,10 +10,12 @@ use cms_backend::{
 };
 use std::io::{self, Write};
 use tracing::{info, warn};
+use comfy_table::{Table, Cell};
+use ring::rand::{SecureRandom, SystemRandom};
 
 #[derive(Parser)]
 #[command(name = "cms-admin")]
-#[command(about = "Enterprise CMS Administration Tool")]
+#[command(about = "CMS Administration Tool")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 struct Cli {
     #[command(subcommand)]
@@ -58,8 +60,8 @@ enum UserAction {
     /// List all users
     List {
         /// Filter by role (admin, editor, user)
-        #[arg(long)]
-        role: Option<String>,
+        #[arg(long, value_enum)]
+        role: Option<UserRole>,
         /// Show only active users
         #[arg(long)]
         active_only: bool,
@@ -73,8 +75,8 @@ enum UserAction {
         #[arg(short, long)]
         email: String,
         /// User role (admin, editor, user)
-        #[arg(short, long, default_value = "user")]
-        role: String,
+        #[arg(short, long, value_enum, default_value_t = UserRole::Subscriber)]
+        role: UserRole,
         /// Generate random password
         #[arg(long)]
         generate_password: bool,
@@ -87,8 +89,8 @@ enum UserAction {
         #[arg(long)]
         email: Option<String>,
         /// New role
-        #[arg(long)]
-        role: Option<String>,
+        #[arg(long, value_enum)]
+        role: Option<UserRole>,
         /// Activate/deactivate user
         #[arg(long)]
         active: Option<bool>,
@@ -105,9 +107,12 @@ enum UserAction {
     ResetPassword {
         /// User ID or username
         user: String,
-        /// New password (if not provided, will be generated)
-        #[arg(long)]
+        /// New password (omit to be prompted)
+        #[arg(long, conflicts_with = "generate_password")]
         password: Option<String>,
+        /// Generate a random password
+        #[arg(long)]
+        generate_password: bool,
     },
 }
 
