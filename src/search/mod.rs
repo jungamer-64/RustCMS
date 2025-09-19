@@ -103,9 +103,12 @@ pub enum FilterOperator {
 #[cfg(feature = "search")]
 #[derive(Clone)]
 pub struct SearchService {
+    #[allow(dead_code)]
     index: Index,
+    #[allow(dead_code)]
     reader: IndexReader,
     writer: Arc<RwLock<IndexWriter>>,
+    #[allow(dead_code)]
     schema: SearchSchema,
     config: SearchConfig,
 }
