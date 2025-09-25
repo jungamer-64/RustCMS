@@ -5,6 +5,7 @@ use crate::{
     Result,
 };
 use chrono::{DateTime, Utc};
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
@@ -22,7 +23,7 @@ pub struct SessionData {
     pub refresh_version: u32, // 現在有効な refresh token version
 }
 
-#[allow(async_fn_in_trait)]
+#[async_trait]
 pub trait SessionStore: Send + Sync {
     async fn insert(&self, id: SessionId, data: SessionData);
     async fn remove(&self, id: SessionId);
@@ -59,6 +60,7 @@ impl InMemorySessionStore {
 }
 
 #[allow(clippy::significant_drop_tightening)]
+#[async_trait]
 impl SessionStore for InMemorySessionStore {
     async fn insert(&self, id: SessionId, data: SessionData) {
         self.inner.write().await.insert(id, data);

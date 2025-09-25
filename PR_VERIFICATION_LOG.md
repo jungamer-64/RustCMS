@@ -50,8 +50,6 @@ Sample manifest.json produced during the run (excerpt):
   "public_fingerprint": "35bebe8c53c4fb16fc3be06e1333fd30fd8b3242e555da058b1471ffb4641674"
 }
 
-```
-
 ```json
 {
   "latest_version": 1,

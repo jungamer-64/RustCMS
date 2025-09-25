@@ -1,7 +1,8 @@
-use cms_backend::utils::hash;
-use serde::Serialize;
-use std::fs;
 use std::path::Path;
+use std::fs;
+use serde::Serialize;
+use cms_backend::utils::hash;
+use cms_backend::{AppError, Result}; // Assuming AppError and Result are defined in cms_backend
 
 #[derive(Serialize)]
 struct Manifest<'a> {
@@ -11,7 +12,9 @@ struct Manifest<'a> {
     public_fingerprint: &'a str,
 }
 
-pub fn update_manifest(dir: &Path, version: u32, priv_fp: &str, pub_fp: &str) {
+/// manifest.json を更新します。
+/// 失敗した場合は I/O エラーを返します。
+pub fn update_manifest(dir: &Path, version: u32, priv_fp: &str, pub_fp: &str) -> std::io::Result<()> {
     let manifest_path = dir.join("manifest.json");
     let manifest = Manifest {
         latest_version: version,
@@ -19,56 +22,65 @@ pub fn update_manifest(dir: &Path, version: u32, priv_fp: &str, pub_fp: &str) {
         private_fingerprint: priv_fp,
         public_fingerprint: pub_fp,
     };
-    if let Ok(json) = serde_json::to_string_pretty(&manifest) {
-        if let Err(e) = fs::write(&manifest_path, json) {
-            eprintln!("Failed to write manifest {}: {e}", manifest_path.display(),);
-        } else {
-            println!("Updated manifest at {}", manifest_path.display());
-        }
-    }
+
+    let json = serde_json::to_string_pretty(&manifest)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    fs::write(&manifest_path, json)?;
+    println!("Updated manifest at {}", manifest_path.display());
+    Ok(())
 }
 
-pub fn prune_versions(dir: &Path, keep: usize) {
+/// 古いバージョンのキーファイルを指定された数だけ残して削除（プルーニング）します。
+/// 失敗した場合は I/O エラーを返します。
+pub fn prune_versions(dir: &Path, keep: usize) -> std::io::Result<()> {
     if keep == 0 {
-        return;
+        return Ok(());
     }
+
+    // ディレクトリ内のバージョンファイルを収集する
     let mut versions: Vec<u32> = Vec::new();
-    if let Ok(read) = fs::read_dir(dir) {
-        for entry in read.flatten() {
-            if let Some(name) = entry.file_name().to_str()
-                && name.starts_with("biscuit_private_v")
-                && std::path::Path::new(name)
-                    .extension()
-                    .is_some_and(|ext| ext.eq_ignore_ascii_case("b64"))
-                && let Some(v) = super::parse_version(name)
-            {
-                versions.push(v);
-            }
-        }
-    }
-    if versions.len() <= keep {
-        return;
-    }
-    versions.sort_unstable();
-    let to_remove: Vec<u32> = versions
-        .iter()
-        .copied()
-        .take(versions.len() - keep)
-        .collect();
-    for v in to_remove {
-        for prefix in ["biscuit_private_v", "biscuit_public_v"] {
-            let path = dir.join(format!("{}{}.b64", prefix, v));
-            if path.exists() {
-                if let Err(e) = fs::remove_file(&path) {
-                    eprintln!("Failed to remove old version {}: {e}", path.display());
-                } else {
-                    println!("Pruned old version file {}", path.display());
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        
+        // ファイルであり、かつ特定の命名規則に一致するかをチェック
+        if path.is_file() {
+            if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+                let is_versioned_key = name.starts_with("biscuit_private_v")
+                    && path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("b64"));
+
+                if is_versioned_key {
+                    if let Some(v) = super::parse_version(name) {
+                        versions.push(v);
+                    }
                 }
             }
         }
     }
+
+    if versions.len() <= keep {
+        return Ok(());
+    }
+
+    versions.sort_unstable();
+
+    // 保持する数を超えた古いバージョンを削除対象とする
+    let to_remove_count = versions.len() - keep;
+    for &v in versions.iter().take(to_remove_count) {
+        for prefix in ["biscuit_private_v", "biscuit_public_v"] {
+            let path = dir.join(format!("{}{}.b64", prefix, v));
+            if path.exists() {
+                fs::remove_file(&path)?;
+                println!("Pruned old version file {}", path.display());
+            }
+        }
+    }
+
+    Ok(())
 }
 
+/// バージョン管理されたファイルの最終処理（フィンガープリント計算、マニフェスト更新、プルーニング）を行います。
 pub fn finalize_versioned(
     path: &Path,
     priv_path: &Path,
@@ -76,42 +88,52 @@ pub fn finalize_versioned(
     pub_b64: &str,
     no_manifest: bool,
     prune: Option<usize>,
-) {
+) -> Result<()> {
+    // ファイルパスからバージョン番号をパースする。失敗した場合はエラーを返す。
     let v = priv_path
         .file_name()
         .and_then(|s| s.to_str())
         .and_then(super::parse_version)
-        .unwrap_or_else(|| {
-            eprintln!(
+        .ok_or_else(|| {
+            AppError::Internal(format!(
                 "Could not determine version from path: {}",
                 priv_path.display()
-            );
-            0
-        });
+            ))
+        })?;
+
     let priv_fp = hash::sha256_hex(priv_b64.as_bytes());
     let pub_fp = hash::sha256_hex(pub_b64.as_bytes());
     println!("private_fingerprint_sha256={priv_fp} public_fingerprint_sha256={pub_fp}");
+
+    // エラーを map_err でアプリケーション固有のエラー型に変換
+    let to_app_err = |e: std::io::Error| AppError::Internal(e.to_string());
+
     if !no_manifest {
-        update_manifest(path, v, &priv_fp, &pub_fp);
+        update_manifest(path, v, &priv_fp, &pub_fp).map_err(to_app_err)?;
     }
     if let Some(keep) = prune {
-        prune_versions(path, keep);
+        prune_versions(path, keep).map_err(to_app_err)?;
     }
+
+    Ok(())
 }
 
-// New helper: perform the full files output flow to keep binary file small.
-pub fn handle_files_output_full(ctx: &super::FilesOutputContext) -> cms_backend::Result<()> {
-    // Ensure directory exists
-    if let Err(e) = std::fs::create_dir_all(ctx.path) {
-        return Err(cms_backend::AppError::Internal(format!(
+/// ファイル出力に関する一連のフローを処理します。
+/// ディレクトリ作成、パス解決、ファイル書き込み、最終処理までを一貫して行います。
+pub fn handle_files_output_full(ctx: &super::FilesOutputContext) -> Result<()> {
+    // 出力ディレクトリが存在しない場合は作成する
+    fs::create_dir_all(ctx.path).map_err(|e| {
+        AppError::Internal(format!(
             "Failed to create out-dir {}: {}",
             ctx.path.display(),
             e
-        )));
-    }
-    // Resolve paths
+        ))
+    })?;
+
+    // 出力パスを解決
     let (priv_path, pub_path) = super::resolve_output_paths(ctx.path, ctx.vopts.versioned);
-    // Perform writes and backups
+
+    // ファイル書き込みとバックアップ処理
     super::write_files_flow(
         &priv_path,
         &pub_path,
@@ -119,16 +141,17 @@ pub fn handle_files_output_full(ctx: &super::FilesOutputContext) -> cms_backend:
         ctx.options,
         ctx.priv_b64,
         ctx.pub_b64,
-    );
-    // Finalize (manifest, prune, alias)
-    // call into bin's finalize logic (apply alias/manifest/prune)
-    super::gen_biscuit_keys_manifest::finalize_versioned(
+    )?; // write_files_flow も Result を返すと仮定
+
+    // マニフェスト更新、プルーニングなどの最終処理
+    finalize_versioned(
         ctx.path,
         &priv_path,
         ctx.priv_b64,
         ctx.pub_b64,
         ctx.vopts.no_manifest,
         ctx.vopts.prune,
-    );
+    )?;
+
     Ok(())
 }
