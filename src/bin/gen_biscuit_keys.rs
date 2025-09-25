@@ -111,9 +111,10 @@ fn replace_env_entries(
 fn filter_out_biscuit_lines(content: &str) -> Vec<&str> {
     content
         .lines()
-    .filter(|line| !(
-        line.starts_with("BISCUIT_PRIVATE_KEY_B64=") || line.starts_with("BISCUIT_PUBLIC_KEY_B64=")
-    ))
+        .filter(|line| {
+            !(line.starts_with("BISCUIT_PRIVATE_KEY_B64=")
+                || line.starts_with("BISCUIT_PUBLIC_KEY_B64="))
+        })
         .collect()
 }
 
@@ -211,7 +212,11 @@ fn resolve_paths_and_write(
     (priv_path, pub_path)
 }
 
-fn finalize_versioned_flow(ctx: &FilesOutputContext<'_>, priv_path: &Path, _pub_path: &Path) {
+fn finalize_versioned_flow(
+    ctx: &FilesOutputContext<'_>,
+    priv_path: &Path,
+    _pub_path: &Path,
+) -> cms_backend::Result<()> {
     if ctx.vopts.versioned {
         // Delegate alias/manifest/prune handling to the manifest module which will
         // update manifest.json, prune old versions and also manage the latest alias.
@@ -220,10 +225,12 @@ fn finalize_versioned_flow(ctx: &FilesOutputContext<'_>, priv_path: &Path, _pub_
             priv_path,
             ctx.priv_b64,
             ctx.pub_b64,
+            ctx.vopts.latest_alias,
             ctx.vopts.no_manifest,
             ctx.vopts.prune,
-        );
+        )?;
     }
+    Ok(())
 }
 
 /// Ensure the output directory exists; returns Err on failure.
@@ -257,10 +264,11 @@ fn post_versioned_flow(
     priv_path: &Path,
     priv_b64: &str,
     pub_b64: &str,
-) {
+) -> cms_backend::Result<()> {
     if vopts.versioned {
-        apply_versioned_post(path, vopts, priv_path, priv_b64, pub_b64);
+        apply_versioned_post(path, vopts, priv_path, priv_b64, pub_b64)?;
     }
+    Ok(())
 }
 
 struct FilesOutputContext<'a> {
@@ -331,7 +339,7 @@ fn apply_versioned_post(
     priv_path: &Path,
     priv_b64: &str,
     pub_b64: &str,
-) {
+) -> cms_backend::Result<()> {
     // Finalization (manifest update, pruning, alias updates) delegated to manifest
     // module which centralizes this behavior.
     gen_biscuit_keys_manifest::finalize_versioned(
@@ -339,11 +347,11 @@ fn apply_versioned_post(
         priv_path,
         priv_b64,
         pub_b64,
+        vopts.latest_alias,
         vopts.no_manifest,
         vopts.prune,
-    );
+    )
 }
-
 
 #[allow(clippy::too_many_arguments)]
 fn handle_env_output(

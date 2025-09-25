@@ -32,17 +32,17 @@
 //! - refresh 使用時: version インクリメント -> 旧トークンは version ミスマッチで無効化 (並行リクエスト対策)
 //! - セッション状態: `SessionStore` 抽象 (現状 `InMemory`)。
 
+mod biscuit;
 pub mod error;
 pub mod key_management;
-pub mod session;
-mod biscuit;
 mod service;
+pub mod session;
 
 pub use error::AuthError;
-pub use session::{InMemorySessionStore, SessionData, SessionStore};
 pub use service::{AuthContext, AuthResponse, AuthService, LoginRequest};
+pub use session::{InMemorySessionStore, SessionData, SessionStore};
 
-use crate::utils::common_types::SessionId;
+use crate::{models::UserRole, utils::common_types::SessionId};
 
 #[inline]
 fn mask_session_id(sid: &SessionId) -> String {
@@ -51,4 +51,19 @@ fn mask_session_id(sid: &SessionId) -> String {
         return "***".to_string();
     }
     format!("{}…{}", &s[..3], &s[s.len() - 3..])
+}
+
+/// 管理者権限が必要な場面でのヘルパー関数。
+///
+/// `SuperAdmin` ロールは常に許可し、それ以外は `"admin"` パーミッションを要求します。
+///
+/// # Errors
+///
+/// 必要な権限を持たない場合は `AuthError::InsufficientPermissions` を返します。
+pub fn require_admin_permission(ctx: &AuthContext) -> crate::Result<()> {
+    if matches!(ctx.role, UserRole::SuperAdmin) || ctx.permissions.iter().any(|p| p == "admin") {
+        Ok(())
+    } else {
+        Err(AuthError::InsufficientPermissions.into())
+    }
 }

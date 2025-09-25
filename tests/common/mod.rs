@@ -16,13 +16,16 @@ pub fn setup() {
         // but `Once` ensures we don't even try after the first time.
         // We can set LOG_FORMAT=text for more readable test output.
         if std::env::var("LOG_FORMAT").is_err() {
-            unsafe { std::env::set_var("LOG_FORMAT", "text"); }
+            unsafe {
+                std::env::set_var("LOG_FORMAT", "text");
+            }
         }
 
         // Allow overriding log level for tests with `TEST_VERBOSE=1`
         let verbose_tests = std::env::var("TEST_VERBOSE").is_ok();
         // In tests, we can afford to panic if logging initialization fails.
-        cms_backend::telemetry::init_telemetry(verbose_tests).expect("Failed to initialize telemetry for tests");
+        cms_backend::telemetry::init_telemetry(verbose_tests)
+            .expect("Failed to initialize telemetry for tests");
     });
 }
 
@@ -30,7 +33,6 @@ pub fn setup() {
 
 // These helpers are conditionally compiled and only available when both `auth` and `database` features are enabled.
 #[cfg(all(feature = "auth", feature = "database"))]
-
 use chrono::Utc;
 use cms_backend::{
     auth::AuthService,

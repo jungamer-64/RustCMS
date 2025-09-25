@@ -9,6 +9,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{
+    Result,
     auth::{
         biscuit::{self, ParsedBiscuit},
         error::AuthError,
@@ -23,7 +24,6 @@ use crate::{
         common_types::{SessionId, UserInfo},
         password,
     },
-    Result,
 };
 
 /// Authentication service
@@ -165,7 +165,11 @@ impl AuthService {
     ///
     /// # Errors
     /// Biscuit 署名やキー不整合などで失敗した場合。
-    pub async fn create_auth_response(&self, user: User, remember_me: bool) -> Result<AuthResponse> {
+    pub async fn create_auth_response(
+        &self,
+        user: User,
+        remember_me: bool,
+    ) -> Result<AuthResponse> {
         let session_id = SessionId::new();
         let (access_exp, refresh_exp) = self.compute_expiries(remember_me);
         let refresh_version = 1u32;
@@ -321,7 +325,8 @@ impl AuthService {
         Self::ensure_active(&user)?;
         let session_id = SessionId::new();
         let (access_exp, refresh_exp) = self.compute_expiries(false);
-        self.insert_session(&user, &session_id, refresh_exp, 1).await;
+        self.insert_session(&user, &session_id, refresh_exp, 1)
+            .await;
         let token = biscuit::build_token(
             &self.biscuit_keypair,
             &user,
@@ -429,7 +434,7 @@ impl AuthService {
     ) -> Result<AuthContext> {
         let parsed = biscuit::parse_and_check(token, expect_type, &self.biscuit_public_key)?;
         self.validate_session_consistency(&parsed).await?;
-    Ok(self.build_auth_context(&parsed))
+        Ok(self.build_auth_context(&parsed))
     }
 
     async fn validate_session_consistency(&self, parsed: &ParsedBiscuit) -> Result<()> {

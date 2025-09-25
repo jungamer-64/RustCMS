@@ -22,7 +22,7 @@
 //! - `search`: 登録時にユーザーを検索インデックスに反映（失敗しても本体処理は継続）。
 
 use axum::{
-    extract::State,
+    extract::{Extension, State},
     http::StatusCode,
     response::{IntoResponse, Json},
 };
@@ -40,7 +40,11 @@ use crate::utils::auth_response::AuthSuccessResponse;
 #[cfg(feature = "legacy-auth-flat")]
 use crate::utils::common_types::UserInfo;
 use crate::utils::response_ext::ApiOk;
-use crate::{AppState, Result, auth::LoginRequest, models::CreateUserRequest};
+use crate::{
+    AppState, Result,
+    auth::{AuthContext, LoginRequest},
+    models::CreateUserRequest,
+};
 
 /// Registration request
 #[derive(Debug, Deserialize, ToSchema)]
@@ -230,9 +234,8 @@ pub async fn login(
 /// Logout user
 /// 認証セッションを無効化します。
 ///
-/// 現在はダミーの応答を返します。トークンの失効（ブラックリスト、セッション破棄）
-/// を行う場合は `Authorization` ヘッダからベアラートークンを抽出し、
-/// 認証サービス側で無効化してください。
+/// アクセストークンの検証に成功した場合、セッションストアから該当セッションを
+/// 削除し、以後のトークン利用を無効化します。
 ///
 /// # Errors
 /// - 認証情報が欠如/無効な場合。
@@ -253,11 +256,10 @@ pub async fn login(
     )
 )]
 pub async fn logout(
-    State(_state): State<AppState>,
-    // Extract token from Authorization header in middleware
+    State(state): State<AppState>,
+    Extension(auth_ctx): Extension<AuthContext>,
 ) -> Result<impl IntoResponse> {
-    // In a real implementation, you'd extract the token from the Authorization header
-    // and invalidate it in the auth service
+    state.auth_logout(auth_ctx.session_id.as_ref()).await?;
 
     Ok(ApiOk(json!({
         "success": true,

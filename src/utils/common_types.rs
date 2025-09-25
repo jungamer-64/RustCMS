@@ -26,7 +26,9 @@ pub struct UserInfo {
 }
 
 // Strongly-typed session identifier to avoid mixing with other strings
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, utoipa::ToSchema,
+)]
 pub struct SessionId(pub String);
 
 impl SessionId {
@@ -37,15 +39,21 @@ impl SessionId {
 }
 
 impl Default for SessionId {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl From<String> for SessionId {
-    fn from(s: String) -> Self { Self(s) }
+    fn from(s: String) -> Self {
+        Self(s)
+    }
 }
 
 impl AsRef<str> for SessionId {
-    fn as_ref(&self) -> &str { &self.0 }
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
 }
 
 dto_from_model!(UserInfo, User, |u| UserInfo {

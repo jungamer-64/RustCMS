@@ -6,9 +6,9 @@
 //! Feature に応じて DB/Cache/Search 等の依存エラーを包含します。
 use crate::utils::api_types::{ApiResponse, ValidationError};
 use axum::{
+    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
 use std::fmt;
 use tracing::{debug, error};
@@ -71,7 +71,9 @@ impl fmt::Display for AppError {
             Self::Media(msg) => write!(f, "Media error: {msg}"),
             Self::Config(msg) => write!(f, "Configuration error: {msg}"),
             Self::ConfigLoad(err) => write!(f, "Configuration loading error: {err}"),
-            Self::ConfigValueMissing(key) => write!(f, "Configuration value missing for key: {key}"),
+            Self::ConfigValueMissing(key) => {
+                write!(f, "Configuration value missing for key: {key}")
+            }
             Self::ConfigValidationError(msg) => write!(f, "Configuration validation error: {msg}"),
             Self::IO(err) => write!(f, "IO error: {err}"),
             Self::Serde(err) => write!(f, "Serialization error: {err}"),
@@ -200,10 +202,13 @@ impl IntoResponse for AppError {
                 None,
             ),
             Self::Search(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str(), None),
-            Self::Config(_) | Self::ConfigLoad(_) | Self::ConfigValueMissing(_) | Self::ConfigValidationError(_) => (
+            Self::Config(_)
+            | Self::ConfigLoad(_)
+            | Self::ConfigValueMissing(_)
+            | Self::ConfigValidationError(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "A server configuration error occurred",
-                None
+                None,
             ),
             Self::IO(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -225,16 +230,16 @@ impl IntoResponse for AppError {
                     .flat_map(|(field, errors)| {
                         errors.iter().map(move |e| ValidationError {
                             field: field.to_string(),
-                            message: e.message.as_ref().map_or_else(
-                                || "Invalid value".to_string(),
-                                |s| s.to_string(),
-                            ),
+                            message: e
+                                .message
+                                .as_ref()
+                                .map_or_else(|| "Invalid value".to_string(), |s| s.to_string()),
                         })
                     })
                     .collect();
                 (
-            StatusCode::UNPROCESSABLE_ENTITY, // 400 Bad Requestより具体的
-                "Invalid input",
+                    StatusCode::UNPROCESSABLE_ENTITY, // 400 Bad Requestより具体的
+                    "Invalid input",
                     Some(details),
                 )
             }
@@ -291,7 +296,10 @@ impl AppError {
             Self::Biscuit(_) => "biscuit auth error",
             Self::Search(_) => "search error",
             Self::Media(_) => "media error",
-            Self::Config(_) | Self::ConfigLoad(_) | Self::ConfigValueMissing(_) | Self::ConfigValidationError(_) => "configuration error",
+            Self::Config(_)
+            | Self::ConfigLoad(_)
+            | Self::ConfigValueMissing(_)
+            | Self::ConfigValidationError(_) => "configuration error",
             #[cfg(feature = "search")]
             Self::Tantivy(_) => "search backend error",
         }

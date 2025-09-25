@@ -8,10 +8,10 @@ use cms_backend::{
     AppState, Result,
     models::{CreateUserRequest, UpdateUserRequest, UserRole},
 };
+use comfy_table::{Cell, Table};
+use ring::rand::{SecureRandom, SystemRandom};
 use std::io::{self, Write};
 use tracing::{info, warn};
-use comfy_table::{Table, Cell};
-use ring::rand::{SecureRandom, SystemRandom};
 
 #[derive(Parser)]
 #[command(name = "cms-admin")]
@@ -263,10 +263,7 @@ async fn run(cli: Cli) -> Result<()> {
     // Initialize full AppState, honoring the verbose flag
     let app_state = cms_backend::utils::init::init_app_state_with_verbose(cli.verbose).await?;
 
-    info!(
-        "🔧 CMS Administration Tool v{}",
-        env!("CARGO_PKG_VERSION")
-    );
+    info!("🔧 CMS Administration Tool v{}", env!("CARGO_PKG_VERSION"));
 
     // Execute command
     match cli.command {
@@ -283,16 +280,24 @@ async fn run(cli: Cli) -> Result<()> {
 async fn handle_user_action(action: UserAction, state: &AppState) -> Result<()> {
     match action {
         UserAction::List { role, active_only } => user_list(&role, active_only, state).await?,
-        UserAction::Create { username, email, role, generate_password } => {
-            user_create(username, email, role, generate_password, state).await?
-        }
-        UserAction::Update { user, email, role, active } => {
-            user_update(user, email, role, active, state).await?
-        }
+        UserAction::Create {
+            username,
+            email,
+            role,
+            generate_password,
+        } => user_create(username, email, role, generate_password, state).await?,
+        UserAction::Update {
+            user,
+            email,
+            role,
+            active,
+        } => user_update(user, email, role, active, state).await?,
         UserAction::Delete { user, force } => user_delete(user, force, state).await?,
-        UserAction::ResetPassword { user, password, generate_password } => {
-            user_reset_password(user, password, generate_password, state).await?
-        }
+        UserAction::ResetPassword {
+            user,
+            password,
+            generate_password,
+        } => user_reset_password(user, password, generate_password, state).await?,
     }
 
     Ok(())
@@ -302,7 +307,10 @@ async fn user_list(role: &Option<UserRole>, active_only: bool, state: &AppState)
     info!("📊 Listing users...");
     let role_filter: Option<&str> = role.as_ref().map(|r| r.as_str());
     let active_filter = if active_only { Some(true) } else { None };
-    let users = state.database.list_users(role_filter, active_filter).await?;
+    let users = state
+        .database
+        .list_users(role_filter, active_filter)
+        .await?;
 
     if users.is_empty() {
         println!("No users found matching the criteria.");
@@ -481,10 +489,26 @@ async fn system_status(state: &AppState) -> Result<()> {
     let health = state.health_check().await?;
     let table = cms_backend::utils::bin_utils::render_health_table_components(
         &health.status,
-        (&health.database.status, health.database.response_time_ms, health.database.error.as_deref()),
-        (&health.cache.status, health.cache.response_time_ms, health.cache.error.as_deref()),
-        (&health.search.status, health.search.response_time_ms, health.search.error.as_deref()),
-        (&health.auth.status, health.auth.response_time_ms, health.auth.error.as_deref()),
+        (
+            &health.database.status,
+            health.database.response_time_ms,
+            health.database.error.as_deref(),
+        ),
+        (
+            &health.cache.status,
+            health.cache.response_time_ms,
+            health.cache.error.as_deref(),
+        ),
+        (
+            &health.search.status,
+            health.search.response_time_ms,
+            health.search.error.as_deref(),
+        ),
+        (
+            &health.auth.status,
+            health.auth.response_time_ms,
+            health.auth.error.as_deref(),
+        ),
     );
     println!("{table}");
 
@@ -506,7 +530,9 @@ mod system_status_tests {
         let search = ("up", 7.89_f64, None::<&str>);
         let auth = ("up", 3.21_f64, None::<&str>);
 
-    let table = cms_backend::utils::bin_utils::render_health_table_components(overall, db, cache, search, auth);
+        let table = cms_backend::utils::bin_utils::render_health_table_components(
+            overall, db, cache, search, auth,
+        );
         let s = format!("{table}");
 
         // Basic assertions: header and a few component names
@@ -581,7 +607,6 @@ fn handle_analytics_action(action: AnalyticsAction, _state: &AppState) {
             // Implementation would show performance metrics
         }
     }
-
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -619,15 +644,15 @@ fn handle_security_action(action: SecurityAction, _state: &AppState) {
             // Implementation would revoke API key
         }
     }
-
 }
 
 // Utility functions
 
-    // utility helpers
+// utility helpers
 
 fn generate_random_password() -> String {
-    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+    const CHARSET: &[u8] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
     let charset_len = CHARSET.len() as u16;
     let threshold: u16 = 256u16 - (256u16 % charset_len);
     let rng = SystemRandom::new();
@@ -636,7 +661,8 @@ fn generate_random_password() -> String {
     let mut byte = [0u8; 1];
     while password.len() < 16 {
         // Fail fast if RNG can't produce bytes
-        rng.fill(&mut byte).expect("Failed to read from system's entropy source");
+        rng.fill(&mut byte)
+            .expect("Failed to read from system's entropy source");
         let v = byte[0] as u16;
         if v < threshold {
             let idx = (v % charset_len) as usize;
@@ -649,7 +675,7 @@ fn generate_random_password() -> String {
 fn prompt_password(prompt: &str) -> Result<String> {
     // Use rpassword to securely read password without echoing to the terminal
     let password = rpassword::prompt_password(prompt)
-    .map_err(|e| cms_backend::AppError::Internal(e.to_string()))?;
+        .map_err(|e| cms_backend::AppError::Internal(e.to_string()))?;
 
     if password.is_empty() {
         return Err(cms_backend::AppError::BadRequest(
@@ -661,7 +687,10 @@ fn prompt_password(prompt: &str) -> Result<String> {
 }
 
 /// Find user by UUID or username and return a NotFound AppError if missing
-async fn find_user_by_id_or_username(state: &AppState, identifier: &str) -> Result<cms_backend::models::User> {
+async fn find_user_by_id_or_username(
+    state: &AppState,
+    identifier: &str,
+) -> Result<cms_backend::models::User> {
     let result = if let Ok(id) = uuid::Uuid::parse_str(identifier) {
         state.db_get_user_by_id(id).await
     } else {
@@ -669,7 +698,6 @@ async fn find_user_by_id_or_username(state: &AppState, identifier: &str) -> Resu
     };
     result.map_err(|_| cms_backend::AppError::NotFound(format!("User '{}' not found", identifier)))
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -687,9 +715,10 @@ mod tests {
             for ch in pw.chars() {
                 let bytes = ch as u8;
                 // must be ASCII printable and in our CHARSET
-                let found = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*"
-                    .iter()
-                    .any(|&c| c == bytes);
+                let found =
+                    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*"
+                        .iter()
+                        .any(|&c| c == bytes);
                 assert!(found, "password contains invalid char: {}", ch);
             }
         }

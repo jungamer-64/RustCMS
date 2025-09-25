@@ -63,7 +63,9 @@ async fn admin_user_create_update_delete() {
         is_active: Some(false),
     };
 
-    let updated = db.update_user(created.id, &update_req).expect("update_user");
+    let updated = db
+        .update_user(created.id, &update_req)
+        .expect("update_user");
     assert_eq!(updated.email, new_email);
     assert_eq!(updated.role, UserRole::Admin.as_str());
     assert!(!updated.is_active);

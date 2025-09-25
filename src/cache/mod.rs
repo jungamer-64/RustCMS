@@ -427,8 +427,6 @@ impl CacheService {
         stats.memory_hits += 1;
         stats.total_operations += 1;
     }
-
-    
 }
 
 impl Default for CacheStats {

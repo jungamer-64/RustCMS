@@ -50,7 +50,9 @@ fn versioned_keys_manifest_and_prune() {
     assert!(!distinct.is_empty(), "expected some versioned files");
     let mut distinct_vec: Vec<u32> = distinct.into_iter().collect();
     distinct_vec.sort_unstable();
-    let max_version = *distinct_vec.last().expect("should have at least one version");
+    let max_version = *distinct_vec
+        .last()
+        .expect("should have at least one version");
 
     // Validate latest alias files exist.
     assert!(
@@ -67,7 +69,8 @@ fn versioned_keys_manifest_and_prune() {
     assert!(manifest_path.exists(), "manifest.json not written");
     let mut mf = fs::File::open(&manifest_path).expect("should open manifest");
     let mut buf = String::new();
-    mf.read_to_string(&mut buf).expect("should read manifest to string");
+    mf.read_to_string(&mut buf)
+        .expect("should read manifest to string");
     let v: Value = serde_json::from_str(&buf).expect("manifest.json invalid JSON");
     let latest_version_u64 = v["latest_version"]
         .as_u64()

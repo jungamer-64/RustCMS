@@ -62,7 +62,8 @@ async fn main() -> Result<(), ServerError> {
     info!("   Integrating cms-lightweight + cms-simple + cms-unified functionality");
 
     // Compute address from config before moving state
-    let addr: SocketAddr = format!("{}:{}", state.config.server.host, state.config.server.port).parse()?;
+    let addr: SocketAddr =
+        format!("{}:{}", state.config.server.host, state.config.server.port).parse()?;
 
     // Build router and attach state (we keep a clone to call shutdown later)
     let state_clone_for_router = state.clone();

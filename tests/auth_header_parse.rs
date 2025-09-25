@@ -19,7 +19,10 @@ fn biscuit_ok() {
 #[test]
 fn invalid_scheme() {
     common::setup();
-    assert!(parse_authorization_header("Basic a:b").is_none(), "Basic scheme should be rejected");
+    assert!(
+        parse_authorization_header("Basic a:b").is_none(),
+        "Basic scheme should be rejected"
+    );
 }
 
 #[test]

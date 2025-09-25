@@ -1,18 +1,19 @@
 use crate::Result;
-use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use biscuit_auth::{Algorithm as BiscuitAlgorithm, KeyPair, PrivateKey, PublicKey};
 use secrecy::ExposeSecret;
 
 // --- Key file helper funcs (共通読込ユーティリティ) ---
 fn read_file_string(path: &std::path::Path, label: &str) -> crate::Result<String> {
-    std::fs::read_to_string(path)
-        .map_err(|e| crate::AppError::Internal(format!("Failed reading biscuit {label} key file: {e}")))
+    std::fs::read_to_string(path).map_err(|e| {
+        crate::AppError::Internal(format!("Failed reading biscuit {label} key file: {e}"))
+    })
 }
 fn decode_key_b64(data: &str, label: &str) -> crate::Result<Vec<u8>> {
-    STANDARD
-        .decode(data)
-        .map_err(|e| crate::AppError::Internal(format!("Failed to decode biscuit {label} key b64: {e}")))
+    STANDARD.decode(data).map_err(|e| {
+        crate::AppError::Internal(format!("Failed to decode biscuit {label} key b64: {e}"))
+    })
 }
 fn read_biscuit_private_key(path: &std::path::Path) -> crate::Result<PrivateKey> {
     let b64 = read_file_string(path, "private")?;

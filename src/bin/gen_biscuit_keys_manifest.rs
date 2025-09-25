@@ -1,8 +1,8 @@
-use std::path::Path;
-use std::fs;
-use serde::Serialize;
 use cms_backend::utils::hash;
-use cms_backend::{AppError, Result}; // Assuming AppError and Result are defined in cms_backend
+use cms_backend::{AppError, Result};
+use serde::Serialize;
+use std::fs;
+use std::path::Path; // Assuming AppError and Result are defined in cms_backend
 
 #[derive(Serialize)]
 struct Manifest<'a> {
@@ -14,7 +14,12 @@ struct Manifest<'a> {
 
 /// manifest.json を更新します。
 /// 失敗した場合は I/O エラーを返します。
-pub fn update_manifest(dir: &Path, version: u32, priv_fp: &str, pub_fp: &str) -> std::io::Result<()> {
+pub fn update_manifest(
+    dir: &Path,
+    version: u32,
+    priv_fp: &str,
+    pub_fp: &str,
+) -> std::io::Result<()> {
     let manifest_path = dir.join("manifest.json");
     let manifest = Manifest {
         latest_version: version,
@@ -43,12 +48,14 @@ pub fn prune_versions(dir: &Path, keep: usize) -> std::io::Result<()> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
-        
+
         // ファイルであり、かつ特定の命名規則に一致するかをチェック
         if path.is_file() {
             if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
                 let is_versioned_key = name.starts_with("biscuit_private_v")
-                    && path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("b64"));
+                    && path
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("b64"));
 
                 if is_versioned_key {
                     if let Some(v) = super::parse_version(name) {
@@ -86,6 +93,7 @@ pub fn finalize_versioned(
     priv_path: &Path,
     priv_b64: &str,
     pub_b64: &str,
+    latest_alias: bool,
     no_manifest: bool,
     prune: Option<usize>,
 ) -> Result<()> {
@@ -108,12 +116,32 @@ pub fn finalize_versioned(
     // エラーを map_err でアプリケーション固有のエラー型に変換
     let to_app_err = |e: std::io::Error| AppError::Internal(e.to_string());
 
+    if latest_alias {
+        write_latest_alias(path, priv_b64, pub_b64).map_err(to_app_err)?;
+    }
+
     if !no_manifest {
         update_manifest(path, v, &priv_fp, &pub_fp).map_err(to_app_err)?;
     }
     if let Some(keep) = prune {
         prune_versions(path, keep).map_err(to_app_err)?;
     }
+
+    Ok(())
+}
+
+fn write_latest_alias(dir: &Path, priv_b64: &str, pub_b64: &str) -> std::io::Result<()> {
+    let priv_alias = dir.join("biscuit_private.b64");
+    let pub_alias = dir.join("biscuit_public.b64");
+
+    fs::write(&priv_alias, priv_b64)?;
+    fs::write(&pub_alias, pub_b64)?;
+
+    println!(
+        "Updated latest alias files: {} & {}",
+        priv_alias.display(),
+        pub_alias.display()
+    );
 
     Ok(())
 }
@@ -141,17 +169,20 @@ pub fn handle_files_output_full(ctx: &super::FilesOutputContext) -> Result<()> {
         ctx.options,
         ctx.priv_b64,
         ctx.pub_b64,
-    )?; // write_files_flow も Result を返すと仮定
+    );
 
     // マニフェスト更新、プルーニングなどの最終処理
-    finalize_versioned(
-        ctx.path,
-        &priv_path,
-        ctx.priv_b64,
-        ctx.pub_b64,
-        ctx.vopts.no_manifest,
-        ctx.vopts.prune,
-    )?;
+    if ctx.vopts.versioned {
+        finalize_versioned(
+            ctx.path,
+            &priv_path,
+            ctx.priv_b64,
+            ctx.pub_b64,
+            ctx.vopts.latest_alias,
+            ctx.vopts.no_manifest,
+            ctx.vopts.prune,
+        )?;
+    }
 
     Ok(())
 }

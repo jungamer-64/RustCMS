@@ -2,8 +2,10 @@
 //!
 //! 依存関係の整備が完了するまで、ログ出力と環境フィルタに絞った構成です。
 //! 将来的にトレーシングのエクスポータやメトリクスHTTPエンドポイントを再導入します。 （詳細は `docs/FEATURES_JA.md` の monitoring セクションを参照）
-use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
-use std::fs::OpenOptions; // Add this import for file output
+use std::fs::OpenOptions;
+use tracing_subscriber::{
+    EnvFilter, fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt,
+}; // Add this import for file output
 
 /// テレメトリを初期化します。
 ///
@@ -35,7 +37,11 @@ pub fn init_telemetry(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Determine default log format based on APP_ENV
-    let default_format = if app_env.eq_ignore_ascii_case("development") { "text" } else { "json" };
+    let default_format = if app_env.eq_ignore_ascii_case("development") {
+        "text"
+    } else {
+        "json"
+    };
     let format = std::env::var("LOG_FORMAT").unwrap_or_else(|_| default_format.to_string());
     let is_json = format.eq_ignore_ascii_case("json"); // This line was duplicated, fixed below
 
@@ -61,9 +67,14 @@ pub fn init_telemetry(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
         }
     } else {
         // Assume it's a file path; create/open the file and provide a closure that clones it for each writer
-        let file = OpenOptions::new().append(true).create(true).open(&log_output)?;
+        let file = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&log_output)?;
         // `with_writer` expects a factory/closure that returns a writer. We clone the file handle per call.
-        let layer = base_layer.with_writer(move || file.try_clone().expect("failed to clone log file handle")).with_ansi(false);
+        let layer = base_layer
+            .with_writer(move || file.try_clone().expect("failed to clone log file handle"))
+            .with_ansi(false);
         if is_json {
             subscriber.with(layer.json()).try_init()?;
         } else {

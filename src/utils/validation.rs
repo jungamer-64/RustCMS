@@ -32,7 +32,7 @@ pub fn validate_email(email: &str) -> bool {
 /// Returns [`AppError::BadRequest`] when email format is invalid or password is too short.
 pub fn validate_user_input(email: &str, password: Option<&str>) -> Result<(), AppError> {
     if !validate_email(email) {
-    return Err(AppError::BadRequest("Invalid email format".to_string()));
+        return Err(AppError::BadRequest("Invalid email format".to_string()));
     }
 
     if let Some(pwd) = password

@@ -44,12 +44,17 @@ pub fn render_health_table_components(
     search: (&str, f64, Option<&str>),
     auth: (&str, f64, Option<&str>),
 ) -> comfy_table::Table {
-    use comfy_table::{Table, Cell};
+    use comfy_table::{Cell, Table};
 
     let mut table = Table::new();
     table.set_header(vec!["Component", "Status", "Response (ms)", "Error"]);
 
-    table.add_row(vec![Cell::new("Overall"), Cell::new(overall_status.to_string()), Cell::new("-"), Cell::new("-")]);
+    table.add_row(vec![
+        Cell::new("Overall"),
+        Cell::new(overall_status.to_string()),
+        Cell::new("-"),
+        Cell::new("-"),
+    ]);
 
     table.add_row(vec![
         Cell::new("Database"),
@@ -105,6 +110,6 @@ pub async fn run_docs_server(addr: SocketAddr) -> crate::Result<()> {
         .map_err(crate::AppError::IO)?;
     axum::serve(listener, app)
         .await
-    .map_err(|e| crate::AppError::Internal(format!("axum serve error: {e}")))?;
+        .map_err(|e| crate::AppError::Internal(format!("axum serve error: {e}")))?;
     Ok(())
 }

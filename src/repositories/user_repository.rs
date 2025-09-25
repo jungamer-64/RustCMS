@@ -3,8 +3,8 @@ use std::pin::Pin;
 
 use uuid::Uuid;
 
-use crate::models::User;
 use crate::Result;
+use crate::models::User;
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 

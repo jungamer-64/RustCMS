@@ -58,8 +58,11 @@ async fn snapshot_health_endpoint() {
         .expect("request should succeed");
 
     assert_eq!(response.status(), StatusCode::OK);
-    let body_bytes = to_bytes(response.into_body(), usize::MAX).await.expect("should read body");
-    let mut json: serde_json::Value = serde_json::from_slice(&body_bytes).expect("should parse body as json");
+    let body_bytes = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("should read body");
+    let mut json: serde_json::Value =
+        serde_json::from_slice(&body_bytes).expect("should parse body as json");
     // timestamp は可変なのでマスク
     if let Some(ts) = json.get_mut("data").and_then(|d| d.get_mut("timestamp")) {
         *ts = serde_json::Value::String("<redacted>".into());

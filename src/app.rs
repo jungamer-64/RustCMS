@@ -227,7 +227,7 @@ where
 #[allow(dead_code)]
 fn service_not_configured(msg: &str) -> ServiceHealth {
     ServiceHealth {
-    status: "not_configured".to_string(),
+        status: "not_configured".to_string(),
         response_time_ms: 0.0,
         error: None,
         details: serde_json::json!({"message": msg}),
@@ -395,9 +395,10 @@ impl AppState {
             info!("🔐 Setting up authentication service...");
             #[cfg(feature = "database")]
             {
-                app_state_builder.auth = Some(
-                    AuthService::new(&config.auth, app_state_builder.database.as_ref().unwrap())?
-                );
+                app_state_builder.auth = Some(AuthService::new(
+                    &config.auth,
+                    app_state_builder.database.as_ref().unwrap(),
+                )?);
             }
             #[cfg(not(feature = "database"))]
             {
@@ -508,8 +509,8 @@ impl AppState {
         // Check database health
         let db_health = self.check_database_health().await;
 
-    // Check cache health
-    let cache_health = self.check_cache_health().await;
+        // Check cache health
+        let cache_health = self.check_cache_health().await;
 
         // Check search health
         let search_health = self.check_search_health().await;
@@ -686,9 +687,9 @@ impl AppState {
             }
         }
 
-    // Telemetry shutdown (best-effort no-op by default)
-    #[cfg(feature = "monitoring")]
-    crate::telemetry::shutdown_telemetry();
+        // Telemetry shutdown (best-effort no-op by default)
+        #[cfg(feature = "monitoring")]
+        crate::telemetry::shutdown_telemetry();
 
         info!("AppState shutdown complete (signalled background tasks)");
     }
@@ -976,6 +977,16 @@ impl AppState {
     ) -> crate::Result<crate::utils::auth_response::AuthSuccessResponse> {
         let (tokens, user) = self.auth_refresh_access_token(refresh_token).await?; // metrics recorded in inner call
         Ok(crate::utils::auth_response::AuthSuccessResponse::from_parts(&tokens, user))
+    }
+
+    #[cfg(feature = "auth")]
+    /// セッションIDを指定して現在のセッションを無効化します。
+    ///
+    /// # Errors
+    ///
+    /// セッションの削除処理に失敗した場合にエラーを返します。
+    pub async fn auth_logout(&self, session_id: &str) -> crate::Result<()> {
+        timed_op!(self, "auth", self.auth.logout(session_id))
     }
 
     /// Validate a token using the `AuthService`; returns the authenticated user on success and records an auth attempt
@@ -1749,7 +1760,7 @@ impl AppState {
     pub async fn db_ensure_schema_migrations_compat(&self) -> crate::Result<()> {
         let create_sql = "CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());";
         let copy_sql = "INSERT INTO schema_migrations(version, applied_at) SELECT version, run_on FROM __diesel_schema_migrations WHERE version NOT IN (SELECT version FROM schema_migrations);";
-            let _ = self.db_execute_sql(create_sql).await?;
+        let _ = self.db_execute_sql(create_sql).await?;
         let _ = self.db_execute_sql(copy_sql).await?;
         Ok(())
     }

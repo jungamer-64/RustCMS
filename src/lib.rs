@@ -52,9 +52,9 @@ pub mod handlers;
 pub mod limiter;
 pub mod middleware;
 pub mod models;
+pub mod repositories;
 pub mod routes;
 pub mod utils; // unified rate limiting
-pub mod repositories;
 
 // OpenAPI documentation system
 pub mod openapi;

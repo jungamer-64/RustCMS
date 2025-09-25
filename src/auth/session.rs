@@ -1,11 +1,6 @@
-use crate::{
-    auth::error::AuthError,
-    models::UserRole,
-    utils::common_types::SessionId,
-    Result,
-};
-use chrono::{DateTime, Utc};
+use crate::{Result, auth::error::AuthError, models::UserRole, utils::common_types::SessionId};
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::RwLock;

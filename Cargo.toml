@@ -121,7 +121,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "regis
 clap = { version = "4.4", features = ["derive", "env"] }
 config = { version = "0.15", features = ["yaml", "toml", "json"] }
 dotenvy = "0.15"
-secrecy = { version = "0.8", features = ["serde"] }
+secrecy = { version = "0.10", features = ["serde"] }
 
 # ===== VALIDATION =====
 garde = { version = "0.22", features = ["derive"] }
@@ -167,7 +167,9 @@ utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
 lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport", "builder"], default-features = false, optional = true }
 
 # ===== WEBSOCKETS (rustls) =====
-tokio-tungstenite = { version = "0.27", features = ["__rustls-tls"], default-features = false }
+tokio-tungstenite = { version = "0.28", features = ["__rustls-tls"], default-features = false }
+libloading = "0.8.9"
+matchit = "0.8.4"
  
 [dev-dependencies]
 # Development and test helpers (alphabetical)

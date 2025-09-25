@@ -1,15 +1,15 @@
 use std::fmt::Write;
 
-use biscuit_auth::{builder::BiscuitBuilder, error::Format as BiscuitFormat, KeyPair, PublicKey};
+use biscuit_auth::{KeyPair, PublicKey, builder::BiscuitBuilder, error::Format as BiscuitFormat};
 use chrono::Utc;
 use tracing::warn;
 use uuid::Uuid;
 
 use crate::{
+    Result,
     auth::error::AuthError,
     models::{User, UserRole},
     utils::common_types::SessionId,
-    Result,
 };
 
 pub(super) struct ParsedBiscuit {
@@ -62,10 +62,7 @@ pub(super) fn build_token(
     Ok(s)
 }
 
-pub(super) fn parse_refresh_biscuit(
-    token: &str,
-    public_key: &PublicKey,
-) -> Result<ParsedBiscuit> {
+pub(super) fn parse_refresh_biscuit(token: &str, public_key: &PublicKey) -> Result<ParsedBiscuit> {
     let parsed = parse(token, public_key)?;
     if parsed.token_type != "refresh" {
         return Err(AuthError::InvalidToken.into());
@@ -106,8 +103,9 @@ fn parse(token: &str, public_key: &PublicKey) -> Result<ParsedBiscuit> {
 fn create_authorizer(token: &str, public_key: &PublicKey) -> Result<biscuit_auth::Authorizer> {
     let unverified = biscuit_auth::UnverifiedBiscuit::from_base64(token)
         .map_err(|e| AuthError::Biscuit(format!("Failed to parse biscuit token: {e}")))?;
-    let key_provider =
-        |_opt_root: Option<u32>| -> std::result::Result<PublicKey, BiscuitFormat> { Ok(*public_key) };
+    let key_provider = |_opt_root: Option<u32>| -> std::result::Result<PublicKey, BiscuitFormat> {
+        Ok(*public_key)
+    };
     let biscuit = unverified
         .verify(key_provider)
         .map_err(|e| AuthError::Biscuit(format!("Biscuit signature verification failed: {e}")))?;
@@ -143,7 +141,8 @@ fn validate_exp(authorizer: &mut biscuit_auth::Authorizer) -> Result<()> {
 }
 
 fn get_session(authorizer: &mut biscuit_auth::Authorizer) -> Result<(SessionId, u32)> {
-    let v: Vec<(String, i64)> = query_vec(authorizer, "data($sid,$v) <- session($sid,$v)", "session")?;
+    let v: Vec<(String, i64)> =
+        query_vec(authorizer, "data($sid,$v) <- session($sid,$v)", "session")?;
     let (sid, ver_i) = v.into_iter().next().ok_or(AuthError::InvalidToken)?;
     let ver_u32 = u32::try_from(ver_i).map_err(|_| AuthError::InvalidToken)?;
     Ok((SessionId::from(sid), ver_u32))
@@ -160,7 +159,11 @@ fn query_triple(
     v.into_iter().next().ok_or(AuthError::InvalidToken.into())
 }
 
-fn query_vec(authz: &mut biscuit_auth::Authorizer, dsl: &str, ctx: &str) -> Result<Vec<(String, i64)>> {
+fn query_vec(
+    authz: &mut biscuit_auth::Authorizer,
+    dsl: &str,
+    ctx: &str,
+) -> Result<Vec<(String, i64)>> {
     let v: Vec<(String, i64)> = authz
         .query_all(dsl)
         .map_err(|e| crate::AppError::Biscuit(format!("Failed to query {ctx}: {e}")))?;
@@ -171,12 +174,18 @@ fn query_string(authz: &mut biscuit_auth::Authorizer, dsl: &str, ctx: &str) -> R
     let v: Vec<(String,)> = authz
         .query_all(dsl)
         .map_err(|e| crate::AppError::Biscuit(format!("Failed to query {ctx}: {e}")))?;
-    v.into_iter().next().map(|t| t.0).ok_or(AuthError::InvalidToken.into())
+    v.into_iter()
+        .next()
+        .map(|t| t.0)
+        .ok_or(AuthError::InvalidToken.into())
 }
 
 fn query_i64(authz: &mut biscuit_auth::Authorizer, dsl: &str, ctx: &str) -> Result<i64> {
     let v: Vec<(i64,)> = authz
         .query_all(dsl)
         .map_err(|e| crate::AppError::Biscuit(format!("Failed to query {ctx}: {e}")))?;
-    v.into_iter().next().map(|t| t.0).ok_or(AuthError::InvalidToken.into())
+    v.into_iter()
+        .next()
+        .map(|t| t.0)
+        .ok_or(AuthError::InvalidToken.into())
 }

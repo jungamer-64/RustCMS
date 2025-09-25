@@ -178,8 +178,9 @@ static REDIS_RATE_LIMITER: OnceCell<RedisRateLimiter> = OnceCell::new();
 /// Obtain the active rate limiter (memory default, redis if opted in).
 pub fn get_rate_limiter() -> &'static dyn ApiKeyRateLimiter {
     // Fast path: check backend selection env (cached after first read via static)
-    static BACKEND: Lazy<String> =
-    Lazy::new(|| std::env::var("API_KEY_FAIL_BACKEND").unwrap_or_else(|_| "memory".to_string()));
+    static BACKEND: Lazy<String> = Lazy::new(|| {
+        std::env::var("API_KEY_FAIL_BACKEND").unwrap_or_else(|_| "memory".to_string())
+    });
     if BACKEND.as_str() == "redis" {
         #[cfg(feature = "cache")]
         {

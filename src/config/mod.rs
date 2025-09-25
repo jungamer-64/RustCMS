@@ -23,8 +23,8 @@
 use secrecy::ExposeSecret;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
-use std::env;
 use std::collections::HashMap;
+use std::env;
 use std::path::PathBuf;
 use tracing::warn;
 
@@ -246,11 +246,20 @@ fn default_role_permissions() -> HashMap<String, Vec<String>> {
     let mut perms = HashMap::new();
     perms.insert(
         "super_admin".to_string(),
-        vec!["admin".to_string(), "read".to_string(), "write".to_string(), "delete".to_string()],
+        vec![
+            "admin".to_string(),
+            "read".to_string(),
+            "write".to_string(),
+            "delete".to_string(),
+        ],
     );
     perms.insert(
         "admin".to_string(),
-        vec!["read".to_string(), "write".to_string(), "delete".to_string()],
+        vec![
+            "read".to_string(),
+            "write".to_string(),
+            "delete".to_string(),
+        ],
     );
     perms.insert(
         "editor".to_string(),
@@ -260,14 +269,8 @@ fn default_role_permissions() -> HashMap<String, Vec<String>> {
         "author".to_string(),
         vec!["read".to_string(), "write_own".to_string()],
     );
-    perms.insert(
-        "contributor".to_string(),
-        vec!["read".to_string()],
-    );
-    perms.insert(
-        "subscriber".to_string(),
-        vec!["read".to_string()],
-    );
+    perms.insert("contributor".to_string(), vec!["read".to_string()]);
+    perms.insert("subscriber".to_string(), vec!["read".to_string()]);
     perms
 }
 
@@ -286,7 +289,7 @@ impl Default for ServerConfig {
 impl Default for DatabaseConfig {
     fn default() -> Self {
         Self {
-            url: SecretString::new("postgresql://localhost/cms".to_string()),
+            url: SecretString::new("postgresql://localhost/cms".into()),
             max_connections: 20,
             min_connections: 5,
             connection_timeout: 30,
@@ -323,7 +326,7 @@ impl Default for SearchConfig {
 impl Default for AuthConfig {
     fn default() -> Self {
         Self {
-            biscuit_root_key: SecretString::new("your-biscuit-root-key".to_string()),
+            biscuit_root_key: SecretString::new("your-biscuit-root-key".into()),
             webauthn: WebAuthnConfig::default(),
             bcrypt_cost: 12,
             session_timeout: 86_400, // 24 hours
@@ -372,7 +375,7 @@ impl Default for EmailConfig {
             smtp_host: "localhost".to_string(),
             smtp_port: 587,
             smtp_username: String::new(),
-            smtp_password: SecretString::new(String::new()),
+            smtp_password: SecretString::new(String::new().into()),
             from_address: "noreply@example.com".to_string(),
             from_name: "CMS".to_string(),
         }
@@ -492,7 +495,7 @@ fn build_builder(profile: &str) -> config::ConfigBuilder<config::builder::Defaul
 fn apply_database_url(cfg: &mut Config) -> Result<(), crate::AppError> {
     if let Ok(real) = env::var("DATABASE_URL") {
         if !real.is_empty() {
-            cfg.database.url = SecretString::new(real);
+            cfg.database.url = SecretString::new(real.into());
             return Ok(());
         }
     }

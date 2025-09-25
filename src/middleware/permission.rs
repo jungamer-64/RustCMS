@@ -1,6 +1,6 @@
 use crate::{
-    auth::{AuthContext, AuthError},
     AppError,
+    auth::{AuthContext, AuthError},
 };
 use axum::{
     extract::Request,
@@ -88,7 +88,9 @@ where
                         Ok(AppError::from(AuthError::InsufficientPermissions).into_response())
                     }
                 }
-                None => Ok(AppError::Authentication("Authentication required".to_string()).into_response()),
+                None => Ok(
+                    AppError::Authentication("Authentication required".to_string()).into_response(),
+                ),
             }
         })
     }

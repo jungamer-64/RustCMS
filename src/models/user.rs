@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
+use clap::ValueEnum;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
-use clap::ValueEnum;
 use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;

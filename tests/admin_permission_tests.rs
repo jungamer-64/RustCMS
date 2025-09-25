@@ -12,7 +12,7 @@ fn test_admin_permission_super_admin() {
         user_id: Uuid::new_v4(),
         username: "superadmin".to_string(),
         role: UserRole::SuperAdmin,
-    session_id: SessionId("test_session".to_string()),
+        session_id: SessionId("test_session".to_string()),
         permissions: vec![
             "admin".to_string(),
             "read".to_string(),
@@ -32,7 +32,7 @@ fn test_admin_permission_admin() {
         user_id: Uuid::new_v4(),
         username: "admin".to_string(),
         role: UserRole::Admin,
-    session_id: SessionId("test_session".to_string()),
+        session_id: SessionId("test_session".to_string()),
         permissions: vec![
             "read".to_string(),
             "write".to_string(),
@@ -55,7 +55,7 @@ fn test_admin_permission_admin_with_permission() {
         user_id: Uuid::new_v4(),
         username: "admin".to_string(),
         role: UserRole::Admin,
-    session_id: SessionId("test_session".to_string()),
+        session_id: SessionId("test_session".to_string()),
         permissions: vec![
             "admin".to_string(),
             "read".to_string(),
@@ -75,7 +75,7 @@ fn test_admin_permission_editor() {
         user_id: Uuid::new_v4(),
         username: "editor".to_string(),
         role: UserRole::Editor,
-    session_id: SessionId("test_session".to_string()),
+        session_id: SessionId("test_session".to_string()),
         permissions: vec!["read".to_string(), "write".to_string()],
     };
 
@@ -90,7 +90,7 @@ fn test_admin_permission_author() {
         user_id: Uuid::new_v4(),
         username: "author".to_string(),
         role: UserRole::Author,
-    session_id: SessionId("test_session".to_string()),
+        session_id: SessionId("test_session".to_string()),
         permissions: vec!["read".to_string(), "write_own".to_string()],
     };
 

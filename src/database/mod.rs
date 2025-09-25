@@ -26,6 +26,7 @@ pub mod schema;
 
 pub use pool::{DatabasePool, Pool, PooledConnection};
 
+use crate::repositories::UserRepository;
 use crate::{
     Result,
     config::DatabaseConfig,
@@ -37,7 +38,6 @@ use crate::{
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use secrecy::ExposeSecret;
 use uuid::Uuid;
-use crate::repositories::UserRepository;
 
 // Macros to DRY optional filter application for Diesel boxed queries
 macro_rules! apply_eq_filter {
@@ -161,7 +161,7 @@ fn map_diesel_result<T>(
 
 fn ensure_affected_nonzero(affected: usize, not_found_msg: &str) -> Result<()> {
     if affected == 0 {
-    Err(crate::AppError::NotFound(not_found_msg.to_string()))
+        Err(crate::AppError::NotFound(not_found_msg.to_string()))
     } else {
         Ok(())
     }
@@ -472,8 +472,7 @@ impl Database {
         })
     }
 
-        // ... rest of impl Database ...
-
+    // ... rest of impl Database ...
 
     // impl UserRepository moved to module scope below
     /// ユーザー数を返します。
@@ -854,16 +853,25 @@ impl Database {
 }
 
 impl UserRepository for Database {
-    fn get_user_by_email(&self, email: &str) -> crate::repositories::user_repository::BoxFuture<'_, Result<User>> {
+    fn get_user_by_email(
+        &self,
+        email: &str,
+    ) -> crate::repositories::user_repository::BoxFuture<'_, Result<User>> {
         let this = self.clone();
         let email_owned = email.to_string();
         Box::pin(async move { this.get_user_by_email(&email_owned).await })
     }
-    fn get_user_by_id(&self, id: Uuid) -> crate::repositories::user_repository::BoxFuture<'_, Result<User>> {
+    fn get_user_by_id(
+        &self,
+        id: Uuid,
+    ) -> crate::repositories::user_repository::BoxFuture<'_, Result<User>> {
         let this = self.clone();
         Box::pin(async move { this.get_user_by_id(id).await })
     }
-    fn update_last_login(&self, id: Uuid) -> crate::repositories::user_repository::BoxFuture<'_, Result<()>> {
+    fn update_last_login(
+        &self,
+        id: Uuid,
+    ) -> crate::repositories::user_repository::BoxFuture<'_, Result<()>> {
         let this = self.clone();
         Box::pin(async move { this.update_last_login(id) })
     }
