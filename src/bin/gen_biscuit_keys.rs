@@ -91,7 +91,6 @@ fn create_env_file(path: &Path, priv_b64: &str, pub_b64: &str) -> std::io::Resul
     writeln!(f, "BISCUIT_PUBLIC_KEY_B64={pub_b64}")?;
     Ok(())
 }
-
 fn replace_env_entries(
     path: &Path,
     content: &str,
@@ -188,7 +187,6 @@ struct FilesWriteOptions {
     compress_opt: Option<bool>,
     force: bool,
 }
-
 fn handle_files_output(ctx: &FilesOutputContext<'_>) -> cms_backend::Result<()> {
     // Delegate the full files output flow (create dir, write files, backups,
     // and finalization) to the manifest helper which centralizes the
@@ -346,6 +344,7 @@ fn apply_versioned_post(
     );
 }
 
+
 #[allow(clippy::too_many_arguments)]
 fn handle_env_output(
     envfile: &str,
@@ -379,7 +378,6 @@ fn maybe_backup_env(
         eprintln!("Backup failed: {e}");
     }
 }
-
 fn perform_env_write(
     path: &Path,
     priv_b64: &str,

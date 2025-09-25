@@ -49,9 +49,6 @@ Sample manifest.json produced during the run (excerpt):
   "private_fingerprint": "92c030120cc19c78856c1985fb7a609053bb56038b27247e774a8fdfa48b6501",
   "public_fingerprint": "35bebe8c53c4fb16fc3be06e1333fd30fd8b3242e555da058b1471ffb4641674"
 }
-```
-
-## Sample manifest.json (excerpt)
 
 ```json
 {
