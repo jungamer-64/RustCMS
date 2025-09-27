@@ -1,0 +1,21 @@
+---
+source: tests/cli_help_test.rs
+assertion_line: 18
+expression: s
+---
+CMS Administration Tool
+
+Usage: cms-admin [OPTIONS] <COMMAND>
+
+Commands:
+  user       User management commands
+  content    Content management commands
+  system     System administration commands
+  analytics  Analytics and reporting
+  security   Security and audit commands
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+  -v, --verbose  Enable verbose logging
+  -h, --help     Print help
+  -V, --version  Print version
