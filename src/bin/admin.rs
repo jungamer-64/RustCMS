@@ -3,15 +3,116 @@
 //! Comprehensive command-line interface for managing users, content,
 //! system settings, and performing administrative tasks.
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use cms_backend::{
     AppState, Result,
     models::{CreateUserRequest, UpdateUserRequest, UserRole},
 };
+use async_trait::async_trait;
 use comfy_table::{Cell, Table};
 use ring::rand::{SecureRandom, SystemRandom};
+use secrecy::{ExposeSecret, SecretString};
 use std::io::{self, Write};
+use tokio::task;
+use std::fmt;
 use tracing::{info, warn};
+
+/// Small trait to abstract AppState DB operations for easier testing of CLI logic.
+#[async_trait]
+pub trait AdminBackend: Sync + Send {
+    async fn create_user(
+        &self,
+        req: CreateUserRequest,
+    ) -> cms_backend::Result<cms_backend::models::User>;
+
+    async fn reset_user_password(
+        &self,
+        user_id: uuid::Uuid,
+        new_password: &str,
+    ) -> cms_backend::Result<()>;
+
+    async fn get_user_by_id(&self, id: uuid::Uuid) -> cms_backend::Result<cms_backend::models::User>;
+
+    async fn get_user_by_username(&self, username: &str) -> cms_backend::Result<cms_backend::models::User>;
+
+    async fn update_user(
+        &self,
+        id: uuid::Uuid,
+        req: UpdateUserRequest,
+    ) -> cms_backend::Result<cms_backend::models::User>;
+
+    async fn delete_user(&self, id: uuid::Uuid) -> cms_backend::Result<()>;
+}
+
+#[async_trait]
+impl AdminBackend for AppState {
+    async fn create_user(
+        &self,
+        req: CreateUserRequest,
+    ) -> cms_backend::Result<cms_backend::models::User> {
+        self.db_create_user(req).await
+    }
+
+    async fn reset_user_password(&self, user_id: uuid::Uuid, new_password: &str) -> cms_backend::Result<()> {
+        self.db_reset_user_password(user_id, new_password).await
+    }
+
+    async fn get_user_by_id(&self, id: uuid::Uuid) -> cms_backend::Result<cms_backend::models::User> {
+        self.db_get_user_by_id(id).await
+    }
+
+    async fn get_user_by_username(&self, username: &str) -> cms_backend::Result<cms_backend::models::User> {
+        self.db_get_user_by_username(username).await
+    }
+
+    async fn update_user(&self, id: uuid::Uuid, req: UpdateUserRequest) -> cms_backend::Result<cms_backend::models::User> {
+        self.db_update_user(id, req).await
+    }
+
+    async fn delete_user(&self, id: uuid::Uuid) -> cms_backend::Result<()> {
+        self.db_delete_user(id).await
+    }
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+#[clap(rename_all = "kebab_case")]
+pub enum PostStatus {
+    Draft,
+    Published,
+    Archived,
+}
+
+impl fmt::Display for PostStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            PostStatus::Draft => "draft",
+            PostStatus::Published => "published",
+            PostStatus::Archived => "archived",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+#[clap(rename_all = "kebab_case")]
+pub enum Period {
+    Day,
+    Week,
+    Month,
+    Year,
+}
+
+impl fmt::Display for Period {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Period::Day => "day",
+            Period::Week => "week",
+            Period::Month => "month",
+            Period::Year => "year",
+        };
+        write!(f, "{}", s)
+    }
+}
 
 #[derive(Parser)]
 #[command(name = "cms-admin")]
@@ -116,13 +217,13 @@ enum UserAction {
     },
 }
 
-#[derive(Subcommand)]
+#[derive(Debug, Subcommand)]
 enum ContentAction {
     /// List posts
     List {
         /// Filter by status
-        #[arg(long)]
-        status: Option<String>,
+        #[arg(long, value_enum)]
+        status: Option<PostStatus>,
         /// Filter by author
         #[arg(long)]
         author: Option<String>,
@@ -142,8 +243,8 @@ enum ContentAction {
         #[arg(short, long)]
         author: String,
         /// Post status
-        #[arg(long, default_value = "draft")]
-        status: String,
+        #[arg(long, value_enum, default_value_t = PostStatus::Draft)]
+        status: PostStatus,
     },
     /// Publish scheduled posts
     PublishScheduled,
@@ -201,20 +302,20 @@ enum AnalyticsAction {
     /// Show user statistics
     Users {
         /// Time period (day, week, month, year)
-        #[arg(long, default_value = "month")]
-        period: String,
+        #[arg(long, default_value_t = Period::Month)]
+        period: Period,
     },
     /// Show content statistics
     Content {
         /// Time period
-        #[arg(long, default_value = "month")]
-        period: String,
+        #[arg(long, default_value_t = Period::Month)]
+        period: Period,
     },
     /// Show performance metrics
     Performance {
         /// Time period
-        #[arg(long, default_value = "day")]
-        period: String,
+        #[arg(long, default_value_t = Period::Day)]
+        period: Period,
     },
 }
 
@@ -268,7 +369,7 @@ async fn run(cli: Cli) -> Result<()> {
     // Execute command
     match cli.command {
         Commands::User { action } => handle_user_action(action, &app_state).await?,
-        Commands::Content { action } => handle_content_action(action, &app_state),
+        Commands::Content { action } => handle_content_action(action, &app_state)?,
         Commands::System { action } => handle_system_action(action, &app_state).await?,
         Commands::Analytics { action } => handle_analytics_action(action, &app_state),
         Commands::Security { action } => handle_security_action(action, &app_state),
@@ -335,29 +436,38 @@ async fn user_list(role: &Option<UserRole>, active_only: bool, state: &AppState)
     Ok(())
 }
 
-async fn user_create(
+async fn user_create<B: AdminBackend + ?Sized>(
     username: String,
     email: String,
     role: UserRole,
     generate_password: bool,
-    state: &AppState,
+    backend: &B,
 ) -> Result<()> {
     let password = if generate_password {
-        generate_random_password()
+        // Allow optional override from env var ADMIN_PW_LENGTH
+        let len = std::env::var("ADMIN_PW_LENGTH")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .map(|v| v.clamp(8, 128))
+            .unwrap_or(16);
+        generate_random_password_with_len(len)?
     } else {
-        prompt_password("Enter password for new user: ")?
+        // prompt_password is blocking: run it in a blocking task
+    prompt_password_async("Enter password for new user: ".to_string()).await?
     };
+
+    let password_for_request = password.expose_secret().to_owned();
 
     let user = CreateUserRequest {
         username: username.clone(),
         email,
-        password: password.clone(),
+        password: password_for_request,
         first_name: Some(String::new()),
         last_name: Some(String::new()),
         role,
     };
 
-    let created_user = state.db_create_user(user).await?;
+    let created_user = backend.create_user(user).await?;
 
     info!("✅ User created successfully:");
     println!("  ID: {}", created_user.id);
@@ -366,21 +476,24 @@ async fn user_create(
     println!("  Role: {}", created_user.role);
 
     if generate_password {
-        warn!("🔑 Generated password: {}", password);
+        // Do not log the password itself.
+        warn!("🔑 A new random password has been generated.");
         warn!("⚠️  Please save this password securely - it will not be shown again!");
+        // Forcing the user to see the password is a better UX than logging it.
+        println!("Generated password: {}", password.expose_secret());
     }
 
     Ok(())
 }
 
-async fn user_update(
+async fn user_update<B: AdminBackend + ?Sized>(
     user: String,
     email: Option<String>,
     role: Option<UserRole>,
     active: Option<bool>,
-    state: &AppState,
+    backend: &B,
 ) -> Result<()> {
-    let existing_user = find_user_by_id_or_username(state, &user).await?;
+    let existing_user = find_user_by_id_or_username(backend, &user).await?;
 
     let update = UpdateUserRequest {
         username: None,
@@ -391,7 +504,7 @@ async fn user_update(
         is_active: active,
     };
 
-    let updated_user = state.db_update_user(existing_user.id, update).await?;
+    let updated_user = backend.update_user(existing_user.id, update).await?;
 
     info!("✅ User updated successfully:");
     println!("  ID: {}", updated_user.id);
@@ -403,8 +516,8 @@ async fn user_update(
     Ok(())
 }
 
-async fn user_delete(user: String, force: bool, state: &AppState) -> Result<()> {
-    let existing_user = find_user_by_id_or_username(state, &user).await?;
+async fn user_delete<B: AdminBackend + ?Sized>(user: String, force: bool, backend: &B) -> Result<()> {
+    let existing_user = find_user_by_id_or_username(backend, &user).await?;
 
     if !force {
         warn!(
@@ -412,42 +525,55 @@ async fn user_delete(user: String, force: bool, state: &AppState) -> Result<()> 
             existing_user.username, existing_user.email
         );
         warn!("⚠️  This action cannot be undone!");
-        print!("Type 'DELETE' to confirm: ");
-        io::stdout().flush()?;
 
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
+        // Run blocking terminal I/O in a blocking task to avoid stalling the async runtime.
+        let confirmed = task::spawn_blocking(move || -> Result<bool> {
+            print!("Type 'DELETE' to confirm: ");
+            io::stdout().flush().map_err(|e| cms_backend::AppError::Internal(e.to_string()))?;
+            let mut input = String::new();
+            io::stdin().read_line(&mut input).map_err(|e| cms_backend::AppError::Internal(e.to_string()))?;
+            Ok(input.trim().eq_ignore_ascii_case("DELETE"))
+        })
+        .await
+        .map_err(|e| cms_backend::AppError::Internal(e.to_string()))??;
 
-        if input.trim() != "DELETE" {
+        if !confirmed {
             info!("❌ User deletion cancelled");
             return Ok(());
         }
     }
 
-    state.db_delete_user(existing_user.id).await?;
+    backend.delete_user(existing_user.id).await?;
     info!("✅ User deleted successfully");
 
     Ok(())
 }
 
-async fn user_reset_password(
+async fn user_reset_password<B: AdminBackend + ?Sized>(
     user: String,
     password: Option<String>,
     generate_password: bool,
-    state: &AppState,
+    backend: &B,
 ) -> Result<()> {
-    let existing_user = find_user_by_id_or_username(state, &user).await?;
+    let existing_user = find_user_by_id_or_username(backend, &user).await?;
 
     // Clear, explicit intent handling
     let new_password = match (password, generate_password) {
-        (Some(p), false) => p,
-        (None, true) => generate_random_password(),
-        (None, false) => prompt_password("Enter new password: ")?,
+        (Some(p), false) => Ok(SecretString::new(p.into_boxed_str())),
+        (None, true) => {
+            let len = std::env::var("ADMIN_PW_LENGTH")
+                .ok()
+                .and_then(|s| s.parse::<usize>().ok())
+                .map(|v| v.clamp(8, 128))
+                .unwrap_or(16);
+            generate_random_password_with_len(len)
+        }
+    (None, false) => prompt_password_async("Enter new password: ".to_string()).await,
         (Some(_), true) => unreachable!(),
-    };
+    }?;
 
-    state
-        .db_reset_user_password(existing_user.id, &new_password)
+    backend
+        .reset_user_password(existing_user.id, new_password.expose_secret())
         .await?;
 
     info!(
@@ -455,23 +581,29 @@ async fn user_reset_password(
         existing_user.username
     );
     if generate_password {
-        warn!("🔑 Generated password: {}", new_password);
+        warn!(
+            "🔑 A new random password has been generated for user: {}",
+            existing_user.username
+        );
+        println!("Generated password: {}", new_password.expose_secret());
     }
 
     Ok(())
 }
 
-#[allow(clippy::cognitive_complexity)]
-fn handle_content_action(_action: ContentAction, _state: &AppState) {
-    // Indicate that content commands are not yet implemented. This makes
-    // running the CLI in development obvious when these commands are used.
-    warn!("'Content' command invoked but not implemented.");
-    // For stronger developer-time visibility you can replace the above
-    // with a `todo!()` when you want the process to panic until implemented:
-    // todo!("Implement content action: {:?}", action);
+fn handle_content_action(action: ContentAction, _state: &AppState) -> Result<()> {
+    warn!(
+        "'Content' command invoked but not implemented: {:?}. Returning NotImplemented.",
+        action
+    );
+    println!(
+        "Content commands are not yet available in this CLI build. Refer to CLI.md for the roadmap."
+    );
+    Err(cms_backend::AppError::NotImplemented(
+        "Content commands are not implemented in this build".into(),
+    ))
 }
 
-#[allow(clippy::cognitive_complexity)]
 async fn handle_system_action(action: SystemAction, state: &AppState) -> Result<()> {
     match action {
         SystemAction::Status => system_status(state).await?,
@@ -517,7 +649,6 @@ async fn system_status(state: &AppState) -> Result<()> {
 
 /// Render a HealthStatus into a comfy_table::Table and return its string form.
 // Leverage utils::bin_utils::render_health_table_components for rendering.
-
 #[cfg(test)]
 mod system_status_tests {
     // no super imports required for this test
@@ -609,7 +740,6 @@ fn handle_analytics_action(action: AnalyticsAction, _state: &AppState) {
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn handle_security_action(action: SecurityAction, _state: &AppState) {
     match action {
         SecurityAction::AuditLog {
@@ -650,7 +780,7 @@ fn handle_security_action(action: SecurityAction, _state: &AppState) {
 
 // utility helpers
 
-fn generate_random_password() -> String {
+fn generate_random_password() -> Result<SecretString> {
     const CHARSET: &[u8] =
         b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
     let charset_len = CHARSET.len() as u16;
@@ -661,18 +791,21 @@ fn generate_random_password() -> String {
     let mut byte = [0u8; 1];
     while password.len() < 16 {
         // Fail fast if RNG can't produce bytes
-        rng.fill(&mut byte)
-            .expect("Failed to read from system's entropy source");
+        rng.fill(&mut byte).map_err(|_| {
+            cms_backend::AppError::Internal(
+                "Failed to read from system's entropy source".to_string(),
+            )
+        })?;
         let v = byte[0] as u16;
         if v < threshold {
             let idx = (v % charset_len) as usize;
             password.push(CHARSET[idx] as char);
         }
     }
-    password
+    Ok(SecretString::new(password.into_boxed_str()))
 }
 
-fn prompt_password(prompt: &str) -> Result<String> {
+fn prompt_password(prompt: &str) -> Result<SecretString> {
     // Use rpassword to securely read password without echoing to the terminal
     let password = rpassword::prompt_password(prompt)
         .map_err(|e| cms_backend::AppError::Internal(e.to_string()))?;
@@ -683,44 +816,265 @@ fn prompt_password(prompt: &str) -> Result<String> {
         ));
     }
 
-    Ok(password)
+    Ok(SecretString::new(password.into_boxed_str()))
+}
+
+/// Async-friendly wrapper around blocking password prompt.
+async fn prompt_password_async(prompt: String) -> Result<SecretString> {
+    task::spawn_blocking(move || prompt_password(&prompt))
+        .await
+        .map_err(|e| cms_backend::AppError::Internal(e.to_string()))?
+}
+
+fn generate_random_password_with_len(len: usize) -> Result<SecretString> {
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+    let charset_len = CHARSET.len() as u16;
+    let threshold: u16 = 256u16 - (256u16 % charset_len);
+    let rng = SystemRandom::new();
+
+    let mut password = String::with_capacity(len);
+    let mut byte = [0u8; 1];
+    while password.len() < len {
+        rng.fill(&mut byte).map_err(|_| {
+            cms_backend::AppError::Internal(
+                "Failed to read from system's entropy source".to_string(),
+            )
+        })?;
+        let v = byte[0] as u16;
+        if v < threshold {
+            let idx = (v % charset_len) as usize;
+            password.push(CHARSET[idx] as char);
+        }
+    }
+    Ok(SecretString::new(password.into_boxed_str()))
 }
 
 /// Find user by UUID or username and return a NotFound AppError if missing
-async fn find_user_by_id_or_username(
-    state: &AppState,
+async fn find_user_by_id_or_username<B: AdminBackend + ?Sized>(
+    backend: &B,
     identifier: &str,
 ) -> Result<cms_backend::models::User> {
+    // Attempt to parse as UUID first; otherwise treat as username.
     let result = if let Ok(id) = uuid::Uuid::parse_str(identifier) {
-        state.db_get_user_by_id(id).await
+        backend.get_user_by_id(id).await
     } else {
-        state.db_get_user_by_username(identifier).await
+        backend.get_user_by_username(identifier).await
     };
-    result.map_err(|_| cms_backend::AppError::NotFound(format!("User '{}' not found", identifier)))
+
+    match result {
+        Ok(user) => Ok(user),
+        Err(e) => {
+            // Log the original backend error for diagnostics.
+            tracing::debug!(identifier = %identifier, backend_error = %format!("{e}"), "User lookup failed");
+
+            // Prefer matching on the concrete AppError variant rather than
+            // relying on error message text. This is more robust if underlying
+            // DB libraries change their Display text.
+            match e {
+                cms_backend::AppError::NotFound(_) => {
+                    Err(cms_backend::AppError::NotFound(format!("User '{}' not found", identifier)))
+                }
+                other => Err(other),
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use secrecy::ExposeSecret;
+    use cms_backend::models::{User as BackendUser, UserRole as BackendUserRole};
 
     #[test]
-    fn test_generate_random_password_length_and_charset() {
+    fn test_generate_random_password_length_and_charset() -> Result<()> {
         // Generate multiple passwords to reduce flakiness
         for _ in 0..8 {
-            let pw = generate_random_password();
+            let pw = generate_random_password()?;
             // length
-            assert_eq!(pw.len(), 16);
+            let secret = pw.expose_secret();
+            assert_eq!(secret.len(), 16);
 
             // allowed chars
-            for ch in pw.chars() {
+            for ch in secret.chars() {
                 let bytes = ch as u8;
                 // must be ASCII printable and in our CHARSET
-                let found =
-                    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*"
-                        .iter()
-                        .any(|&c| c == bytes);
+                let found = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*".contains(&bytes);
                 assert!(found, "password contains invalid char: {}", ch);
             }
+        }
+        Ok(())
+    }
+
+    // Configurable MockBackend for testing AdminBackend consumer logic.
+    #[derive(Clone)]
+    struct MockBackend {
+        user_to_return: Option<BackendUser>,
+    // Closure generator to produce an AppError when needed. Using a closure
+    // avoids requiring AppError: Clone on the backend error type.
+    error_to_return: Option<std::sync::Arc<dyn Fn() -> cms_backend::AppError + Send + Sync>>,
+    }
+
+    impl MockBackend {
+        fn ok() -> Self {
+            Self {
+                user_to_return: Some(BackendUser::new(
+                    "byname_user".to_string(),
+                    "byname@example.com".to_string(),
+                    Some("hash".to_string()),
+                    None,
+                    None,
+                    BackendUserRole::Subscriber,
+                )),
+                error_to_return: None,
+            }
+        }
+
+        fn not_found() -> Self {
+            Self {
+                user_to_return: None,
+                error_to_return: Some(std::sync::Arc::new(|| cms_backend::AppError::NotFound("mock: not found".into()))),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl AdminBackend for MockBackend {
+        async fn create_user(
+            &self,
+            req: CreateUserRequest,
+        ) -> cms_backend::Result<cms_backend::models::User> {
+            if let Some(f) = &self.error_to_return {
+                return Err((f)());
+            }
+            Ok(BackendUser::new(
+                req.username,
+                req.email,
+                Some("hashedpw".to_string()),
+                req.first_name,
+                req.last_name,
+                req.role,
+            ))
+        }
+
+        async fn reset_user_password(
+            &self,
+            _user_id: uuid::Uuid,
+            _new_password: &str,
+        ) -> cms_backend::Result<()> {
+            if let Some(f) = &self.error_to_return {
+                return Err((f)());
+            }
+            Ok(())
+        }
+
+        async fn get_user_by_id(&self, _id: uuid::Uuid) -> cms_backend::Result<cms_backend::models::User> {
+            if let Some(f) = &self.error_to_return {
+                return Err((f)());
+            }
+            if let Some(u) = &self.user_to_return {
+                return Ok(u.clone());
+            }
+            Err(cms_backend::AppError::NotFound("mock: not found".into()))
+        }
+
+        async fn get_user_by_username(&self, _username: &str) -> cms_backend::Result<cms_backend::models::User> {
+            if let Some(f) = &self.error_to_return {
+                return Err((f)());
+            }
+            if let Some(u) = &self.user_to_return {
+                return Ok(u.clone());
+            }
+            Err(cms_backend::AppError::NotFound("mock: not found".into()))
+        }
+
+        async fn update_user(
+            &self,
+            _id: uuid::Uuid,
+            _req: UpdateUserRequest,
+        ) -> cms_backend::Result<cms_backend::models::User> {
+            if let Some(f) = &self.error_to_return {
+                return Err((f)());
+            }
+            Ok(BackendUser::new(
+                "updated_user".to_string(),
+                "updated@example.com".to_string(),
+                Some("hash".to_string()),
+                None,
+                None,
+                BackendUserRole::Subscriber,
+            ))
+        }
+
+        async fn delete_user(&self, _id: uuid::Uuid) -> cms_backend::Result<()> {
+            if let Some(f) = &self.error_to_return {
+                return Err((f)());
+            }
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_user_create_with_mock_backend() -> Result<()> {
+    let backend = MockBackend::ok();
+        let res = user_create(
+            "testuser".to_string(),
+            "test@example.com".to_string(),
+            BackendUserRole::Subscriber,
+            true,
+            &backend,
+        )
+        .await;
+        assert!(res.is_ok());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_user_reset_password_with_mock_backend() -> Result<()> {
+    let backend = MockBackend::ok();
+        let res = user_reset_password(
+            "someuser".to_string(),
+            None,
+            true,
+            &backend,
+        )
+        .await;
+        assert!(res.is_ok());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_user_update_and_delete_with_mock_backend() -> Result<()> {
+    let backend = MockBackend::ok();
+
+        let update_res = user_update(
+            "someuser".to_string(),
+            Some("new@example.com".to_string()),
+            None,
+            Some(true),
+            &backend,
+        )
+        .await;
+        assert!(update_res.is_ok());
+
+        let delete_res = user_delete("someuser".to_string(), true, &backend).await;
+        assert!(delete_res.is_ok());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_user_lookup_not_found_with_mock_backend() {
+        let backend = MockBackend::not_found();
+        // When the backend reports not found for lookups, the helper should
+        // return an AppError::NotFound variant.
+        let id = uuid::Uuid::new_v4();
+        let res = find_user_by_id_or_username::<MockBackend>(&backend, &id.to_string()).await;
+        match res {
+            Err(cms_backend::AppError::NotFound(msg)) => {
+                assert!(msg.contains("mock: not found") || msg.contains("User"));
+            }
+            other => panic!("expected NotFound error, got: {:?}", other),
         }
     }
 }
