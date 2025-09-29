@@ -12,6 +12,9 @@ fn cms_admin_help_contains_expected_sections() {
     assert!(s.contains("Usage"), "help should contain Usage");
     assert!(s.contains("Commands:"), "help should list Commands");
     assert!(s.contains("user"), "help should mention user subcommand");
-    assert!(s.contains("content"), "help should mention content subcommand");
+    assert!(
+        s.contains("content"),
+        "help should mention content subcommand"
+    );
     assert!(s.contains("--help"), "help should show help flag");
 }
