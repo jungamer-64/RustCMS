@@ -5,7 +5,7 @@
 //! logs for operators.
 
 use crate::utils::api_types::{ApiResponse, ValidationError};
-use axum::{http::StatusCode, response::IntoResponse, response::Response, Json};
+use axum::{Json, http::StatusCode, response::IntoResponse, response::Response};
 use std::fmt;
 use tracing::{debug, error};
 use validator::ValidationErrors;
@@ -66,7 +66,9 @@ impl fmt::Display for AppError {
             Self::Media(msg) => write!(f, "Media error: {msg}"),
             Self::Config(msg) => write!(f, "Configuration error: {msg}"),
             Self::ConfigLoad(err) => write!(f, "Configuration loading error: {err}"),
-            Self::ConfigValueMissing(key) => write!(f, "Configuration value missing for key: {key}"),
+            Self::ConfigValueMissing(key) => {
+                write!(f, "Configuration value missing for key: {key}")
+            }
             Self::ConfigValidationError(msg) => write!(f, "Configuration validation error: {msg}"),
             Self::IO(err) => write!(f, "IO error: {err}"),
             Self::Serde(err) => write!(f, "Serialization error: {err}"),
@@ -121,19 +123,52 @@ impl AppError {
     fn classify_and_validation(&self) -> (StatusCode, String, Option<Vec<ValidationError>>) {
         match self {
             #[cfg(feature = "database")]
-            Self::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "A database error occurred".to_string(), None),
+            Self::Database(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "A database error occurred".to_string(),
+                None,
+            ),
             #[cfg(feature = "cache")]
-            Self::Redis(_) => (StatusCode::INTERNAL_SERVER_ERROR, "A cache error occurred".to_string(), None),
-            Self::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "An internal server error occurred".to_string(), None),
+            Self::Redis(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "A cache error occurred".to_string(),
+                None,
+            ),
+            Self::Internal(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "An internal server error occurred".to_string(),
+                None,
+            ),
             #[cfg(feature = "auth")]
-            Self::Argon2(_) => (StatusCode::INTERNAL_SERVER_ERROR, "A password hashing error occurred".to_string(), None),
-            Self::Search(s) => (StatusCode::INTERNAL_SERVER_ERROR, s.as_str().to_string(), None),
-            Self::Config(_) | Self::ConfigLoad(_) | Self::ConfigValueMissing(_) | Self::ConfigValidationError(_) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "A server configuration error occurred".to_string(), None)
-            }
-            Self::IO(_) => (StatusCode::INTERNAL_SERVER_ERROR, "An I/O error occurred".to_string(), None),
+            Self::Argon2(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "A password hashing error occurred".to_string(),
+                None,
+            ),
+            Self::Search(s) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                s.as_str().to_string(),
+                None,
+            ),
+            Self::Config(_)
+            | Self::ConfigLoad(_)
+            | Self::ConfigValueMissing(_)
+            | Self::ConfigValidationError(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "A server configuration error occurred".to_string(),
+                None,
+            ),
+            Self::IO(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "An I/O error occurred".to_string(),
+                None,
+            ),
             #[cfg(feature = "search")]
-            Self::Tantivy(_) => (StatusCode::INTERNAL_SERVER_ERROR, "A search service error occurred".to_string(), None),
+            Self::Tantivy(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "A search service error occurred".to_string(),
+                None,
+            ),
 
             Self::Validation(ve) => {
                 let details: Vec<ValidationError> = ve
@@ -149,7 +184,11 @@ impl AppError {
                         })
                     })
                     .collect();
-                (StatusCode::UNPROCESSABLE_ENTITY, "Invalid input".to_string(), Some(details))
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "Invalid input".to_string(),
+                    Some(details),
+                )
             }
 
             Self::Authentication(s) => (StatusCode::UNAUTHORIZED, s.as_str().to_string(), None),
@@ -160,12 +199,15 @@ impl AppError {
             Self::BadRequest(s) => (StatusCode::BAD_REQUEST, s.as_str().to_string(), None),
             Self::Biscuit(s) => (StatusCode::UNAUTHORIZED, s.as_str().to_string(), None),
             Self::Media(s) => (StatusCode::BAD_REQUEST, s.as_str().to_string(), None),
-            Self::Serde(_) => (StatusCode::BAD_REQUEST, "Failed to process request body".to_string(), None),
+            Self::Serde(_) => (
+                StatusCode::BAD_REQUEST,
+                "Failed to process request body".to_string(),
+                None,
+            ),
             Self::NotImplemented(s) => (StatusCode::NOT_IMPLEMENTED, s.as_str().to_string(), None),
         }
     }
 }
-
 
 //--- Conversions from external error types ---//
 
@@ -224,7 +266,6 @@ impl From<tantivy::TantivyError> for AppError {
     }
 }
 
-
 //--- AppError inherent methods ---//
 
 impl AppError {
@@ -261,7 +302,6 @@ impl AppError {
         }
     }
 }
-
 
 /// A module-local `Result` alias.
 pub type Result<T> = std::result::Result<T, AppError>;
