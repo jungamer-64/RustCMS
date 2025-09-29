@@ -1,11 +1,12 @@
-use cms_backend::{models::User, Result};
+use cms_backend::{Result, models::User};
 use ring::rand::{SecureRandom, SystemRandom};
 use secrecy::SecretString;
 use tokio::task;
 
 use crate::backend::AdminBackend;
 
-pub const PASSWORD_CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+pub const PASSWORD_CHARSET: &[u8] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
 
 pub fn generate_random_password() -> Result<SecretString> {
     generate_random_password_with_len(16)
@@ -67,9 +68,9 @@ pub async fn find_user_by_id_or_username<B: AdminBackend + ?Sized>(
         Err(err) => {
             tracing::debug!(identifier = %identifier, backend_error = %format!("{err}"), "User lookup failed");
             match err {
-                cms_backend::AppError::NotFound(_) => {
-                    Err(cms_backend::AppError::NotFound(format!("User '{}' not found", identifier)))
-                }
+                cms_backend::AppError::NotFound(_) => Err(cms_backend::AppError::NotFound(
+                    format!("User '{}' not found", identifier),
+                )),
                 other => Err(other),
             }
         }
@@ -89,7 +90,11 @@ mod tests {
             assert_eq!(secret.len(), 16);
             for ch in secret.chars() {
                 let byte = ch as u8;
-                assert!(PASSWORD_CHARSET.contains(&byte), "password contains invalid char: {}", ch);
+                assert!(
+                    PASSWORD_CHARSET.contains(&byte),
+                    "password contains invalid char: {}",
+                    ch
+                );
             }
         }
         Ok(())

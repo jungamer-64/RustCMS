@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use cms_backend::{
-    models::{CreateUserRequest, UpdateUserRequest, User},
     AppState, Result,
+    models::{CreateUserRequest, UpdateUserRequest, User},
 };
 
 /// Abstraction over `AppState` database operations so CLI logic can be tested in isolation.
