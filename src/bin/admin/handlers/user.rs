@@ -1,6 +1,6 @@
 use cms_backend::{
-    models::{CreateUserRequest, UpdateUserRequest, UserRole},
     AppState, Result,
+    models::{CreateUserRequest, UpdateUserRequest, UserRole},
 };
 use comfy_table::{Cell, Table};
 use secrecy::{ExposeSecret, SecretString};
@@ -13,7 +13,10 @@ use crate::util::{
     find_user_by_id_or_username, generate_random_password_with_len, prompt_password_async,
 };
 
-pub async fn handle_user_action<B: AdminBackend + ?Sized>(action: UserAction, backend: &B) -> Result<()> {
+pub async fn handle_user_action<B: AdminBackend + ?Sized>(
+    action: UserAction,
+    backend: &B,
+) -> Result<()> {
     match action {
         UserAction::List { role, active_only } => list(backend, &role, active_only).await?,
         UserAction::Create {
@@ -38,7 +41,11 @@ pub async fn handle_user_action<B: AdminBackend + ?Sized>(action: UserAction, ba
     Ok(())
 }
 
-async fn list<B: AdminBackend + ?Sized>(backend: &B, role: &Option<UserRole>, active_only: bool) -> Result<()> {
+async fn list<B: AdminBackend + ?Sized>(
+    backend: &B,
+    role: &Option<UserRole>,
+    active_only: bool,
+) -> Result<()> {
     info!("📊 Listing users...");
     let role_filter: Option<&str> = role.as_ref().map(|r| r.as_str());
     let active_filter = if active_only { Some(true) } else { None };
@@ -156,9 +163,13 @@ async fn delete<B: AdminBackend + ?Sized>(backend: &B, user: String, force: bool
         let confirmed = task::spawn_blocking(move || -> Result<bool> {
             use std::io::{self, Write};
             print!("Type 'DELETE' to confirm: ");
-            io::stdout().flush().map_err(|e| cms_backend::AppError::Internal(e.to_string()))?;
+            io::stdout()
+                .flush()
+                .map_err(|e| cms_backend::AppError::Internal(e.to_string()))?;
             let mut input = String::new();
-            io::stdin().read_line(&mut input).map_err(|e| cms_backend::AppError::Internal(e.to_string()))?;
+            io::stdin()
+                .read_line(&mut input)
+                .map_err(|e| cms_backend::AppError::Internal(e.to_string()))?;
             Ok(input.trim().eq_ignore_ascii_case("DELETE"))
         })
         .await
