@@ -84,26 +84,6 @@ pub enum Commands {
     },
 }
 
-impl Commands {
-    pub fn action(&self) -> CommandActionRef<'_> {
-        match self {
-            Commands::User { action } => CommandActionRef::User(action),
-            Commands::Content { action } => CommandActionRef::Content(action),
-            Commands::System { action } => CommandActionRef::System(action),
-            Commands::Analytics { action } => CommandActionRef::Analytics(action),
-            Commands::Security { action } => CommandActionRef::Security(action),
-        }
-    }
-}
-
-pub enum CommandActionRef<'a> {
-    User(&'a UserAction),
-    Content(&'a ContentAction),
-    System(&'a SystemAction),
-    Analytics(&'a AnalyticsAction),
-    Security(&'a SecurityAction),
-}
-
 #[derive(Subcommand)]
 pub enum UserAction {
     /// List all users
