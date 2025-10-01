@@ -1,11 +1,11 @@
-# 🚀 エンタープライズ向け CMS バックエンド
+# 🚀 CMS バックエンド
 
 ![CI](https://github.com/jungamer-64/RustCMS/actions/workflows/ci.yml/badge.svg)
 ![Docker Build](https://github.com/jungamer-64/RustCMS/actions/workflows/ci-docker-build.yml/badge.svg)
 ![Docker Release](https://github.com/jungamer-64/RustCMS/actions/workflows/docker-release.yml/badge.svg)
 ![Security Audit](https://github.com/jungamer-64/RustCMS/actions/workflows/security.yml/badge.svg)
 
-高性能で本番運用に耐えるコンテンツ管理システム（CMS）API。Rust と Axum を用いて構築され、大規模トラフィックを想定したエンタープライズ向け機能を備えています。
+高性能で本番運用に耐えるコンテンツ管理システム（CMS）API。Rust と Axum を用いて構築され、大規模トラフィックを想定した機能を備えています。
 
 ## 🚀 主な特徴
 
@@ -70,6 +70,7 @@
 簡易な成功パスはハンドラで `ApiOk(payload)` を返すだけです。従来の `ok/err/ok_message` ヘルパは非推奨 (将来削除)。
 
 #### スナップショット (contract) テスト
+
 `tests/contract_snapshots.rs` で代表的な 4 パターン (成功 / 成功+message / エラー / バリデーションエラー) を `insta` で固定化しています。破壊的変更があると CI で差分が検出されます。
 
 追加で `/health` エンドポイント形状を監視する **統合スナップショット** (`tests/integration_health_snapshot.rs`) を導入しています。これは本物のサービス初期化に依存せず、決定的なダミー `HealthStatus` を生成しタイムスタンプを `<redacted>` にマスクすることでインフラ非依存 & 変動値排除を実現しています。
@@ -92,6 +93,7 @@ cargo test snapshot_health_endpoint -- --exact
 新規追加 → 差分確認 → 受け入れのフローは従来と同じです。
 
 更新フロー:
+
 ```powershell
 # 変更検証
 cargo insta test
@@ -104,6 +106,7 @@ cargo insta accept
 ```
 
 #### 重い鍵生成テストの高速化
+
 `FAST_KEY_TESTS=1` を設定すると高速版圧縮テストのみ実行し、フルバックアップ/圧縮テストをスキップする CI マトリクス構成が可能です。
 例: GitHub Actions でのステップ:
 
@@ -111,6 +114,7 @@ cargo insta accept
 - name: Fast tests
   run: FAST_KEY_TESTS=1 cargo test --all --no-fail-fast
 ```
+
 長時間走る完全テストは nightly ジョブに分離する運用を推奨します。
 
 ## 📊 アーキテクチャ
@@ -270,8 +274,6 @@ cargo build --features legacy-auth-flat
 
 詳細: `docs/AUTH_MIGRATION_V2.md` の Phase 4 セクションおよび `CHANGELOG.md` の Planned を参照。
 
-
-
 ## �🛠️ クイックスタート
 
 ### 前提条件
@@ -389,7 +391,6 @@ cargo run --bin gen_biscuit_keys -- --out-dir keys --list
 
 API キーは長期自動処理 (CI / バッチ / 外部統合) 用。ユーザ認証後に管理エンドポイントで発行し、生キーはそのレスポンス以外では再取得不可。DB では **復号不能** (Argon2) かつ検索高速化のための決定的 `lookup_hash` (衝突極小) を持ちます。
 
- 
 #### レガシー行バックフィル
 
 初期段階で `lookup_hash` 空の行が存在する場合、ミドルウェアは検証成功時にその行へハッシュを後書きし徐々に移行します。運用 CLI (backfill) により一括同定・失効も可能です。
@@ -449,7 +450,6 @@ Redis バックエンド時の注意:
 2. TTL はウィンドウ秒で `EXPIRE`。閾値超過判定は `INCR` 後の値が `threshold` を超えたかで実施。
 3. `tracked_len` メトリクスは 15 秒キャッシュされた SCAN 結果。大量キー環境ではオーバーヘッド低減のため頻度を抑制。
 4. キープレフィックスは `API_KEY_FAIL_REDIS_PREFIX` (デフォルト `rk:`) で変更可能。衝突回避のためサービス毎に prefix 設定推奨。
-
 
 成功時にはそのキーの失敗カウンタを即座に削除し (in-memory: map remove / redis: DEL) 正常利用を阻害しません。
 
@@ -557,7 +557,6 @@ api_key_auth_success_total 35
 | `api_key_rate_limit_max_tracked` | 最大追跡キー数 |
 | `api_key_rate_limit_tracked_keys` | 現在追跡中キー数 (動的) |
 | `api_key_rate_limit_enabled` | 1=有効 / 0=無効 (`API_KEY_FAIL_DISABLE` 反映) |
-
 
 デフォルト起動バイナリは `cms-server`（`Cargo.toml` の `default-run` 設定に依存）。
 
@@ -714,5 +713,3 @@ curl "http://localhost:3000/api/v1/search?q=rust"
 - **ヘルスチェック**: すべてのサービスに対する詳細ヘルス監視
 - **構造化ログ**: tracing サポートによる詳細ログ
 - **パフォーマンストラッキング**: リクエスト時間などの分析
-
-このリファクタ済み CMS バックエンドはエンタープライズ向けデプロイを想定しており、大規模トラフィックに対応可能です。
