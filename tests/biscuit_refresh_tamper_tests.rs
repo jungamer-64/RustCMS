@@ -1,7 +1,6 @@
 //! Tampering tests for refresh biscuit tokens
 
 use base64::Engine; // for decode/encode methods on STANDARD
-use chrono::Utc;
 
 mod common;
 

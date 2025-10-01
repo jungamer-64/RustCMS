@@ -1,6 +1,11 @@
 use crate::config::Config;
 use crate::error::Result;
 use crate::telemetry;
+use once_cell::sync::OnceCell;
+use tracing::warn;
+
+// Hold telemetry guards for process lifetime so background logging continues.
+static TELEMETRY_HANDLE: OnceCell<telemetry::TelemetryHandle> = OnceCell::new();
 
 /// Initialize logging/telemetry and return loaded `Config`
 ///
@@ -9,7 +14,11 @@ use crate::telemetry;
 /// 環境変数の読み込みや設定値の検証に失敗した場合、エラーを返します。
 pub fn init_logging_and_config() -> Result<Config> {
     // Initialize tracing subscriber (idempotent)
-    let _ = telemetry::init_telemetry(false);
+    let handle = telemetry::init_telemetry(false).map_err(|e| {
+        warn!(error = %e, "telemetry initialization failed during startup");
+        e
+    })?;
+    let _ = TELEMETRY_HANDLE.set(handle);
 
     // Load configuration
     let config = Config::from_env()?;
@@ -21,7 +30,11 @@ pub fn init_logging_and_config() -> Result<Config> {
 /// Prefer this from CLI binaries that accept a --verbose flag.
 pub fn init_logging_and_config_with_verbose(verbose: bool) -> Result<Config> {
     // Initialize tracing subscriber (idempotent)
-    let _ = telemetry::init_telemetry(verbose);
+    let handle = telemetry::init_telemetry(verbose).map_err(|e| {
+        warn!(error = %e, "telemetry initialization failed during startup");
+        e
+    })?;
+    let _ = TELEMETRY_HANDLE.set(handle);
 
     // Load configuration
     let config = Config::from_env()?;
@@ -35,7 +48,9 @@ pub fn init_env() {
     let _ = dotenvy::dotenv();
 
     // Initialize telemetry/logging (best-effort)
-    let _ = telemetry::init_telemetry(false);
+    if let Ok(handle) = telemetry::init_telemetry(false) {
+        let _ = TELEMETRY_HANDLE.set(handle);
+    }
 }
 
 /// Initialize `AppState` from environment via `Config`

@@ -1,6 +1,7 @@
 //! Common test setup utilities
 
 use std::sync::Once;
+use temp_env::with_var;
 
 static INIT: Once = Once::new();
 
@@ -15,39 +16,53 @@ pub fn setup() {
         // The `try_init` in `init_telemetry` makes it safe to call this multiple times,
         // but `Once` ensures we don't even try after the first time.
         // We can set LOG_FORMAT=text for more readable test output.
-        if std::env::var("LOG_FORMAT").is_err() {
-            unsafe {
-                std::env::set_var("LOG_FORMAT", "text");
+        let verbose_tests = std::env::var("TEST_VERBOSE").is_ok();
+        let init_result = if std::env::var("LOG_FORMAT").is_err() {
+            with_var("LOG_FORMAT", Some("text"), || {
+                cms_backend::telemetry::init_telemetry(verbose_tests)
+            })
+        } else {
+            cms_backend::telemetry::init_telemetry(verbose_tests)
+        };
+
+        match init_result {
+            Ok(_) => {}
+            Err(e) => {
+                // Try structured logging first for consistency with production
+                // observability. Always also print to stderr so the failure
+                // is visible in CI logs even if a tracing subscriber wasn't
+                // installed.
+                tracing::warn!(error = %e, "init_telemetry failed for tests");
+                eprintln!("init_telemetry failed for tests: {}", e);
             }
         }
-
-        // Allow overriding log level for tests with `TEST_VERBOSE=1`
-        let verbose_tests = std::env::var("TEST_VERBOSE").is_ok();
-        // In tests, we can afford to panic if logging initialization fails.
-        cms_backend::telemetry::init_telemetry(verbose_tests)
-            .expect("Failed to initialize telemetry for tests");
     });
 }
 
-/// Test helpers for auth and database integration tests
+// Test helpers for auth and database integration tests
 
-// These helpers are conditionally compiled and only available when both `auth` and `database` features are enabled.
-#[cfg(all(feature = "auth", feature = "database"))]
-use chrono::Utc;
-use cms_backend::{
-    auth::AuthService,
-    config::{AuthConfig, DatabaseConfig},
-    database::Database,
-    models::{User, UserRole},
-};
+// The following helpers are only available when both `auth` and `database` features are enabled.
+// We limit the scope of `cfg` to the items that require those features so other tests
+// don't get their imports gated unintentionally.
 use uuid::Uuid;
 
-/// Builds a database connection for tests. Returns `None` if `DATABASE_URL` is not set.
-pub async fn build_db() -> Option<Database> {
-    let url = std::env::var("DATABASE_URL").ok()?;
-    if url.is_empty() {
-        return None;
-    }
+// Reusable dummy password hash for tests. Centralize the value so it's easier
+// to change or spot in test output.
+const DUMMY_HASH: &str = "$argon2id$v=19$m=65536,t=3,p=4$YWJj$YWJj";
+
+/// Like `build_db`, but returns a `Result` so callers can distinguish
+/// between "no DATABASE_URL set" (Ok(None)) and a connection error (Err).
+pub async fn build_db_result()
+-> Result<Option<cms_backend::database::Database>, cms_backend::AppError> {
+    use cms_backend::config::DatabaseConfig;
+
+    let url = std::env::var("DATABASE_URL").ok();
+    let url = match url {
+        None => return Ok(None),
+        Some(u) if u.is_empty() => return Ok(None),
+        Some(u) => u,
+    };
+
     let cfg = DatabaseConfig {
         url: url.into(),
         max_connections: 2,
@@ -55,15 +70,39 @@ pub async fn build_db() -> Option<Database> {
         connection_timeout: 5,
         idle_timeout: 30,
         max_lifetime: 300,
-        enable_migrations: false, // In tests, we assume tables exist for speed.
+        enable_migrations: false,
     };
-    Database::new(&cfg).await.ok()
+
+    match cms_backend::database::Database::new(&cfg).await {
+        Ok(db) => Ok(Some(db)),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Convenience helper mirroring legacy behavior: returns `None` when the
+/// database is unavailable and logs any initialization errors.
+pub async fn build_db() -> Option<cms_backend::database::Database> {
+    match build_db_result().await {
+        Ok(db_opt) => db_opt,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to initialize database for tests");
+            eprintln!("failed to initialize database for tests: {e}");
+            None
+        }
+    }
 }
 
 /// Builds an `AuthService` instance for tests with configurable TTLs.
-pub async fn build_auth(db: &Database, access_ttl: u64, refresh_ttl: u64) -> AuthService {
+#[cfg(all(feature = "auth", feature = "database"))]
+pub async fn build_auth(
+    db: &cms_backend::database::Database,
+    access_ttl: u64,
+    refresh_ttl: u64,
+) -> cms_backend::auth::AuthService {
     use base64::Engine;
     use biscuit_auth::KeyPair;
+    use cms_backend::config::AuthConfig;
+
     let kp = KeyPair::new();
     let priv_b64 = base64::engine::general_purpose::STANDARD.encode(kp.private().to_bytes());
     let cfg = AuthConfig {
@@ -72,17 +111,26 @@ pub async fn build_auth(db: &Database, access_ttl: u64, refresh_ttl: u64) -> Aut
         refresh_token_ttl_secs: refresh_ttl,
         ..Default::default()
     };
-    AuthService::new(&cfg, db).expect("auth service initialization for test failed")
+    cms_backend::auth::AuthService::new(&cfg, db)
+        .expect("auth service initialization for test failed")
 }
 
 /// Creates a dummy `User` model for testing purposes.
-pub fn dummy_user() -> User {
+#[cfg(all(feature = "auth", feature = "database"))]
+pub fn dummy_user() -> cms_backend::models::User {
+    // The `User` model stores `role` as `String` (see src/models/user.rs), so
+    // we convert from the `UserRole` enum to the string representation here.
+    // If the model changes to store `UserRole` directly, change this helper
+    // to construct the enum directly instead.
+    use chrono::Utc;
+    use cms_backend::models::UserRole;
+
     let now = Utc::now();
-    User {
+    cms_backend::models::User {
         id: Uuid::new_v4(),
         username: format!("user_{}", Uuid::new_v4().simple()),
         email: format!("test+{}@example.com", Uuid::new_v4()),
-        password_hash: Some("$argon2id$v=19$m=65536,t=3,p=4$YWJj$YWJj".into()), // Dummy hash
+        password_hash: Some(DUMMY_HASH.into()), // Dummy hash
         first_name: None,
         last_name: None,
         role: UserRole::Subscriber.as_str().to_string(),

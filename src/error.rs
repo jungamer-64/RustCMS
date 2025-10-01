@@ -4,6 +4,7 @@
 //! avoids exporting internal error details to clients while preserving them in
 //! logs for operators.
 
+use crate::telemetry::TelemetryError;
 use crate::utils::api_types::{ApiResponse, ValidationError};
 use axum::{Json, http::StatusCode, response::IntoResponse, response::Response};
 use std::fmt;
@@ -35,6 +36,7 @@ pub enum AppError {
     ConfigLoad(config::ConfigError),
     ConfigValueMissing(String),
     ConfigValidationError(String),
+    Telemetry(TelemetryError),
     IO(std::io::Error),
     Serde(serde_json::Error),
     #[cfg(feature = "search")]
@@ -70,6 +72,7 @@ impl fmt::Display for AppError {
                 write!(f, "Configuration value missing for key: {key}")
             }
             Self::ConfigValidationError(msg) => write!(f, "Configuration validation error: {msg}"),
+            Self::Telemetry(err) => write!(f, "Telemetry error: {err}"),
             Self::IO(err) => write!(f, "IO error: {err}"),
             Self::Serde(err) => write!(f, "Serialization error: {err}"),
             #[cfg(feature = "search")]
@@ -88,6 +91,7 @@ impl std::error::Error for AppError {
             Self::ConfigLoad(err) => Some(err),
             Self::IO(err) => Some(err),
             Self::Serde(err) => Some(err),
+            Self::Telemetry(err) => Some(err),
             #[cfg(feature = "search")]
             Self::Tantivy(err) => Some(err),
             // Errors wrapping only a String or simple type don't have a source
@@ -158,6 +162,11 @@ impl AppError {
                 "A server configuration error occurred".to_string(),
                 None,
             ),
+            Self::Telemetry(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "A telemetry subsystem error occurred".to_string(),
+                None,
+            ),
             Self::IO(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "An I/O error occurred".to_string(),
@@ -180,7 +189,7 @@ impl AppError {
                             message: e
                                 .message
                                 .as_ref()
-                                .map_or_else(|| "Invalid value".to_string(), |s| s.to_string()),
+                                .map_or_else(|| "Invalid value".to_string(), ToString::to_string),
                         })
                     })
                     .collect();
@@ -206,6 +215,12 @@ impl AppError {
             ),
             Self::NotImplemented(s) => (StatusCode::NOT_IMPLEMENTED, s.as_str().to_string(), None),
         }
+    }
+}
+
+impl From<TelemetryError> for AppError {
+    fn from(err: TelemetryError) -> Self {
+        Self::Telemetry(err)
     }
 }
 
@@ -296,6 +311,7 @@ impl AppError {
             | Self::ConfigLoad(_)
             | Self::ConfigValueMissing(_)
             | Self::ConfigValidationError(_) => "configuration error",
+            Self::Telemetry(_) => "telemetry error",
             Self::NotImplemented(_) => "not implemented",
             #[cfg(feature = "search")]
             Self::Tantivy(_) => "search backend error",
