@@ -156,7 +156,7 @@ fn query_triple(
     let v: Vec<(String, String, String)> = authz
         .query_all(dsl)
         .map_err(|e| crate::AppError::Biscuit(format!("Failed to query {ctx}: {e}")))?;
-    v.into_iter().next().ok_or(AuthError::InvalidToken.into())
+    v.into_iter().next().ok_or_else(|| AuthError::InvalidToken.into())
 }
 
 fn query_vec(
@@ -177,7 +177,7 @@ fn query_string(authz: &mut biscuit_auth::Authorizer, dsl: &str, ctx: &str) -> R
     v.into_iter()
         .next()
         .map(|t| t.0)
-        .ok_or(AuthError::InvalidToken.into())
+        .ok_or_else(|| AuthError::InvalidToken.into())
 }
 
 fn query_i64(authz: &mut biscuit_auth::Authorizer, dsl: &str, ctx: &str) -> Result<i64> {
@@ -187,5 +187,5 @@ fn query_i64(authz: &mut biscuit_auth::Authorizer, dsl: &str, ctx: &str) -> Resu
     v.into_iter()
         .next()
         .map(|t| t.0)
-        .ok_or(AuthError::InvalidToken.into())
+        .ok_or_else(|| AuthError::InvalidToken.into())
 }

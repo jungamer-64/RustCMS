@@ -19,7 +19,7 @@
 //!  - add unit tests for extracted pieces
 //!  - consider repository/service patterns to reduce module size
 //!
-//! See: docs/REFACTORING_GUIDE.md for a suggested plan (create if needed)
+//! See: `docs/REFACTORING_GUIDE.md` for a suggested plan (create if needed)
 
 pub mod pool;
 pub mod schema;

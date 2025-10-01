@@ -8,10 +8,6 @@ use crate::backend::AdminBackend;
 pub const PASSWORD_CHARSET: &[u8] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
 
-pub fn generate_random_password() -> Result<SecretString> {
-    generate_random_password_with_len(16)
-}
-
 pub fn generate_random_password_with_len(len: usize) -> Result<SecretString> {
     let charset_len = PASSWORD_CHARSET.len() as u16;
     let threshold: u16 = 256u16 - (256u16 % charset_len);
@@ -85,7 +81,7 @@ mod tests {
     #[test]
     fn generate_password_uses_charset() -> Result<()> {
         for _ in 0..8 {
-            let password = generate_random_password()?;
+            let password = generate_random_password_with_len(16)?;
             let secret = password.expose_secret();
             assert_eq!(secret.len(), 16);
             for ch in secret.chars() {

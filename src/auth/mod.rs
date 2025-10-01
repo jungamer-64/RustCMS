@@ -2,7 +2,7 @@
 //!
 //! リファクタリング概要 (2025-09):
 //! - Key 管理: `PrivateKey` / `PublicKey` から毎回 `KeyPair` を再生成していた非効率を解消し、起動時に確定した `KeyPair` を保持
-//! - `remember_me` TTL: 旧仕様 ("2倍 or refresh 以下") の曖昧さを廃止し、通常 = `config.access_token_ttl_secs` / remember_me = 24h 固定
+//! - `remember_me` TTL: 旧仕様 ("2倍 or refresh 以下") の曖昧さを廃止し、通常 = `config.access_token_ttl_secs` / `remember_me` = 24h 固定
 //! - セッションストレージ: `HashMap` 直使用を排除し `SessionStore` trait + `InMemorySessionStore` 抽象化 (将来 Redis/Postgres 差替え容易化)
 //! - Refresh Token 並行リクエスト: ポリシーを明示 (旧トークン即失効)。version ミスマッチは `InvalidToken`
 //! - 有効期限検証: Biscuit の `exp` fact を parse 時に必ず検証 (期限切れは `TokenExpired`)

@@ -277,10 +277,10 @@ fn default_role_permissions() -> HashMap<String, Vec<String>> {
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
-            host: String::from(ServerConfig::DEFAULT_HOST),
-            port: ServerConfig::DEFAULT_PORT,
-            max_request_size: ServerConfig::DEFAULT_MAX_REQUEST_SIZE,
-            request_timeout: ServerConfig::DEFAULT_REQUEST_TIMEOUT,
+            host: String::from(Self::DEFAULT_HOST),
+            port: Self::DEFAULT_PORT,
+            max_request_size: Self::DEFAULT_MAX_REQUEST_SIZE,
+            request_timeout: Self::DEFAULT_REQUEST_TIMEOUT,
             worker_threads: None,
         }
     }
@@ -315,8 +315,8 @@ impl Default for SearchConfig {
     fn default() -> Self {
         Self {
             index_path: PathBuf::from("./data/search_index"),
-            writer_memory: SearchConfig::DEFAULT_WRITER_MEMORY,
-            max_results: SearchConfig::DEFAULT_MAX_RESULTS,
+            writer_memory: Self::DEFAULT_WRITER_MEMORY,
+            max_results: Self::DEFAULT_MAX_RESULTS,
             enable_fuzzy: true,
             fuzzy_distance: 2,
         }
@@ -531,19 +531,21 @@ fn apply_log_env_overrides(cfg: &mut Config) {
 fn apply_legacy_env_overrides(cfg: &mut Config) {
     // Back-compat overrides: legacy env names from older deployments
     if let Ok(v) = env::var("ACCESS_TOKEN_TTL_SECS") {
-        match v.parse() {
-            Ok(n) => cfg.auth.access_token_ttl_secs = n,
-            Err(_) => warn!(
+        if let Ok(n) = v.parse() {
+            cfg.auth.access_token_ttl_secs = n;
+        } else {
+            warn!(
                 "Failed to parse ACCESS_TOKEN_TTL_SECS: '{v}'. Using configured/default value."
-            ),
+            );
         }
     }
     if let Ok(v) = env::var("REFRESH_TOKEN_TTL_SECS") {
-        match v.parse() {
-            Ok(n) => cfg.auth.refresh_token_ttl_secs = n,
-            Err(_) => warn!(
+        if let Ok(n) = v.parse() {
+            cfg.auth.refresh_token_ttl_secs = n;
+        } else {
+            warn!(
                 "Failed to parse REFRESH_TOKEN_TTL_SECS: '{v}'. Using configured/default value."
-            ),
+            );
         }
     }
 }

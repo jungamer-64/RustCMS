@@ -456,7 +456,7 @@ impl AppState {
                                 m.active_sessions = active;
                             }
                         }
-                        Ok(_) = shutdown_rx.recv() => {
+                        Ok(()) = shutdown_rx.recv() => {
                             info!("Auth cleanup task received shutdown");
                             break;
                         }
@@ -485,7 +485,7 @@ impl AppState {
                         _ = ticker.tick() => {
                             state_clone.csrf.cleanup_expired_tokens().await;
                         }
-                        Ok(_) = shutdown_rx.recv() => {
+                        Ok(()) = shutdown_rx.recv() => {
                             info!("CSRF cleanup task received shutdown");
                             break;
                         }

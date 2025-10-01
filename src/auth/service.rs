@@ -29,7 +29,7 @@ use crate::{
 /// Authentication service
 #[cfg(feature = "auth")]
 pub struct AuthService {
-    /// 起動時に読み込み/生成された KeyPair (再利用でパフォーマンス向上)
+    /// 起動時に読み込み/生成された `KeyPair` (再利用でパフォーマンス向上)
     pub(super) biscuit_keypair: Arc<KeyPair>,
     /// 公開鍵 (検証用) - Copy 可能
     pub(super) biscuit_public_key: PublicKey,
