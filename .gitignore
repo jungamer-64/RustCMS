@@ -104,5 +104,8 @@ uploads/*
 # Log files (temporary)
 *.log
 
+# gemini-cli settings
 .gemini/
+
+# GitHub App credentials
 gha-creds-*.json
