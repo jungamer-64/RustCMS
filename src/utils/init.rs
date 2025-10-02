@@ -28,6 +28,9 @@ pub fn init_logging_and_config() -> Result<Config> {
 
 /// Initialize telemetry with verbose option and return loaded `Config`.
 /// Prefer this from CLI binaries that accept a --verbose flag.
+///
+/// # Errors
+/// Returns an error if telemetry initialization or configuration loading fails.
 pub fn init_logging_and_config_with_verbose(verbose: bool) -> Result<Config> {
     // Initialize tracing subscriber (idempotent)
     let handle = telemetry::init_telemetry(verbose).map_err(|e| {
@@ -64,6 +67,9 @@ pub async fn init_app_state() -> crate::Result<crate::AppState> {
 }
 
 /// Initialize `AppState` honoring a verbose flag used by CLI tools.
+///
+/// # Errors
+/// Returns an error if configuration loading or `AppState` initialization fails.
 pub async fn init_app_state_with_verbose(verbose: bool) -> crate::Result<crate::AppState> {
     let config = init_logging_and_config_with_verbose(verbose)?;
     crate::AppState::from_config(config).await
