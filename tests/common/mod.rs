@@ -75,7 +75,7 @@ pub async fn build_db_result()
 
     match cms_backend::database::Database::new(&cfg).await {
         Ok(db) => Ok(Some(db)),
-        Err(e) => Err(e.into()),
+        Err(e) => Err(e),
     }
 }
 

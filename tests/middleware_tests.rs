@@ -144,10 +144,10 @@ fn compression_middleware_exists() {
 #[test]
 fn logging_middleware_configuration() {
     // Test that logging middleware can be configured
-    use cms_backend::middleware::logging;
+    use cms_backend::config::LoggingConfig;
 
-    // Just verify the module exists and is accessible
-    let _ = std::mem::size_of::<logging::LoggingConfig>();
+    // Just verify the type exists and is accessible
+    let _ = std::mem::size_of::<LoggingConfig>();
 }
 
 #[tokio::test]

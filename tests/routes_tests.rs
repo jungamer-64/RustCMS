@@ -54,9 +54,9 @@ fn route_admin_paths_protected() {
 #[test]
 fn route_structure_validation() {
     // Validate route path patterns
-    let public_routes = vec!["/", "/api/v1", "/api/v1/health"];
-    let auth_routes = vec!["/api/v1/auth/login", "/api/v1/auth/logout"];
-    let protected_routes = vec!["/api/v1/posts", "/api/v1/users"];
+    let public_routes = ["/", "/api/v1", "/api/v1/health"];
+    let auth_routes = ["/api/v1/auth/login", "/api/v1/auth/logout"];
+    let protected_routes = ["/api/v1/posts", "/api/v1/users"];
 
     // All routes should start with /
     for route in public_routes.iter().chain(auth_routes.iter()).chain(protected_routes.iter()) {

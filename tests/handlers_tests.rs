@@ -150,13 +150,13 @@ fn json_serialization_safety() {
 #[test]
 fn handler_timeout_values() {
     // Verify handler timeout configurations are reasonable
-    const REQUEST_TIMEOUT: u64 = 30; // seconds
-    const DB_QUERY_TIMEOUT: u64 = 10; // seconds
-    const CACHE_TIMEOUT: u64 = 5; // seconds
+    let request_timeout: u64 = 30; // seconds
+    let db_query_timeout: u64 = 10; // seconds
+    let cache_timeout: u64 = 5; // seconds
 
-    assert!(DB_QUERY_TIMEOUT < REQUEST_TIMEOUT);
-    assert!(CACHE_TIMEOUT < DB_QUERY_TIMEOUT);
-    assert!(REQUEST_TIMEOUT <= 60); // Max 1 minute
+    assert!(db_query_timeout < request_timeout, "DB timeout should be less than request timeout");
+    assert!(cache_timeout < db_query_timeout, "Cache timeout should be less than DB timeout");
+    assert!(request_timeout <= 60, "Request timeout should not exceed 1 minute");
 }
 
 #[test]

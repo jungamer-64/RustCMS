@@ -42,14 +42,15 @@ fn test_data_serialization() {
 
 #[test]
 fn cache_ttl_values() {
-    // Verify cache TTL constants are reasonable
-    const SHORT_TTL: u64 = 60;    // 1 minute
-    const MEDIUM_TTL: u64 = 300;  // 5 minutes
-    const LONG_TTL: u64 = 3600;   // 1 hour
+    // Verify cache TTL constants are reasonable and in ascending order
+    let short_ttl: u64 = 60;    // 1 minute
+    let medium_ttl: u64 = 300;  // 5 minutes
+    let long_ttl: u64 = 3600;   // 1 hour
 
-    assert!(SHORT_TTL < MEDIUM_TTL);
-    assert!(MEDIUM_TTL < LONG_TTL);
-    assert!(LONG_TTL <= 86400); // Max 24 hours
+    // Ensure TTL values are in ascending order
+    assert!(short_ttl < medium_ttl, "SHORT_TTL should be less than MEDIUM_TTL");
+    assert!(medium_ttl < long_ttl, "MEDIUM_TTL should be less than LONG_TTL");
+    assert!(long_ttl <= 86400, "LONG_TTL should not exceed 24 hours");
 }
 
 #[test]
