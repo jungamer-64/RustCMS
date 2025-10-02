@@ -173,6 +173,7 @@ pub struct SecurityConfig {
     pub cors_origins: Vec<String>,
     pub rate_limit_requests: u64,
     pub rate_limit_window: u64,
+    pub enable_login_rate_limiting: bool,
 }
 
 impl Default for SecurityConfig {
@@ -181,6 +182,7 @@ impl Default for SecurityConfig {
             cors_origins: vec![String::from("http://localhost:3000")],
             rate_limit_requests: 100,
             rate_limit_window: 60,
+            enable_login_rate_limiting: true,
         }
     }
 }
@@ -488,7 +490,6 @@ fn build_builder(profile: &str) -> config::ConfigBuilder<config::builder::Defaul
     }
     builder
         .add_source(config::File::with_name("config/local").required(false))
-        .add_source(config::Environment::with_prefix("CMS").separator("_"))
 }
 
 #[cfg(feature = "database")]
@@ -528,26 +529,9 @@ fn apply_log_env_overrides(cfg: &mut Config) {
     }
 }
 
-fn apply_legacy_env_overrides(cfg: &mut Config) {
-    // Back-compat overrides: legacy env names from older deployments
-    if let Ok(v) = env::var("ACCESS_TOKEN_TTL_SECS") {
-        if let Ok(n) = v.parse() {
-            cfg.auth.access_token_ttl_secs = n;
-        } else {
-            warn!(
-                "Failed to parse ACCESS_TOKEN_TTL_SECS: '{v}'. Using configured/default value."
-            );
-        }
-    }
-    if let Ok(v) = env::var("REFRESH_TOKEN_TTL_SECS") {
-        if let Ok(n) = v.parse() {
-            cfg.auth.refresh_token_ttl_secs = n;
-        } else {
-            warn!(
-                "Failed to parse REFRESH_TOKEN_TTL_SECS: '{v}'. Using configured/default value."
-            );
-        }
-    }
+fn apply_legacy_env_overrides(_cfg: &mut Config) {
+    // Legacy environment variable overrides removed in v3.0.0
+    // Use standard configuration file or AUTH_ACCESS_TOKEN_TTL_SECS/AUTH_REFRESH_TOKEN_TTL_SECS instead
 }
 
 fn sanitize_cors(cfg: &mut Config) {
@@ -586,4 +570,225 @@ where
 {
     // Do not expose secrets in serialized output; mask with fixed placeholder
     serializer.serialize_str("******")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use temp_env;
+
+    const FULL_DEFAULT_TOML: &str = r#"
+environment = "test"
+
+[server]
+host = "127.0.0.1"
+port = 8000
+max_request_size = 10485760
+request_timeout = 30
+
+[security]
+cors_origins = ["http://localhost:3000"]
+rate_limit_requests = 100
+rate_limit_window = 60
+enable_login_rate_limiting = true
+
+[logging]
+level = "info"
+format = "text"
+
+[monitoring]
+enable_metrics = false
+metrics_port = 9090
+health_check_interval = 30
+
+[media]
+upload_dir = "uploads"
+max_file_size = 52428800
+allowed_types = ["image/jpeg", "image/png"]
+thumbnail_sizes = [[150, 150]]
+
+[notifications.email]
+smtp_host = "localhost"
+smtp_port = 587
+smtp_username = ""
+smtp_password = ""
+from_address = "noreply@example.com"
+from_name = "CMS"
+
+[notifications.webhooks]
+enabled = false
+timeout = 30
+retry_attempts = 3
+
+# The following sections are behind feature flags
+
+[database]
+url = "${DATABASE_URL}"
+max_connections = 20
+min_connections = 5
+connection_timeout = 30
+idle_timeout = 600
+max_lifetime = 3600
+enable_migrations = true
+
+[redis]
+url = "redis://127.0.0.1/"
+pool_size = 10
+default_ttl = 3600
+key_prefix = "cms:"
+
+[search]
+index_path = "./search_index"
+writer_memory = 52428800
+max_results = 100
+enable_fuzzy = true
+fuzzy_distance = 2
+
+[auth]
+biscuit_root_key = "default-key"
+bcrypt_cost = 12
+session_timeout = 86400
+access_token_ttl_secs = 3600
+refresh_token_ttl_secs = 86400
+remember_me_access_ttl_secs = 86400
+
+[auth.webauthn]
+rp_id = "localhost"
+rp_name = "CMS"
+rp_origin = "http://localhost:3000"
+timeout = 60000
+"#;
+
+    // Helper to create a temporary config directory with files
+    struct TempConfigDir {
+        _dir: tempfile::TempDir,
+        original_cwd: PathBuf,
+    }
+
+    impl TempConfigDir {
+        fn new(files: &[(&str, &str)]) -> Self {
+            let original_cwd = env::current_dir().unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            let config_path = dir.path().join("config");
+            fs::create_dir(&config_path).unwrap();
+            for (name, content) in files {
+                fs::write(config_path.join(name), content).unwrap();
+            }
+            env::set_current_dir(dir.path()).unwrap();
+            Self { _dir: dir, original_cwd }
+        }
+    }
+
+    impl Drop for TempConfigDir {
+        fn drop(&mut self) {
+            env::set_current_dir(&self.original_cwd).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_security_config_defaults() {
+        let security_config = SecurityConfig::default();
+        assert_eq!(security_config.cors_origins, vec!["http://localhost:3000"]);
+        assert_eq!(security_config.rate_limit_requests, 100);
+        assert_eq!(security_config.rate_limit_window, 60);
+        assert!(security_config.enable_login_rate_limiting);
+    }
+
+    #[test]
+    fn test_config_from_env_with_env_var_override() {
+        let _tdir = TempConfigDir::new(&[("default.toml", FULL_DEFAULT_TOML)]);
+        temp_env::with_vars(
+            [
+                ("CMS_SERVER_PORT", Some("8081")),
+                ("CMS_SECURITY_ENABLE_LOGIN_RATE_LIMITING", Some("false")),
+                ("DATABASE_URL", Some("postgres://user:pass@host/db")),
+            ],
+            || {
+                let config = Config::from_env().unwrap();
+                assert_eq!(config.server.port, 8081);
+                assert!(!config.security.enable_login_rate_limiting);
+            },
+        );
+    }
+
+    #[test]
+    fn test_config_loading_priority() {
+        let _tdir = TempConfigDir::new(&[
+            ("default.toml", FULL_DEFAULT_TOML),
+            ("production.toml", "[server]\nport = 2\n[security]\nrate_limit_window = 2"),
+            ("local.toml", "[server]\nport = 3"),
+        ]);
+
+        temp_env::with_vars([("DATABASE_URL", Some("postgres://user:pass@host/db"))], || {
+            // 1. Test default only
+            temp_env::with_var("CMS_PROFILE", Some("development"), || {
+                let config = Config::from_env().unwrap();
+                assert_eq!(config.server.port, 3); // local.toml overrides default
+                assert_eq!(config.security.rate_limit_window, 60); // from default.toml
+            });
+
+            // 2. Test profile override
+            temp_env::with_var("CMS_PROFILE", Some("production"), || {
+                let config = Config::from_env().unwrap();
+                assert_eq!(config.server.port, 3); // local.toml overrides production
+                assert_eq!(config.security.rate_limit_window, 2);
+            });
+
+            // 3. Test env var override
+            temp_env::with_vars([("CMS_SERVER_PORT", Some("4")), ("CMS_PROFILE", Some("production"))], || {
+                let config = Config::from_env().unwrap();
+                assert_eq!(config.server.port, 4); // env var overrides everything
+            });
+        });
+    }
+
+    #[test]
+    fn test_log_overrides() {
+        let _tdir = TempConfigDir::new(&[("default.toml", FULL_DEFAULT_TOML)]);
+        temp_env::with_vars(
+            [
+                ("LOG_LEVEL", Some("debug")),
+                ("LOG_FORMAT", Some("json")),
+                ("DATABASE_URL", Some("postgres://user:pass@host/db")),
+            ],
+            || {
+                let config = Config::from_env().unwrap();
+                assert_eq!(config.logging.level, "debug");
+                assert!(matches!(config.logging.format, LogFormat::Json));
+            },
+        );
+    }
+
+    #[test]
+    fn test_sanitize_cors() {
+        let _tdir = TempConfigDir::new(&[("default.toml", FULL_DEFAULT_TOML)]);
+        temp_env::with_vars(
+            [
+                ("CMS_SECURITY_CORS_ORIGINS", Some("http://a.com, http://b.com")),
+                ("DATABASE_URL", Some("postgres://user:pass@host/db")),
+            ],
+            || {
+                let config = Config::from_env().unwrap();
+                assert_eq!(config.security.cors_origins, vec!["http://a.com", "http://b.com"]);
+            },
+        );
+    }
+
+    #[test]
+    fn test_validation_fails_on_invalid_rate_limit_window() {
+        let _tdir = TempConfigDir::new(&[("default.toml", FULL_DEFAULT_TOML)]);
+        temp_env::with_vars(
+            [
+                ("CMS_SECURITY_RATE_LIMIT_WINDOW", Some("0")),
+                ("DATABASE_URL", Some("postgres://user:pass@host/db")),
+            ],
+            || {
+                let result = Config::from_env();
+                assert!(result.is_err());
+                let err_msg = result.err().unwrap().to_string();
+                assert!(err_msg.contains("security.rate_limit_window must be greater than 0"));
+            },
+        );
+    }
 }
