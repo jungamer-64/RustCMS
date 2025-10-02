@@ -191,7 +191,7 @@ pub struct DeletedResponse {
 }
 
 /// バリデーションエラー
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[schema(example = json!({"field":"title","message":"must not be empty"}))]
 pub struct ValidationError {
     pub field: String,

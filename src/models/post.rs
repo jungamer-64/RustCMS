@@ -9,7 +9,7 @@ use validator::Validate;
 
 // Note: slug 検証用の正規表現は utils 側へ集約済み。ここでの個別定義は削除。
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub enum PostStatus {
     Draft,
     Published,

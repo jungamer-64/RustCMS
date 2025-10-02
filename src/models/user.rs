@@ -28,7 +28,7 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema, ValueEnum, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, ValueEnum, Default)]
 #[clap(rename_all = "kebab_case")]
 pub enum UserRole {
     SuperAdmin,
