@@ -16,7 +16,6 @@
 
 pub mod api_types;
 pub mod auth_response;
-pub mod auth_utils;
 pub mod bin_utils;
 pub mod cache_helpers;
 pub mod cache_key;

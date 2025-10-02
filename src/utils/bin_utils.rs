@@ -32,7 +32,7 @@ pub fn print_env_summary() {
     println!("BISCUIT_ROOT_KEY=base64_or_path_to_keydir");
 
     println!("\n✅ To run the CMS, use:");
-    println!("cargo run --bin cms-simple");
+    println!("cargo run --bin cms-server");
 }
 
 /// Render a health table from primitive components for CLI output.
