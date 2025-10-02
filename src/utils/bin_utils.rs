@@ -37,6 +37,7 @@ pub fn print_env_summary() {
 
 /// Render a health table from primitive components for CLI output.
 /// Public so binaries and tests can reuse the same rendering logic.
+#[must_use]
 pub fn render_health_table_components(
     overall_status: &str,
     db: (&str, f64, Option<&str>),
