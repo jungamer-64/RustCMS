@@ -33,6 +33,10 @@ required-features = ["database"]
 name = "cms-admin"
 path = "src/bin/admin.rs"
 
+[[bin]]
+name = "benchmark-analyzer"
+path = "src/bin/benchmark_analyzer.rs"
+
 [dependencies]
 rpassword = "7.3"
 comfy-table = "7.1"
