@@ -4,11 +4,11 @@ use cms_backend::openapi::ApiDoc;
 use utoipa::OpenApi; // bring openapi() into scope
 
 #[test]
-fn openapi_snapshot_default_features() {
+fn openapi_snapshot_unified_biscuit() {
     let doc = ApiDoc::openapi();
     let value = serde_json::to_value(&doc).expect("serialize openapi");
 
-    // Structural guard: ensure AuthSuccessResponse required fields present (feature dependent)
+    // Structural guard: ensure AuthSuccessResponse required fields present
     let auth_schema = value
         .pointer("/components/schemas/AuthSuccessResponse")
         .expect("AuthSuccessResponse schema present");
@@ -17,56 +17,23 @@ fn openapi_snapshot_default_features() {
         .and_then(|v| v.as_array())
         .expect("required array");
     let required_fields: Vec<&str> = required.iter().filter_map(|v| v.as_str()).collect();
+    
+    // Unified Biscuit authentication required fields
     for f in &["success", "tokens", "user"] {
         assert!(required_fields.contains(f), "missing required field {f}");
     }
-    if cfg!(feature = "auth-flat-fields") {
-        for f in &[
-            "access_token",
-            "refresh_token",
-            "biscuit_token",
-            "expires_in",
-            "session_id",
-            "token",
-        ] {
-            assert!(
-                required_fields.contains(f),
-                "missing flat required field {f}"
-            );
-        }
-    } else {
-        // Ensure flat fields not required
-        for f in &[
-            "access_token",
-            "refresh_token",
-            "biscuit_token",
-            "expires_in",
-            "session_id",
-            "token",
-        ] {
-            assert!(
-                !required_fields.contains(f),
-                "flat field {f} should be absent when feature disabled"
-            );
-        }
+    
+    // Ensure legacy flat fields are not present
+    for f in &["access_token", "refresh_token", "biscuit_token", "expires_in", "session_id", "token"] {
+        assert!(
+            !required_fields.contains(f),
+            "legacy flat field {f} should not be present in unified Biscuit authentication"
+        );
     }
 
-    // Legacy LoginResponse absence check
-    if cfg!(not(feature = "legacy-auth-flat")) {
-        assert!(value.pointer("/components/schemas/LoginResponse").is_none());
-    }
-}
-
-/// When the transitional feature `legacy-auth-flat` is enabled we expect the legacy `LoginResponse`
-/// schema to be present. This test only compiles under that feature.
-#[cfg(feature = "legacy-auth-flat")]
-#[test]
-fn openapi_snapshot_legacy_auth_flat_feature() {
-    let doc = ApiDoc::openapi();
-    let value = serde_json::to_value(&doc).expect("serialize openapi");
-    let has_login = value.pointer("/components/schemas/LoginResponse").is_some();
+    // Legacy LoginResponse should no longer be present
     assert!(
-        has_login,
-        "LoginResponse schema should be present when legacy-auth-flat feature is enabled"
+        value.pointer("/components/schemas/LoginResponse").is_none(),
+        "LoginResponse schema should not be present (legacy removed)"
     );
 }
