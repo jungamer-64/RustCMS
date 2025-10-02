@@ -140,6 +140,7 @@ impl AppError {
     ///
     /// Keeping the heavy match logic separate reduces the cognitive complexity of
     /// `into_response` and makes the mapping easier to unit test if desired.
+    #[allow(clippy::too_many_lines)] // Comprehensive error mapping match; splitting would reduce clarity
     fn classify_and_validation(&self) -> (StatusCode, String, Option<Vec<ValidationError>>) {
         match self {
             #[cfg(feature = "database")]
@@ -235,12 +236,12 @@ impl AppError {
             }
             Self::FileError { operation, path, .. } => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("File operation failed: {} on {}", operation, path),
+                format!("File operation failed: {operation} on {path}"),
                 None,
             ),
             Self::NetworkError { endpoint, .. } => (
                 StatusCode::BAD_GATEWAY,
-                format!("Network error communicating with: {}", endpoint),
+                format!("Network error communicating with: {endpoint}"),
                 None,
             ),
         }
