@@ -59,6 +59,8 @@ pub struct RegisterRequest {
         (status = 201, description = "User registered", body = crate::utils::auth_response::AuthSuccessResponse)
     )
 )]
+/// # Errors
+/// Returns an error if user creation or authentication fails.
 pub async fn register(
     State(state): State<AppState>,
     Json(request): Json<RegisterRequest>,
