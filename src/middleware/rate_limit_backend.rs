@@ -97,7 +97,8 @@ impl InMemoryRateLimiter {
                         continue;
                     }
                     let win = this.window;
-                    let _before_len = map.len(); // monitoring only
+                    #[cfg(feature = "monitoring")]
+                    let before_len = map.len(); // monitoring only
                     map.retain(|_, (_c, ts)| now.duration_since(*ts) <= win);
                     // If still over max_tracked (pathological), drop oldest excess
                     if map.len() > this.max_tracked {
@@ -110,7 +111,7 @@ impl InMemoryRateLimiter {
                     }
                     #[cfg(feature = "monitoring")]
                     {
-                        if _before_len != map.len() {
+                        if before_len != map.len() {
                             gauge!("api_key_rate_limit_tracked_keys").set(usize_to_f64(map.len()));
                         }
                     }
