@@ -1,0 +1,87 @@
+[
+  {
+    "id": "450e8400-e29b-41d4-a716-446655440001",
+    "username": "admin_user",
+    "email": "admin@example.com",
+    "password_hash": "$argon2id$v=19$m=19456,t=2,p=1$randomsalt123$hashedpassword123",
+    "role": "admin",
+    "is_active": true,
+    "created_at": "2025-01-01T00:00:00Z",
+    "updated_at": "2025-09-01T10:00:00Z",
+    "last_login": "2025-10-02T08:00:00Z",
+    "profile": {
+      "full_name": "Admin User",
+      "bio": "System administrator",
+      "avatar": "https://example.com/avatars/admin.jpg",
+      "website": "https://example.com"
+    }
+  },
+  {
+    "id": "450e8400-e29b-41d4-a716-446655440002",
+    "username": "editor_jane",
+    "email": "jane@example.com",
+    "password_hash": "$argon2id$v=19$m=19456,t=2,p=1$randomsalt456$hashedpassword456",
+    "role": "editor",
+    "is_active": true,
+    "created_at": "2025-02-15T10:00:00Z",
+    "updated_at": "2025-09-15T14:00:00Z",
+    "last_login": "2025-10-01T16:30:00Z",
+    "profile": {
+      "full_name": "Jane Editor",
+      "bio": "Content editor and writer",
+      "avatar": "https://example.com/avatars/jane.jpg",
+      "website": "https://jane-writes.com"
+    }
+  },
+  {
+    "id": "450e8400-e29b-41d4-a716-446655440003",
+    "username": "user_bob",
+    "email": "bob@example.com",
+    "password_hash": "$argon2id$v=19$m=19456,t=2,p=1$randomsalt789$hashedpassword789",
+    "role": "user",
+    "is_active": true,
+    "created_at": "2025-03-20T14:30:00Z",
+    "updated_at": "2025-09-20T11:00:00Z",
+    "last_login": "2025-09-30T09:15:00Z",
+    "profile": {
+      "full_name": "Bob User",
+      "bio": "Regular user",
+      "avatar": null,
+      "website": null
+    }
+  },
+  {
+    "id": "450e8400-e29b-41d4-a716-446655440004",
+    "username": "inactive_user",
+    "email": "inactive@example.com",
+    "password_hash": "$argon2id$v=19$m=19456,t=2,p=1$randomsalt999$hashedpassword999",
+    "role": "user",
+    "is_active": false,
+    "created_at": "2025-04-10T08:00:00Z",
+    "updated_at": "2025-05-01T12:00:00Z",
+    "last_login": "2025-05-01T12:00:00Z",
+    "profile": {
+      "full_name": "Inactive User",
+      "bio": "Deactivated account",
+      "avatar": null,
+      "website": null
+    }
+  },
+  {
+    "id": "450e8400-e29b-41d4-a716-446655440005",
+    "username": "test_user",
+    "email": "test@example.com",
+    "password_hash": "$argon2id$v=19$m=19456,t=2,p=1$testsalt111$testpassword111",
+    "role": "user",
+    "is_active": true,
+    "created_at": "2025-08-01T10:00:00Z",
+    "updated_at": "2025-08-01T10:00:00Z",
+    "last_login": null,
+    "profile": {
+      "full_name": "Test User",
+      "bio": "Used for automated testing",
+      "avatar": null,
+      "website": null
+    }
+  }
+]

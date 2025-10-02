@@ -1,0 +1,56 @@
+# Test Configuration File
+# This configuration is used for automated testing
+
+[server]
+host = "127.0.0.1"
+port = 8080
+workers = 2
+
+[database]
+url = "postgres://test_user:test_password@localhost:5432/cms_test"
+pool_size = 5
+connection_timeout = 5
+
+[redis]
+url = "redis://localhost:6379/1"
+pool_size = 10
+connection_timeout = 3
+
+[auth]
+root_key_path = "./test_keys/root.key"
+public_key_path = "./test_keys/public.key"
+token_expiry_seconds = 3600
+refresh_token_expiry_seconds = 86400
+
+[search]
+index_path = "./test_search_index"
+writer_memory_mb = 50
+
+[cache]
+ttl_seconds = 300
+max_entries = 1000
+
+[upload]
+directory = "./test_uploads"
+max_file_size_mb = 5
+allowed_extensions = ["jpg", "jpeg", "png", "gif", "webp", "pdf"]
+
+[logging]
+level = "debug"
+format = "json"
+file = "./logs/test.log"
+
+[features]
+enable_cache = true
+enable_search = true
+enable_metrics = false
+enable_tracing = false
+
+[rate_limit]
+requests_per_minute = 1000
+burst = 200
+
+[security]
+cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+csrf_protection = true
+secure_cookies = false  # Disabled for testing

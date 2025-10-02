@@ -1,0 +1,102 @@
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440001",
+    "title": "Getting Started with RustCMS",
+    "slug": "getting-started-rustcms",
+    "content": "# Getting Started with RustCMS\n\nWelcome to RustCMS, a high-performance content management system built with Rust.\n\n## Installation\n\n```bash\ncargo install cms-backend\n```\n\n## Configuration\n\nCreate a `config/default.toml` file with your database settings.",
+    "excerpt": "Learn how to get started with RustCMS",
+    "author_id": "450e8400-e29b-41d4-a716-446655440001",
+    "category_id": "350e8400-e29b-41d4-a716-446655440001",
+    "status": "published",
+    "visibility": "public",
+    "featured_image": "https://example.com/images/rustcms-hero.jpg",
+    "tags": ["rust", "cms", "tutorial"],
+    "metadata": {
+      "reading_time": 5,
+      "difficulty": "beginner"
+    },
+    "published_at": "2025-09-01T10:00:00Z",
+    "created_at": "2025-08-25T14:30:00Z",
+    "updated_at": "2025-09-01T10:00:00Z"
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440002",
+    "title": "Advanced Authentication with Biscuit Tokens",
+    "slug": "advanced-authentication-biscuit",
+    "content": "# Advanced Authentication\n\nBiscuit tokens provide a secure and flexible authentication mechanism.\n\n## Features\n\n- Attenuable tokens\n- Fine-grained permissions\n- Cryptographic verification",
+    "excerpt": "Deep dive into Biscuit token authentication",
+    "author_id": "450e8400-e29b-41d4-a716-446655440002",
+    "category_id": "350e8400-e29b-41d4-a716-446655440002",
+    "status": "published",
+    "visibility": "public",
+    "featured_image": "https://example.com/images/biscuit-auth.jpg",
+    "tags": ["security", "authentication", "biscuit"],
+    "metadata": {
+      "reading_time": 10,
+      "difficulty": "advanced"
+    },
+    "published_at": "2025-09-15T14:00:00Z",
+    "created_at": "2025-09-10T09:00:00Z",
+    "updated_at": "2025-09-15T14:00:00Z"
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440003",
+    "title": "Performance Optimization Techniques",
+    "slug": "performance-optimization",
+    "content": "# Performance Optimization\n\nLearn how to optimize your CMS for maximum performance.\n\n## Caching Strategies\n\n- Redis caching\n- In-memory caching\n- CDN integration",
+    "excerpt": "Optimize your CMS for peak performance",
+    "author_id": "450e8400-e29b-41d4-a716-446655440001",
+    "category_id": "350e8400-e29b-41d4-a716-446655440003",
+    "status": "published",
+    "visibility": "public",
+    "featured_image": null,
+    "tags": ["performance", "optimization", "caching"],
+    "metadata": {
+      "reading_time": 8,
+      "difficulty": "intermediate"
+    },
+    "published_at": "2025-09-20T11:30:00Z",
+    "created_at": "2025-09-18T16:00:00Z",
+    "updated_at": "2025-09-20T11:30:00Z"
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440004",
+    "title": "Draft: Upcoming Features in v3.1",
+    "slug": "upcoming-features-v31",
+    "content": "# Upcoming Features\n\n## Planned for v3.1\n\n- GraphQL API\n- Real-time collaboration\n- Enhanced search capabilities",
+    "excerpt": "Preview of exciting features coming in v3.1",
+    "author_id": "450e8400-e29b-41d4-a716-446655440002",
+    "category_id": "350e8400-e29b-41d4-a716-446655440001",
+    "status": "draft",
+    "visibility": "private",
+    "featured_image": null,
+    "tags": ["roadmap", "features"],
+    "metadata": {
+      "reading_time": 3,
+      "difficulty": "beginner"
+    },
+    "published_at": null,
+    "created_at": "2025-09-28T10:00:00Z",
+    "updated_at": "2025-09-30T15:00:00Z"
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440005",
+    "title": "Search Engine Integration Guide",
+    "slug": "search-engine-integration",
+    "content": "# Search Integration\n\nIntegrate Tantivy full-text search into your application.\n\n## Setup\n\n```rust\nlet search_engine = SearchEngine::new(\"./search_index\")?;\n```",
+    "excerpt": "Complete guide to search engine integration",
+    "author_id": "450e8400-e29b-41d4-a716-446655440001",
+    "category_id": "350e8400-e29b-41d4-a716-446655440001",
+    "status": "published",
+    "visibility": "public",
+    "featured_image": "https://example.com/images/search-guide.jpg",
+    "tags": ["search", "tantivy", "tutorial"],
+    "metadata": {
+      "reading_time": 12,
+      "difficulty": "intermediate"
+    },
+    "published_at": "2025-09-25T09:00:00Z",
+    "created_at": "2025-09-20T14:00:00Z",
+    "updated_at": "2025-09-25T09:00:00Z"
+  }
+]
