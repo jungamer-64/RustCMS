@@ -129,7 +129,6 @@ impl AuthService {
     ///
     /// # Errors
     /// - 資格情報が不正 / ユーザが存在しない / パスワードハッシュ検証失敗時。
-    #[allow(clippy::cognitive_complexity)]
     pub async fn authenticate_user(&self, request: LoginRequest) -> Result<User> {
         info!(target: "auth", "login_attempt");
         let user = self
