@@ -72,55 +72,55 @@ pub enum TelemetryError {
     AlreadyInitialized,
 }
 
-impl Display for TelemetryError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl TelemetryError {
+    /// Get the error message string for this error variant
+    #[allow(clippy::too_many_lines)]
+    fn error_message(&self) -> String {
         match self {
             Self::InvalidLogFormat(value) => {
-                write!(f, "Invalid log format string: '{value}'")
+                format!("Invalid log format string: '{value}'")
             }
             Self::InvalidEnvFilter(value) => {
-                write!(f, "Invalid RUST_LOG filter: '{value}'")
+                format!("Invalid RUST_LOG filter: '{value}'")
             }
             Self::InvalidLogOutput(value) => {
-                write!(
-                    f,
+                format!(
                     "Invalid LOG_OUTPUT value: '{value}'. Expected formats include 'stdout', 'stderr', or 'file:/path/to/log [rotation=<daily|hourly|never>]'"
                 )
             }
             Self::MissingLogOutputPath => {
-                write!(
-                    f,
-                    "LOG_OUTPUT=file:<path> requires a file path, e.g. 'file:/var/log/app.log'"
-                )
+                "LOG_OUTPUT=file:<path> requires a file path, e.g. 'file:/var/log/app.log'".to_string()
             }
             Self::DirectoryPathProvided(path) => {
-                write!(
-                    f,
-                    "LOG_OUTPUT path '{path}' must include a file name, e.g. 'file:{path}app.log'"
-                )
+                format!("LOG_OUTPUT path '{path}' must include a file name, e.g. 'file:{path}app.log'")
             }
             Self::UnknownLogRotationToken(token) => {
-                write!(
-                    f,
+                format!(
                     "Unknown log rotation token '{token}'; expected one of 'daily', 'hourly', or 'never'",
                 )
             }
             Self::TooManyLogOutputTokens => {
-                write!(f, "Too many tokens supplied to LOG_OUTPUT")
+                "Too many tokens supplied to LOG_OUTPUT".to_string()
             }
             Self::UnsupportedLogScheme(scheme) => {
-                write!(f, "Unsupported LOG_OUTPUT scheme '{scheme}'")
+                format!("Unsupported LOG_OUTPUT scheme '{scheme}'")
             }
             Self::CreateDir { path, source } => {
-                write!(f, "Failed to create directory '{path}': {source}")
+                format!("Failed to create directory '{path}': {source}")
             }
             Self::Init(err) => {
-                write!(f, "Failed to initialize tracing subscriber: {err}")
+                format!("Failed to initialize tracing subscriber: {err}")
             }
             Self::AlreadyInitialized => {
-                write!(f, "Telemetry has already been initialized for this process")
+                "Telemetry has already been initialized for this process".to_string()
             }
         }
+    }
+}
+
+impl Display for TelemetryError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.error_message())
     }
 }
 
@@ -280,6 +280,22 @@ fn install_telemetry(verbose: bool) -> Result<TelemetryState, TelemetryError> {
 
     let (writer, guards) = setup_writer(&log_output)?;
 
+    initialize_subscriber(env_filter, log_format, &log_output, writer)?;
+
+    #[cfg(feature = "monitoring")]
+    init_metrics();
+
+    Ok(TelemetryState::new(guards, log_output))
+}
+
+/// Initialize the tracing subscriber with the given configuration
+#[allow(clippy::needless_pass_by_value)] // EnvFilter and LogFormat need to be owned for with_env_filter
+fn initialize_subscriber(
+    env_filter: EnvFilter,
+    log_format: LogFormat,
+    log_output: &LogOutput,
+    writer: LogWriter,
+) -> Result<(), TelemetryError> {
     let make_builder = |writer: LogWriter| {
         tracing_subscriber::fmt()
             .with_env_filter(env_filter.clone())
@@ -300,16 +316,7 @@ fn install_telemetry(verbose: bool) -> Result<TelemetryState, TelemetryError> {
                 .try_init()?;
         }
         LogFormat::Text => {
-            let use_ansi = match &log_output {
-                LogOutput::Stdout => {
-                    io::stdout().is_terminal() && env::var_os("NO_COLOR").is_none()
-                }
-                LogOutput::Stderr => {
-                    io::stderr().is_terminal() && env::var_os("NO_COLOR").is_none()
-                }
-                LogOutput::File(_, _) => false,
-            };
-
+            let use_ansi = should_use_ansi(log_output);
             make_builder(writer)
                 .compact()
                 .with_ansi(use_ansi)
@@ -318,10 +325,16 @@ fn install_telemetry(verbose: bool) -> Result<TelemetryState, TelemetryError> {
         }
     }
 
-    #[cfg(feature = "monitoring")]
-    init_metrics();
+    Ok(())
+}
 
-    Ok(TelemetryState::new(guards, log_output))
+/// Determine if ANSI colors should be used based on output type
+fn should_use_ansi(log_output: &LogOutput) -> bool {
+    match log_output {
+        LogOutput::Stdout => io::stdout().is_terminal() && env::var_os("NO_COLOR").is_none(),
+        LogOutput::Stderr => io::stderr().is_terminal() && env::var_os("NO_COLOR").is_none(),
+        LogOutput::File(_, _) => false,
+    }
 }
 
 fn setup_writer(
@@ -439,57 +452,79 @@ impl FromStr for LogOutput {
         if s.eq_ignore_ascii_case("stdout") {
             return Ok(Self::Stdout);
         }
-
         if s.eq_ignore_ascii_case("stderr") {
             return Ok(Self::Stderr);
         }
 
-        if let Some((scheme, remainder)) = s.split_once(':') {
-            if !scheme.eq_ignore_ascii_case("file") {
-                return Err(TelemetryError::UnsupportedLogScheme(scheme.to_string()));
-            }
+        Self::parse_file_output(s)
+    }
+}
 
-            let rest = remainder.trim();
-            if rest.is_empty() {
-                return Err(TelemetryError::MissingLogOutputPath);
-            }
+impl LogOutput {
+    /// Parse file output configuration from string
+    fn parse_file_output(s: &str) -> Result<Self, TelemetryError> {
+        let (scheme, remainder) = s
+            .split_once(':')
+            .ok_or_else(|| TelemetryError::InvalidLogOutput(s.to_string()))?;
 
-            let mut parts = rest.split_whitespace();
-            let path_str = parts.next().unwrap();
-            if path_str.ends_with('/') {
-                return Err(TelemetryError::DirectoryPathProvided(path_str.to_string()));
-            }
-
-            let path = PathBuf::from(path_str);
-            if path.file_name().is_none() {
-                return Err(TelemetryError::DirectoryPathProvided(path_str.to_string()));
-            }
-
-            let mut rotation = Rotation::Never;
-            let mut saw_positional_rotation = false;
-
-            for token in parts {
-                if let Some((key, value)) = token.split_once('=') {
-                    if key.eq_ignore_ascii_case("rotation") {
-                        rotation = parse_rotation_value(value)?;
-                    } else {
-                        eprintln!(
-                            "WARN: Unsupported LOG_OUTPUT option '{key}'; ignoring value '{value}'"
-                        );
-                    }
-                } else {
-                    if saw_positional_rotation {
-                        return Err(TelemetryError::TooManyLogOutputTokens);
-                    }
-                    rotation = parse_rotation_value(token)?;
-                    saw_positional_rotation = true;
-                }
-            }
-
-            return Ok(Self::File(path, rotation));
+        if !scheme.eq_ignore_ascii_case("file") {
+            return Err(TelemetryError::UnsupportedLogScheme(scheme.to_string()));
         }
 
-        Err(TelemetryError::InvalidLogOutput(s.to_string()))
+        let rest = remainder.trim();
+        if rest.is_empty() {
+            return Err(TelemetryError::MissingLogOutputPath);
+        }
+
+        let mut parts = rest.split_whitespace();
+        let path = Self::parse_log_path(&mut parts)?;
+        let rotation = Self::parse_rotation_options(&mut parts)?;
+
+        Ok(Self::File(path, rotation))
+    }
+
+    /// Parse and validate log file path
+    fn parse_log_path(parts: &mut std::str::SplitWhitespace) -> Result<PathBuf, TelemetryError> {
+        let path_str = parts.next().expect("path should exist after validation");
+        
+        if path_str.ends_with('/') {
+            return Err(TelemetryError::DirectoryPathProvided(path_str.to_string()));
+        }
+
+        let path = PathBuf::from(path_str);
+        if path.file_name().is_none() {
+            return Err(TelemetryError::DirectoryPathProvided(path_str.to_string()));
+        }
+
+        Ok(path)
+    }
+
+    /// Parse rotation options from remaining tokens
+    fn parse_rotation_options(
+        parts: &mut std::str::SplitWhitespace,
+    ) -> Result<Rotation, TelemetryError> {
+        let mut rotation = Rotation::Never;
+        let mut saw_positional_rotation = false;
+
+        for token in parts {
+            if let Some((key, value)) = token.split_once('=') {
+                if key.eq_ignore_ascii_case("rotation") {
+                    rotation = parse_rotation_value(value)?;
+                } else {
+                    eprintln!(
+                        "WARN: Unsupported LOG_OUTPUT option '{key}'; ignoring value '{value}'"
+                    );
+                }
+            } else {
+                if saw_positional_rotation {
+                    return Err(TelemetryError::TooManyLogOutputTokens);
+                }
+                rotation = parse_rotation_value(token)?;
+                saw_positional_rotation = true;
+            }
+        }
+
+        Ok(rotation)
     }
 }
 
@@ -891,7 +926,7 @@ mod tests {
     #[serial]
     fn test_init_telemetry_invalid_log_output_bubbles_error() {
         with_var("LOG_OUTPUT", Some("file:"), || {
-            if let Some(_) = TELEMETRY_STATE.get() {
+            if TELEMETRY_STATE.get().is_some() {
                 init_telemetry(false).expect("should reuse existing telemetry");
             } else {
                 let err = init_telemetry(false).expect_err("invalid output should error");
