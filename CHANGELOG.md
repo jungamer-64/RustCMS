@@ -2,7 +2,7 @@
 
 ## 3.0.0 (Complete Biscuit Migration)
 
-### Breaking Changes
+### Breaking Changes (v3.0.0)
 
 - **Removed all legacy authentication features**: Complete migration to Biscuit-only authentication
 - **Removed feature flags**: `legacy-auth-flat`, `legacy-admin-token`, `auth-flat-fields`
@@ -12,7 +12,7 @@
   - Use `AUTH_ACCESS_TOKEN_TTL_SECS` and `AUTH_REFRESH_TOKEN_TTL_SECS` instead
 - **Removed admin token authentication**: All admin operations now use Biscuit authentication with SuperAdmin role
 
-### Changed
+### Changed (v3.0.0)
 
 - `AuthSuccessResponse` now only contains `success`, `tokens`, and `user` fields
 - All authentication uses unified Biscuit token system exclusively
@@ -47,26 +47,27 @@ For applications upgrading from 2.x:
 
 ## 2.0.0 (Biscuit Unification)
 
-### Breaking Changes
+### Breaking Changes (v2.0.0)
 
 - Removed all JWT-based authentication logic; Biscuit tokens are now the sole auth mechanism.
 - Eliminated `AuthError::Jwt` variant.
 - Removed legacy `simple-cms` example project.
 
-### Added
+### Added (v2.0.0)
 
 - Configurable `access_token_ttl_secs` and `refresh_token_ttl_secs` in `AuthConfig`.
 - Biscuit access & refresh token rotation with in-memory session map (versioned refresh tokens).
 - New test: `biscuit_token_flow_tests` validating refresh rotation & old token invalidation.
 
-### Changed
+### Changed (v2.0.0)
 
 - `AuthService::new` now derives keys from config/env (Biscuit only) and persists/generates as needed.
 - Updated documentation (`README.md`, `README_PRODUCTION.md`) to reflect Biscuit-only auth.
 
-### Removed
+### Removed (v2.0.0)
 
 - All JWT environment variables, config fields, and code paths.
+
 
 ### Internal
 
