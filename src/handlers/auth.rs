@@ -8,8 +8,7 @@
 //! - 入力: `axum` によって JSON ボディが `serde` で検証/デシリアライズされる。
 //! - 出力: 成功時は `ApiOk(T)` ラッパで JSON を返す。エラー時は `AppError` に集約され HTTP ステータスへ変換。
 //! - セキュリティ: 認証済みが必要なエンドポイントは `BearerAuth` 等のセキュリティ定義と、実際のミドルウェア検証を前提にする。
-//! - トークン: 成功時の認証系レスポンスは「統一トークン表現」を返す（`tokens.access_token` など）。
-//!   互換性のため `feature = "legacy-auth-flat"` 有効時のみ旧フラットフィールドを併記する。
+//! - トークン: 成功時の認証系レスポンスは「統一トークン表現」(`AuthSuccessResponse`) を返す（`tokens.access_token` など）。
 //!
 //! トークンのライフサイクル概要:
 //! - `login`/`register` でアクセストークン・リフレッシュトークンを発行。
@@ -17,8 +16,7 @@
 //! - `logout` はトークン失効のためのフック（実装によりブラックリストやセッション無効化を行う）。
 //!
 //! フィーチャーフラグ:
-//! - `legacy-auth-flat`: 旧 `LoginResponse`/フラットなトークンフィールドの互換提供。
-//! - `monitoring`: レガシー経路など特定イベントのカウンタを発火。
+//! - `monitoring`: 特定イベントのカウンタを発火。
 //! - `search`: 登録時にユーザーを検索インデックスに反映（失敗しても本体処理は継続）。
 
 use axum::{
@@ -26,19 +24,10 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
-#[cfg(all(feature = "legacy-auth-flat", feature = "monitoring"))]
-use metrics::counter;
 use serde::Deserialize;
-#[cfg(feature = "legacy-auth-flat")]
-use serde::Serialize;
 use serde_json::json;
 use utoipa::ToSchema;
 
-#[cfg(feature = "legacy-auth-flat")]
-use crate::utils::auth_response::AuthSuccessResponse;
-
-#[cfg(feature = "legacy-auth-flat")]
-use crate::utils::common_types::UserInfo;
 use crate::utils::response_ext::ApiOk;
 use crate::{
     AppState, Result,
@@ -56,97 +45,18 @@ pub struct RegisterRequest {
     pub last_name: Option<String>,
 }
 
-#[cfg(feature = "legacy-auth-flat")]
-/// 旧 `LoginResponse` 型 (feature = `legacy-auth-flat` 有効時のみ公開) - 新規コードは `AuthSuccessResponse` を使用してください
-#[allow(deprecated)]
-#[derive(Debug, Serialize, ToSchema)]
-pub struct LoginResponse {
-    pub success: bool,
-    pub access_token: String,
-    pub refresh_token: String,
-    pub biscuit_token: String,
-    pub user: UserInfo,
-    pub expires_in: i64,
-    pub session_id: String,
-    pub token: String,
-}
-
-#[cfg(feature = "legacy-auth-flat")]
-#[allow(deprecated)]
-impl From<AuthSuccessResponse> for LoginResponse {
-    fn from(a: AuthSuccessResponse) -> Self {
-        // Emit one-time runtime warning when legacy LoginResponse mapping is exercised.
-        #[cfg(feature = "legacy-auth-flat")]
-        {
-            use crate::utils::deprecation::warn_once;
-            warn_once(
-                "legacy_login_response",
-                "LoginResponse conversion invoked; migrate consumers to AuthSuccessResponse (flattened fields removed in 3.0.0).",
-            );
-            // Metrics: track remaining legacy LoginResponse conversions
-            #[cfg(feature = "monitoring")]
-            counter!("legacy_login_response_conversion_total").increment(1);
-        }
-        // Avoid referencing deprecated flattened fields directly; derive from unified tokens.
-        let AuthSuccessResponse {
-            success,
-            tokens,
-            user,
-            ..
-        } = a;
-        // access_token は token と重複して返すため、一度だけ clone/コピーを行う
-        let access_token = tokens.access_token;
-        Self {
-            success,
-            token: access_token.clone(),
-            access_token,
-            refresh_token: tokens.refresh_token,
-            biscuit_token: tokens.biscuit_token,
-            user,
-            expires_in: tokens.expires_in,
-            session_id: tokens.session_id,
-        }
-    }
-}
-
 /// Register a new user
 /// 新規ユーザーを登録します。
-///
+/// - 認証ハンドラ: Biscuit認証専用
 /// - デフォルトのロールは `Subscriber`。
 /// - 必要に応じてメール検証や追加プロファイル設定は上位層で実施してください。
-///
-/// # Errors
-/// - 入力の検証に失敗した場合。
-/// - 既存ユーザーとの一意制約に違反した場合。
-/// - 内部エラーが発生した場合。
 #[utoipa::path(
     post,
     path = "/api/v1/auth/register",
     tag = "Auth",
     request_body = RegisterRequest,
     responses(
-        (status = 201, description = "User registered", body = crate::utils::auth_response::AuthSuccessResponse,
-            examples((
-                "Registered" = (
-                    summary = "登録成功 (unified tokens; flat legacy fields may appear when feature auth-flat-fields is enabled)",
-                    value = json!({
-                        "success": true,
-                        "tokens": {
-                            "access_token": "ACCESS_TOKEN_SAMPLE",
-                            "refresh_token": "REFRESH_TOKEN_SAMPLE",
-                            "biscuit_token": "BISCUIT_TOKEN_SAMPLE",
-                            "expires_in": 3600,
-                            "session_id": "sess_123"
-                        },
-                        "user": {"id": "1d2e3f40-1111-2222-3333-444455556666", "username": "alice", "email": "alice@example.com", "role": "subscriber"}
-                        // NOTE: When feature auth-flat-fields is ON the response also repeats
-                        // access_token / refresh_token / biscuit_token / expires_in / session_id / token at top-level (deprecated)
-                    })
-                )
-            ))
-        ),
-        (status = 400, description = "Validation error", body = crate::utils::api_types::ApiResponse<serde_json::Value>),
-        (status = 500, description = "Server error")
+        (status = 201, description = "User registered", body = crate::utils::auth_response::AuthSuccessResponse)
     )
 )]
 pub async fn register(
@@ -196,7 +106,7 @@ pub async fn register(
         (status = 200, description = "Login success", body = crate::utils::auth_response::AuthSuccessResponse,
             examples((
                 "LoggedIn" = (
-                    summary = "ログイン成功 (unified tokens; flat legacy fields may appear when feature auth-flat-fields is enabled)",
+                    summary = "ログイン成功 (unified Biscuit authentication)",
                     value = json!({
                         "success": true,
                         "tokens": {
@@ -207,7 +117,6 @@ pub async fn register(
                             "session_id": "sess_123"
                         },
                         "user": {"id": "1d2e3f40-1111-2222-3333-444455556666", "username": "alice", "email": "alice@example.com", "role": "subscriber"}
-                        // NOTE: When feature auth-flat-fields is ON the response also repeats deprecated flat fields
                     })
                 )
             ))

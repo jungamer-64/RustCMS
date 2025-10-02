@@ -175,23 +175,20 @@ pub async fn openapi_json() -> impl IntoResponse {
             .entry("securitySchemes")
             .or_insert_with(|| json!({}));
         if let Some(map) = security_schemes.as_object_mut() {
-            map.entry("BearerAuth").or_insert(json!({
+            // Biscuit 認証のみをサポート (Bearer スキームでも内部的には Biscuit トークン)
+            map.entry("BiscuitAuth").or_insert(json!({
                 "type": "http",
                 "scheme": "bearer",
-                "bearerFormat": "Biscuit"
+                "bearerFormat": "Biscuit",
+                "description": "Biscuit token authentication. Send as: Authorization: Bearer <biscuit-token> or Authorization: Biscuit <biscuit-token>. All authentication mechanisms are unified to use Biscuit tokens internally."
             }));
-            map.entry("BiscuitAuth").or_insert(json!({
-                "type": "apiKey",
-                "name": "Authorization",
-                "in": "header",
-                "description": "Send as: Authorization: Biscuit <base64-token>"
-            }));
-            // API Key ヘッダ (X-API-Key) 仕様も追加 (将来公開予定)
+            // API Key ヘッダ (X-API-Key) 仕様も追加
+            // 注: API Key認証も内部的にはBiscuit AuthContextに変換されます
             map.entry("ApiKeyHeader").or_insert(json!({
                 "type": "apiKey",
                 "name": "X-API-Key",
                 "in": "header",
-                "description": "API key authentication header"
+                "description": "API key authentication header. API keys are internally converted to Biscuit-based authentication contexts for unified security processing."
             }));
         }
 
@@ -221,11 +218,8 @@ pub async fn openapi_json() -> impl IntoResponse {
     .into_iter()
     .collect();
 
-    // 認証必須 (Bearer または Biscuit 任意) とする操作: public 以外の /api/v1/* で、logout/profile/reindex/users/posts など。
+    // 認証必須エンドポイントに Biscuit 認証を適用: public 以外の /api/v1/* で、logout/profile/reindex/users/posts など。
     if let Some(paths) = v.get_mut("paths").and_then(|p| p.as_object_mut()) {
-        // Biscuit のみ許可したいエンドポイント (method, path)
-        let biscuit_only: std::collections::HashSet<(&'static str, &'static str)> =
-            std::iter::once(("post", "/api/v1/search/reindex")).collect();
         for (path, item) in paths.iter_mut() {
             let Some(item_obj) = item.as_object_mut() else {
                 continue;
@@ -242,24 +236,13 @@ pub async fn openapi_json() -> impl IntoResponse {
                     if !path.starts_with("/api/v1/") {
                         continue;
                     }
-                    if biscuit_only.contains(&(method, path.as_str())) {
-                        // Biscuit のみ
-                        op.insert(
-                            "security".to_string(),
-                            serde_json::json!([
-                                {"BiscuitAuth": []}
-                            ]),
-                        );
-                    } else {
-                        // OR 条件 (Bearer または Biscuit)
-                        op.insert(
-                            "security".to_string(),
-                            serde_json::json!([
-                                {"BearerAuth": []},
-                                {"BiscuitAuth": []}
-                            ]),
-                        );
-                    }
+                    // 全ての保護エンドポイントで Biscuit 認証を使用
+                    op.insert(
+                        "security".to_string(),
+                        serde_json::json!([
+                            {"BiscuitAuth": []}
+                        ]),
+                    );
                 }
             }
         }
