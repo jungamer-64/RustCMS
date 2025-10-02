@@ -11,7 +11,7 @@ use std::fmt;
 use tracing::{debug, error};
 use validator::ValidationErrors;
 
-/// The application's unified error type.
+/// The application's unified error type with enhanced context information.
 #[derive(Debug)]
 pub enum AppError {
     #[cfg(feature = "database")]
@@ -41,6 +41,12 @@ pub enum AppError {
     Serde(serde_json::Error),
     #[cfg(feature = "search")]
     Tantivy(tantivy::TantivyError),
+    /// Generic parsing error with context
+    ParseError { message: String, context: String },
+    /// File operation error with path context
+    FileError { operation: String, path: String, source: std::io::Error },
+    /// Network error with endpoint context
+    NetworkError { endpoint: String, source: String },
 }
 
 //--- Trait Implementations ---//
@@ -77,6 +83,15 @@ impl fmt::Display for AppError {
             Self::Serde(err) => write!(f, "Serialization error: {err}"),
             #[cfg(feature = "search")]
             Self::Tantivy(err) => write!(f, "Tantivy search error: {err}"),
+            Self::ParseError { message, context } => {
+                write!(f, "Parse error: {message} (context: {context})")
+            }
+            Self::FileError { operation, path, source } => {
+                write!(f, "File error during {operation} on {path}: {source}")
+            }
+            Self::NetworkError { endpoint, source } => {
+                write!(f, "Network error at {endpoint}: {source}")
+            }
         }
     }
 }
@@ -94,6 +109,7 @@ impl std::error::Error for AppError {
             Self::Telemetry(err) => Some(err),
             #[cfg(feature = "search")]
             Self::Tantivy(err) => Some(err),
+            Self::FileError { source, .. } => Some(source),
             // Errors wrapping only a String or simple type don't have a source
             _ => None,
         }
@@ -214,6 +230,19 @@ impl AppError {
                 None,
             ),
             Self::NotImplemented(s) => (StatusCode::NOT_IMPLEMENTED, s.as_str().to_string(), None),
+            Self::ParseError { message, .. } => {
+                (StatusCode::BAD_REQUEST, message.clone(), None)
+            }
+            Self::FileError { operation, path, .. } => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("File operation failed: {} on {}", operation, path),
+                None,
+            ),
+            Self::NetworkError { endpoint, .. } => (
+                StatusCode::BAD_GATEWAY,
+                format!("Network error communicating with: {}", endpoint),
+                None,
+            ),
         }
     }
 }
@@ -315,6 +344,9 @@ impl AppError {
             Self::NotImplemented(_) => "not implemented",
             #[cfg(feature = "search")]
             Self::Tantivy(_) => "search backend error",
+            Self::ParseError { .. } => "parse error",
+            Self::FileError { .. } => "file operation error",
+            Self::NetworkError { .. } => "network error",
         }
     }
 }
