@@ -554,6 +554,57 @@ fn write_env_file(
 }
 
 /// Appends or updates environment file
+/// Creates a new .env file with biscuit keys
+fn create_new_env_file(
+    path: &Path,
+    priv_b64: &str,
+    pub_b64: &str,
+) -> std::io::Result<()> {
+    let mut f = fs::File::create(path)?;
+    writeln!(f, "# Generated biscuit keys")?;
+    writeln!(f, "BISCUIT_PRIVATE_KEY_B64={}", priv_b64)?;
+    writeln!(f, "BISCUIT_PUBLIC_KEY_B64={}", pub_b64)?;
+    Ok(())
+}
+
+/// Replaces existing biscuit keys in .env file
+fn replace_env_keys(
+    path: &Path,
+    content: &str,
+    priv_b64: &str,
+    pub_b64: &str,
+) -> std::io::Result<()> {
+    let filtered: Vec<_> = content
+        .lines()
+        .filter(|line| {
+            !line.starts_with("BISCUIT_PRIVATE_KEY_B64=")
+                && !line.starts_with("BISCUIT_PUBLIC_KEY_B64=")
+        })
+        .collect();
+
+    let mut f = fs::File::create(path)?;
+    for line in filtered {
+        writeln!(f, "{}", line)?;
+    }
+    writeln!(f, "BISCUIT_PRIVATE_KEY_B64={}", priv_b64)?;
+    writeln!(f, "BISCUIT_PUBLIC_KEY_B64={}", pub_b64)?;
+    Ok(())
+}
+
+/// Appends biscuit keys to existing .env file
+fn append_env_keys(
+    path: &Path,
+    priv_b64: &str,
+    pub_b64: &str,
+) -> std::io::Result<()> {
+    let mut f = OpenOptions::new().append(true).open(path)?;
+    writeln!(f, "\n# Generated biscuit keys")?;
+    writeln!(f, "BISCUIT_PRIVATE_KEY_B64={}", priv_b64)?;
+    writeln!(f, "BISCUIT_PUBLIC_KEY_B64={}", pub_b64)?;
+    Ok(())
+}
+
+/// Main function to append or update .env file with biscuit keys
 fn append_or_update_env(
     path: &Path,
     priv_b64: &str,
@@ -561,46 +612,24 @@ fn append_or_update_env(
     force: bool,
 ) -> std::io::Result<()> {
     if !path.exists() {
-        let mut f = fs::File::create(path)?;
-        writeln!(f, "# Generated biscuit keys")?;
-        writeln!(f, "BISCUIT_PRIVATE_KEY_B64={}", priv_b64)?;
-        writeln!(f, "BISCUIT_PUBLIC_KEY_B64={}", pub_b64)?;
-        return Ok(());
+        return create_new_env_file(path, priv_b64, pub_b64);
     }
 
     let content = fs::read_to_string(path)?;
-    if content.contains("BISCUIT_PRIVATE_KEY_B64=") || content.contains("BISCUIT_PUBLIC_KEY_B64=") {
+    let has_keys = content.contains("BISCUIT_PRIVATE_KEY_B64=") 
+        || content.contains("BISCUIT_PUBLIC_KEY_B64=");
+
+    if has_keys {
         if !force {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
                 format!("{} already contains biscuit keys", path.display()),
             ));
         }
-        
-        // Replace existing entries
-        let filtered: Vec<_> = content
-            .lines()
-            .filter(|line| {
-                !line.starts_with("BISCUIT_PRIVATE_KEY_B64=")
-                    && !line.starts_with("BISCUIT_PUBLIC_KEY_B64=")
-            })
-            .collect();
-
-        let mut f = fs::File::create(path)?;
-        for line in filtered {
-            writeln!(f, "{}", line)?;
-        }
-        writeln!(f, "BISCUIT_PRIVATE_KEY_B64={}", priv_b64)?;
-        writeln!(f, "BISCUIT_PUBLIC_KEY_B64={}", pub_b64)?;
+        replace_env_keys(path, &content, priv_b64, pub_b64)
     } else {
-        // Append new entries
-        let mut f = OpenOptions::new().append(true).open(path)?;
-        writeln!(f, "\n# Generated biscuit keys")?;
-        writeln!(f, "BISCUIT_PRIVATE_KEY_B64={}", priv_b64)?;
-        writeln!(f, "BISCUIT_PUBLIC_KEY_B64={}", pub_b64)?;
+        append_env_keys(path, priv_b64, pub_b64)
     }
-
-    Ok(())
 }
 
 /// Gets next version number
