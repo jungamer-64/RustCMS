@@ -7,7 +7,6 @@ if [ -z "${GITHUB_TOKEN:-}" ]; then
   exit 1
 fi
 
-ROOT="$(pwd)"
 WORKFLOWS=$(git ls-files .github/workflows/*.yml || true)
 if [ -z "$WORKFLOWS" ]; then
   echo "No workflow files found under .github/workflows"
@@ -106,14 +105,10 @@ for wf in $WORKFLOWS; do
 
     # perform in-file replacement and add comment preserving indentation
     # find lines like "    - uses: owner/repo@ref" and replace with comment + pinned uses
-    # escape only slash and ampersand for safe use in perl substitution
-    escaped_owner_repo_ref="$(printf '%s' "${owner_repo}@${ref}" | sed -e 's/[\/&]/\\&/g')"
-    escaped_owner_repo_sha="$(printf '%s' "${owner_repo}@${sha}" | sed -e 's/[\/&]/\\&/g')"
-
-      # insert comment line with same indentation before the uses line and replace ref
-      # We will rewrite the file safely: for each line, if it matches the exact uses pattern,
-      # print a comment line then the replaced uses line; otherwise print the line unchanged.
-      tmpfile="${wf}.tmp"
+    # insert comment line with same indentation before the uses line and replace ref
+    # We will rewrite the file safely: for each line, if it matches the exact uses pattern,
+    # print a comment line then the replaced uses line; otherwise print the line unchanged.
+    tmpfile="${wf}.tmp"
       awk -v target="${owner_repo}@${ref}" -v replacement="${owner_repo}@${sha}" '
         { if (index($0, "uses:") && index($0, target)) {
             match($0, /^([ \t]*)-[ \t]*uses:[ \t]*/, m);
