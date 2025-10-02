@@ -82,8 +82,8 @@ fn cache_key_validation() {
     let valid_keys = vec!["user:123", "post:456", "session:abc"];
 
     for key in valid_keys {
-        assert!(key.contains(':'), "Cache key should contain separator: {}", key);
-        assert!(!key.contains(' '), "Cache key should not contain spaces: {}", key);
+        assert!(key.contains(':'), "Cache key should contain separator: {key}");
+        assert!(!key.contains(' '), "Cache key should not contain spaces: {key}");
         assert!(!key.is_empty(), "Cache key should not be empty");
     }
 }
