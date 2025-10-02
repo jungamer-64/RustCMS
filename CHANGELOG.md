@@ -1,5 +1,38 @@
 # CHANGELOG
 
+## 3.0.0 (Complete Biscuit Migration)
+
+### Breaking Changes
+
+- **Removed all legacy authentication features**: Complete migration to Biscuit-only authentication
+- **Removed feature flags**: `legacy-auth-flat`, `legacy-admin-token`, `auth-flat-fields`
+- **Removed flattened auth response fields**: `access_token`, `refresh_token`, `biscuit_token`, `expires_in`, `session_id`, `token`
+  - Use `response.tokens.*` instead (e.g., `response.tokens.access_token`)
+- **Removed legacy environment variables**: `ACCESS_TOKEN_TTL_SECS`, `REFRESH_TOKEN_TTL_SECS`
+  - Use `AUTH_ACCESS_TOKEN_TTL_SECS` and `AUTH_REFRESH_TOKEN_TTL_SECS` instead
+- **Removed admin token authentication**: All admin operations now use Biscuit authentication with SuperAdmin role
+
+### Changed
+
+- `AuthSuccessResponse` now only contains `success`, `tokens`, and `user` fields
+- All authentication uses unified Biscuit token system exclusively
+- Updated OpenAPI documentation to reflect Biscuit-only authentication
+
+### Migration Guide
+
+For applications upgrading from 2.x:
+
+1. Update all API response handling to use `response.tokens.*` instead of flat fields
+2. Replace admin token authentication with Biscuit tokens + SuperAdmin role
+3. Update environment variables to use new `AUTH_*` prefixed names
+4. Regenerate API client SDKs from updated OpenAPI specification
+
+### Improvements
+
+- Simplified authentication codebase with single unified system
+- Improved security through consistent Biscuit-based permissions
+- Reduced technical debt by removing deprecated code paths
+
 ## Unreleased
 
 - Add session rotation test for Biscuit tokens (access/refresh) (#feature/gen-biscuit-backups)
@@ -11,43 +44,6 @@
 - Added generic trait `GenericRateLimiter` and `RateLimitDecision` enum; implemented for IP limiter and API key failure limiter via adapter.
 - Refactored API key middleware to use unified trait adapter (`ApiKeyFailureLimiterAdapter`).
 - Added tests `rate_limiter_tests` for fixed window + adapter behavior.
-
-### Planned (Breaking Change Notice for 3.0.0)
-
-The following items are scheduled for removal in the next major release (3.0.0). They remain available in 2.x with deprecation warnings to provide a clear migration window:
-
-- Cargo feature `legacy-auth-flat` (will be removed; use nested `tokens` object only)
-- Flattened auth response fields: `access_token`, `refresh_token`, `biscuit_token`, `expires_in`, `session_id`, `token`
-- Legacy `LoginResponse` schema (currently gated behind `legacy-auth-flat`)
-
-Migration Guidance (repeat from docs for visibility):
-
-1. Replace any direct `response.access_token` style references with `response.tokens.access_token`
-2. Remove reliance on `token` alias
-3. Regenerate client SDKs after upgrading; stale cached OpenAPI artifacts may retain removed fields
-
-Risk Mitigation:
-
-- Early notice (this entry + `docs/AUTH_MIGRATION_V2.md`)
-- Warnings at compile-time via `#[deprecated]` attributes
-- CI recommendation: add a job that builds with `--no-default-features --features auth,database` to ensure no accidental flat-field dependencies linger
-
-Tracking Reference: see `docs/AUTH_MIGRATION_V2.md` Phase 4 plan and `deduplicated_logic_report.csv` (`phase4_plan_doc`).
-
-### Deprecations (Active in 2.x)
-
-These items are deprecated and will be removed in 3.0.0:
-
-- Flattened auth response fields (`access_token`, `refresh_token`, `biscuit_token`, `expires_in`, `session_id`, `token`) – use `response.tokens.*`
-- `LoginResponse` schema (available only when `legacy-auth-flat` feature is enabled)
-- Cargo feature `legacy-auth-flat` itself (migration aid only)
-
-Monitoring Guidance:
-
-- Run: `grep -R "\.access_token" -n src/ | grep -v auth_response.rs` to detect lingering direct field usage
-- Consider adding a non-fatal CI job that reports count of deprecated field accesses outside their defining module
-
-Removal Checklist lives in: `docs/AUTH_MIGRATION_V2.md` (Phase 4)
 
 ## 2.0.0 (Biscuit Unification)
 
