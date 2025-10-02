@@ -28,11 +28,14 @@ pub struct RequirePermissionLayer {
 
 impl RequirePermissionLayer {
     /// Creates a new layer that requires one of the given permissions.
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)] // Vec<String> parameter prevents const fn
     pub fn new(permissions: Vec<String>) -> Self {
         Self { permissions }
     }
 
     /// Creates a new layer that requires a single permission.
+    #[must_use]
     pub fn one(permission: &str) -> Self {
         Self {
             permissions: vec![permission.to_string()],
