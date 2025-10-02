@@ -326,7 +326,10 @@ impl Database {
     /// Best-effort close for database pool. Currently this is synchronous and
     /// simply drops the inner pool reference; provided for API symmetry and
     /// graceful shutdown hooks.
-    #[allow(dead_code)]
+    ///
+    /// # Errors
+    /// Currently never returns an error, but the signature allows for future expansion.
+    #[allow(dead_code, clippy::unused_async)]
     pub async fn close(&self) -> Result<()> {
         // Dropping Arc clones will close pool when last reference is gone. If
         // specific cleanup is needed, implement here.
