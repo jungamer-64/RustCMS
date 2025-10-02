@@ -1,6 +1,6 @@
 //! Basic Authentication Example
 //!
-//! This is a conceptual example showing the authentication flow in RustCMS.
+//! This is a conceptual example showing the authentication flow in `RustCMS`.
 //! For actual implementation, see the test files.
 
 fn main() {
