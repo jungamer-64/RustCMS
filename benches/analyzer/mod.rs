@@ -308,7 +308,7 @@ impl ReportGenerator {
                     comp.change_percent
                 ));
             }
-            report.push_str("\n");
+            report.push('\n');
         }
 
         // Improvements section
@@ -330,7 +330,7 @@ impl ReportGenerator {
                     comp.change_percent
                 ));
             }
-            report.push_str("\n");
+            report.push('\n');
         }
 
         // All comparisons
