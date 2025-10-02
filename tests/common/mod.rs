@@ -33,7 +33,7 @@ pub fn setup() {
                 // is visible in CI logs even if a tracing subscriber wasn't
                 // installed.
                 tracing::warn!(error = %e, "init_telemetry failed for tests");
-                eprintln!("init_telemetry failed for tests: {}", e);
+                eprintln!("init_telemetry failed for tests: {e}");
             }
         }
     });
@@ -52,7 +52,7 @@ use uuid::Uuid;
 const DUMMY_HASH: &str = "$argon2id$v=19$m=65536,t=3,p=4$YWJj$YWJj";
 
 /// Like `build_db`, but returns a `Result` so callers can distinguish
-/// between "no DATABASE_URL set" (Ok(None)) and a connection error (Err).
+/// between "no `DATABASE_URL` set" (Ok(None)) and a connection error (Err).
 #[allow(dead_code)]
 pub async fn build_db_result()
 -> Result<Option<cms_backend::database::Database>, cms_backend::AppError> {
@@ -97,7 +97,7 @@ pub async fn build_db() -> Option<cms_backend::database::Database> {
 
 /// Builds an `AuthService` instance for tests with configurable TTLs.
 #[cfg(all(feature = "auth", feature = "database"))]
-#[allow(dead_code)]
+#[allow(dead_code, clippy::unused_async)] // Used by tests, no actual async operations needed
 pub async fn build_auth(
     db: &cms_backend::database::Database,
     access_ttl: u64,
