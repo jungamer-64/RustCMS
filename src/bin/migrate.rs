@@ -122,34 +122,59 @@ enum Commands {
     },
 }
 
+/// Initialize logging with appropriate level
+/// 
+/// # Safety
+/// 
+/// This function sets the RUST_LOG environment variable before any threads are created.
+/// It must be called at the very start of main() before any other operations.
+/// 
+/// # Note
+/// 
+/// Consider using a structured logging configuration instead for production use
+/// to avoid environment variable mutation.
+fn initialize_logging(debug: bool) -> Result<()> {
+    let log_level = if debug { "debug" } else { "info" };
+    // SAFETY: This is called at program startup before any threads are spawned.
+    // The environment variable is only used for logging configuration.
+    unsafe {
+        std::env::set_var("RUST_LOG", log_level);
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     
-    // Initialize logging with appropriate level
-    let log_level = if cli.debug { "debug" } else { "info" };
-    // SAFETY: Setting environment variable before any threads are created
-    // is safe. This is the very first operation in main().
-    unsafe {
-        std::env::set_var("RUST_LOG", log_level);
-    }
-    
+    initialize_logging(cli.debug)?;
     let _config = cms_backend::utils::init::init_logging_and_config()?;
 
+    print_banner();
+    check_dry_run_mode(cli.dry_run);
+
+    let app_state = cms_backend::utils::init::init_app_state().await?;
+    execute_and_handle_result(&cli, &app_state).await
+}
+
+/// Print application banner
+fn print_banner() {
     info!(
         "🔧 Enterprise CMS Database Migration Tool v{}",
         env!("CARGO_PKG_VERSION")
     );
-    
-    if cli.dry_run {
+}
+
+/// Check and warn about dry-run mode
+fn check_dry_run_mode(dry_run: bool) {
+    if dry_run {
         warn!("🔍 DRY-RUN MODE: No changes will be made");
     }
+}
 
-    // Initialize application state
-    let app_state = cms_backend::utils::init::init_app_state().await?;
-    
-    // Execute command with comprehensive error handling
-    let result = execute_command(&cli, &app_state).await;
+/// Execute command and handle result
+async fn execute_and_handle_result(cli: &Cli, app_state: &AppState) -> Result<()> {
+    let result = execute_command(cli, app_state).await;
     
     match &result {
         Ok(_) => info!("✅ Operation completed successfully"),
