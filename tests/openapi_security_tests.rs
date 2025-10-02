@@ -15,7 +15,7 @@ async fn fetch_openapi_json() -> serde_json::Value {
 }
 
 #[tokio::test]
-async fn protected_endpoint_has_dual_security() {
+async fn protected_endpoint_has_biscuit_security() {
     let v = fetch_openapi_json().await;
     let paths = v
         .get("paths")
@@ -30,20 +30,13 @@ async fn protected_endpoint_has_dual_security() {
         .get("security")
         .and_then(|s| s.as_array())
         .expect("security array missing");
-    let mut has_bearer = false;
-    let mut has_biscuit = false;
-    for entry in sec {
-        if let Some(obj) = entry.as_object() {
-            if obj.contains_key("BearerAuth") {
-                has_bearer = true;
-            }
-            if obj.contains_key("BiscuitAuth") {
-                has_biscuit = true;
-            }
-        }
-    }
-    assert!(has_bearer, "BearerAuth missing in security list");
-    assert!(has_biscuit, "BiscuitAuth missing in security list");
+    assert_eq!(
+        sec.len(),
+        1,
+        "expected exactly one security requirement (BiscuitAuth)"
+    );
+    let obj = sec[0].as_object().expect("entry object");
+    assert!(obj.contains_key("BiscuitAuth"), "BiscuitAuth key missing");
 }
 
 #[tokio::test]
@@ -65,7 +58,7 @@ async fn public_endpoint_has_no_security() {
 }
 
 #[tokio::test]
-async fn biscuit_only_endpoint_has_only_biscuit() {
+async fn biscuit_auth_endpoint_has_biscuit_security() {
     let v = fetch_openapi_json().await;
     let paths = v
         .get("paths")
@@ -87,10 +80,6 @@ async fn biscuit_only_endpoint_has_only_biscuit() {
     );
     let obj = sec[0].as_object().expect("entry object");
     assert!(obj.contains_key("BiscuitAuth"), "BiscuitAuth key missing");
-    assert!(
-        !obj.contains_key("BearerAuth"),
-        "BearerAuth should not be allowed here"
-    );
 }
 
 #[tokio::test]
@@ -139,7 +128,7 @@ async fn api_key_header_security_scheme_present() {
 }
 
 #[tokio::test]
-async fn api_key_management_endpoints_have_dual_security() {
+async fn api_key_management_endpoints_have_biscuit_security() {
     let v = fetch_openapi_json().await;
     let paths = v
         .get("paths")
@@ -156,21 +145,15 @@ async fn api_key_management_endpoints_have_dual_security() {
                     .get("security")
                     .and_then(|s| s.as_array())
                     .expect("security block missing");
-                let mut has_bearer = false;
-                let mut has_biscuit = false;
-                for entry in sec {
-                    if let Some(obj) = entry.as_object() {
-                        if obj.contains_key("BearerAuth") {
-                            has_bearer = true;
-                        }
-                        if obj.contains_key("BiscuitAuth") {
-                            has_biscuit = true;
-                        }
-                    }
-                }
+                assert_eq!(
+                    sec.len(),
+                    1,
+                    "{method} {path} should have exactly one security requirement (BiscuitAuth)"
+                );
+                let obj = sec[0].as_object().expect("entry object");
                 assert!(
-                    has_bearer && has_biscuit,
-                    "{method} {path} should allow both Bearer and Biscuit",
+                    obj.contains_key("BiscuitAuth"),
+                    "{method} {path} should have BiscuitAuth",
                 );
             } else {
                 panic!("operation {method} {path} missing");
