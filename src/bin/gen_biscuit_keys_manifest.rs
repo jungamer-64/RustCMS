@@ -146,6 +146,10 @@ fn write_latest_alias(dir: &Path, priv_b64: &str, pub_b64: &str) -> std::io::Res
     Ok(())
 }
 
+// Note: This function is deprecated and no longer used.
+// The functionality has been moved to the main gen_biscuit_keys module.
+// Keeping this for reference during transition period.
+/*
 /// ファイル出力に関する一連のフローを処理します。
 /// ディレクトリ作成、パス解決、ファイル書き込み、最終処理までを一貫して行います。
 pub fn handle_files_output_full(ctx: &super::FilesOutputContext) -> Result<()> {
@@ -186,3 +190,4 @@ pub fn handle_files_output_full(ctx: &super::FilesOutputContext) -> Result<()> {
 
     Ok(())
 }
+*/
