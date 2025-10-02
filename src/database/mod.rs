@@ -192,12 +192,33 @@ struct PostUpdateData {
 
 // Compute the final set of fields for a post update, based on the request and existing row
 fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpdateData {
+    let basic_fields = extract_basic_fields(existing, req);
+    let (status, published_at) = compute_status_and_publish_date(existing, req);
+
+    PostUpdateData {
+        title: basic_fields.0,
+        slug: basic_fields.1,
+        content: basic_fields.2,
+        excerpt: basic_fields.3,
+        tags: basic_fields.4,
+        categories: basic_fields.5,
+        meta_title: basic_fields.6,
+        meta_description: basic_fields.7,
+        status,
+        published_at,
+        updated_at: chrono::Utc::now(),
+    }
+}
+
+/// Extract basic post fields from existing post and update request
+#[allow(clippy::type_complexity)]
+fn extract_basic_fields(
+    existing: &Post,
+    req: &UpdatePostRequest,
+) -> (String, String, String, Option<String>, Vec<String>, Vec<String>, Option<String>, Option<String>) {
     let title = req.title.clone().unwrap_or_else(|| existing.title.clone());
     let slug = req.slug.clone().unwrap_or_else(|| existing.slug.clone());
-    let content = req
-        .content
-        .clone()
-        .unwrap_or_else(|| existing.content.clone());
+    let content = req.content.clone().unwrap_or_else(|| existing.content.clone());
     let excerpt = merge_opt_option(req.excerpt.as_ref(), existing.excerpt.as_ref());
     let tags = merge_opt(req.tags.as_ref(), &existing.tags);
     let categories = req.category.as_ref().map_or_else(
@@ -210,16 +231,20 @@ fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpd
         existing.meta_description.as_ref(),
     );
 
-    // status / published_at handling
+    (title, slug, content, excerpt, tags, categories, meta_title, meta_description)
+}
+
+/// Compute status and `published_at` based on request and existing values
+fn compute_status_and_publish_date(
+    existing: &Post,
+    req: &UpdatePostRequest,
+) -> (String, Option<chrono::DateTime<chrono::Utc>>) {
     let mut status = req
         .status
         .as_ref()
         .map_or_else(|| existing.status.clone(), ToString::to_string);
-    let mut published_at = if req.published_at.is_some() {
-        req.published_at
-    } else {
-        existing.published_at
-    };
+    let mut published_at = req.published_at.or(existing.published_at);
+
     if let Some(published) = req.published {
         if published {
             status = "published".to_string();
@@ -231,21 +256,7 @@ fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpd
         }
     }
 
-    let updated_at = chrono::Utc::now();
-
-    PostUpdateData {
-        title,
-        slug,
-        content,
-        excerpt,
-        tags,
-        categories,
-        meta_title,
-        meta_description,
-        status,
-        published_at,
-        updated_at,
-    }
+    (status, published_at)
 }
 
 fn merge_opt<T: Clone>(candidate: Option<&T>, current: &T) -> T {
