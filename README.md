@@ -142,64 +142,49 @@ cargo insta accept
 └─────────────────┘
 ```
 
-## 🔐 認証（実装とドキュメントの同期）
+## 🔐 認証（Biscuit トークンによる統一認証）
 
-- 標準ヘッダ: `Authorization: Bearer <your_token>`
-- 互換許容: `Authorization: Biscuit <token>`（ミドルウェアで同等に検証）
+本システムは **Biscuit トークン** による認証を採用しています。
+
+- **標準ヘッダ**: `Authorization: Bearer <biscuit_token>`
+- **互換スキーム**: `Authorization: Biscuit <biscuit_token>`
 
 公開/保護はルータ構成で管理します。
 
-- 公開: `/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/refresh`, `/api/v1/health/**`, `/api/docs/**`, `/api/v1/metrics`
-- 保護: `/api/v1/posts/**`, `/api/v1/users/**`, `/api/v1/api-keys/**`, `/api/v1/auth/logout`, `/api/v1/auth/profile`
+- **公開エンドポイント（認証不要）**: `/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/refresh`, `/api/v1/health/**`, `/api/docs/**`, `/api/v1/metrics`
+- **保護エンドポイント（Biscuit認証必須）**: `/api/v1/posts/**`, `/api/v1/users/**`, `/api/v1/api-keys/**`, `/api/v1/auth/logout`, `/api/v1/auth/profile`
 
 保護ルートには認証ミドルウェアが適用され、ハンドラは `Extension<crate::auth::AuthContext>` で検証済みユーザ情報を利用できます。
 
-### レガシー互換 Feature: `legacy-auth-flat`
+### 認証の仕組み
 
-統一認証レスポンス `AuthSuccessResponse` への移行に伴い、旧 `LoginResponse` スキーマはデフォルトで OpenAPI から除外されています。過去クライアント生成コードや差分検証用途で必要な場合のみ下記で有効化してください。
+1. **ログイン**: `/api/v1/auth/login` で認証情報を送信し、Biscuit トークン（access/refresh）を取得
+2. **アクセス**: 保護エンドポイントへのリクエスト時に `Authorization` ヘッダーで Biscuit トークンを送信
+3. **検証**: サーバー側で Biscuit トークンの署名検証、有効期限チェック、セッション確認を実施
+4. **認可**: ユーザーのロールと権限に基づいてアクセス制御を実行
 
-## Deprecated Admin Token Feature
+### API キー認証（Biscuit ベース統合）
 
-`legacy-admin-token` feature を有効化すると、旧 admin token ベースの認証ロジック (`check_admin_token`, `get_admin_token`) が利用可能です。
-デフォルトでは無効化されており、Biscuit 権限認証への移行を推奨します。
+長期的なマシン間通信には API キー認証も利用可能です：
 
-### Runtime Deprecation Warnings
+- **ヘッダー**: `X-API-Key: ak_<your_api_key>`
+- API キーは Argon2 ハッシュで保護され、独立したレート制限を持ちます
+- **重要**: API キー認証も内部的には Biscuit ベースの `AuthContext` に変換され、統一的なセキュリティモデルで処理されます
+- API キーの発行・管理は Biscuit 認証が必要な `/api/v1/api-keys` エンドポイントで行います
 
-以下の runtime 一度きり警告が出力されます (target:"deprecation"):
+**統一認証アーキテクチャ**:
 
-- フラット認証トークンフィールド利用 (feature `auth-flat-fields` 有効時)
-- 旧 ADMIN_TOKEN 認証利用 (feature `legacy-admin-token` 有効時)
-
-本番運用で警告抑止したい場合は該当 feature を無効化、またはログフィルタで target="deprecation" を除外してください。
-
-### 収集メトリクス (Auth 統一関連)
-
-`monitoring` フィーチャ有効時、以下の統一進捗カウンタが公開 (Prometheus exporter 経由) されます。
-
-| Metric | 意味 | 減少完了条件 |
-|--------|------|--------------|
-| `auth_flat_fields_legacy_usage_total` | 旧フラットフィールドを含む `AuthSuccessResponse` が構築された回数 | 本番トラフィックで 0 維持 → `auth-flat-fields` 無効化準備完了 |
-| `legacy_login_response_conversion_total` | `LoginResponse` (互換) へ変換が行われた回数 | 0 維持 → `legacy-auth-flat` 削除準備完了 |
-
-ダッシュボード例:
-
-```promql
-increase(auth_flat_fields_legacy_usage_total[24h])
-increase(legacy_login_response_conversion_total[24h])
-```
-
-どちらも 0 が安定した期間 (例: 7–14 日) が確保できれば次期メジャー削除 PR を作成してください。
-
-補助スクリプト:
+- 全ての認証メカニズム（Biscuit トークン、API キー）は内部的に同じ `AuthContext` に収束
+- ロールベースアクセス制御（RBAC）が一貫して適用
+- 詳細は [docs/BISCUIT_UNIFIED_AUTH.md](docs/BISCUIT_UNIFIED_AUTH.md) を参照
 
 ```bash
-# 現在の src/ 残存を厳格判定 (ゼロ以外があれば exit 1)
-bash scripts/deprecation-strict-check.sh
-
-# 3 連続ゼロ到達トラッキング & 推奨手順表示
 bash scripts/deprecation-auto-guidance.sh
+```
 
-# Phase 4 削除 PR ドラフト生成 (ゼロ確認後)
+## Phase 4 削除 PR ドラフト生成 (ゼロ確認後)
+
+```bash
 bash scripts/generate_phase4_pr.sh
 ```
 
@@ -226,10 +211,8 @@ Grafana ダッシュボード例: `monitoring/grafana/auth_unification_dashboard
 
 内部で以下を実行します:
 
-- デフォルト (auth-flat-fields 有効) 全テスト
 - フラット互換フィールド無効構成 (--no-default-features + 必要最小 features) 全テスト
 
-CI ではさらに `no-flat` マトリクス (auth-flat-fields だけを無効化し他主要機能は維持) を常時実行し、将来 (Phase4) の削除後状態を継続的に検証します。
 
 補助スキャン (任意 CI informational ジョブ例):
 
@@ -248,13 +231,10 @@ Phase4 直前チェック:
 出力が空 (または docs/ / CHANGELOG のみ) になれば最終削除 PR を作成可能です。
 
 ```bash
-cargo build --features legacy-auth-flat
 ```
 
 有効化すると以下が有効になります:
 
-- `LoginResponse` 型がコンパイルされ OpenAPI に `LoginResponse` スキーマが追加
-- 互換 JSON フラットフィールド (access_token 等) は feature `auth-flat-fields` で提供 (デフォルト有効 / 3.0.0 で削除予定)
 
 将来のメジャーリリースでこの feature とフラットフィールドは削除予定です。新規実装は `response.tokens.*` を参照してください。
 
@@ -262,9 +242,7 @@ cargo build --features legacy-auth-flat
 
 次期メジャー (3.0.0) では以下を削除予定です:
 
-1. Cargo feature `legacy-auth-flat`
-2. フラットフィールド: `access_token`, `refresh_token`, `biscuit_token`, `expires_in`, `session_id`, `token`
-3. 互換用 `LoginResponse` スキーマ
+1. フラットフィールド: `access_token`, `refresh_token`, `biscuit_token`, `expires_in`, `session_id`, `token`
 
 移行ガイド (要約):
 
@@ -330,6 +308,10 @@ cargo run --no-default-features --features "dev-tools,auth,database" --bin cms-s
 
 - `cms-admin` : 管理・運用用 CLI（ユーザ作成など）
 - `cms-migrate`: DB マイグレーション実行
+
+開発支援バイナリ (dev-tools feature が必要):
+
+- `dev-tools`, `admin_server`, `run_docs` など（Cargo.toml の [[bin]] セクション参照）
 
 Developer 補助ツール:
 
@@ -573,21 +555,22 @@ docker-compose logs -f cms-backend
 docker-compose up -d --scale cms-backend=3
 ```
 
-## 📚 API ドキュメント / ルート一覧
+## 📚 API ドキュメント
 
 ベースパス: `http://localhost:3000/api/v1`
 
-- API 情報: `GET /api/v1` または `GET /api/v1/info`
-- ヘルスチェック: `GET /api/v1/health`（`/liveness`, `/readiness` のサブパスあり）
-- 認証（feature=auth）: `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/profile`, `POST /api/v1/auth/refresh`
-- 投稿（feature=database）: `/api/v1/posts` 以下で CRUD
-- ユーザ（feature=database）: `/api/v1/users` 以下で CRUD
-- 管理 API（feature=database）: `/api/v1/admin/posts` (一覧/作成), `/api/v1/admin/posts/:id` (削除)
-- 検索（feature=search）: `/api/v1/search`, `/suggest`, `/stats`, `/reindex`, `/health`
-- OpenAPI UI: `GET /api/docs`
-- OpenAPI JSON: `GET /api/docs/openapi.json`
+- **ホームページ**: `GET /` - 統合ブランディングと機能概要
+- **API 情報**: `GET /api/v1` または `GET /api/v1/info`
+- **ヘルスチェック**: `GET /api/v1/health`（`/liveness`, `/readiness` のサブパスあり）
+- **メトリクス** (monitoring feature): `GET /api/v1/metrics` - Prometheus形式のメトリクス
+- **認証** (feature=auth): `/api/v1/auth/*` - register, login, logout, profile, refresh
+- **コンテンツ** (feature=database): `/api/v1/posts`, `/api/v1/users`, `/api/v1/admin/posts`
+- **API キー管理** (feature=auth,database): `/api/v1/api-keys` - 作成/一覧/失効
+- **検索** (feature=search): `/api/v1/search/*` - 全文検索, サジェスト, 統計, 再インデックス
+- **OpenAPI UI**: `GET /api/docs` - Swagger UI インターフェース
+- **OpenAPI JSON**: `GET /api/docs/openapi.json` - OpenAPI スキーマ
 
-ルート直下の `/health` は簡易的な別実装が残る場合があります。標準的には `/api/v1/health` を利用してください。
+詳細なエンドポイント仕様は `/api/docs` の Swagger UI を参照してください。
 
 ### 認証
 
@@ -656,10 +639,12 @@ curl "http://localhost:3000/api/v1/search?q=rust"
 ## 🤝 コントリビュート
 
 1. リポジトリを Fork する
-1. 機能用ブランチを作成する
-1. 新機能にはテストを追加する
-1. すべてのテストが通ることを確認する
-1. プルリクエストを作成する
+2. 機能用ブランチを作成する (`git checkout -b feature/amazing-feature`)
+3. 変更をコミットする (`git commit -m 'Add amazing feature'`)
+4. 新機能にはテストを追加する
+5. すべてのテストが通ることを確認する (`cargo test`)
+6. ブランチを Push する (`git push origin feature/amazing-feature`)
+7. プルリクエストを作成する
 
 ## 📝 ライセンス
 
@@ -669,33 +654,49 @@ curl "http://localhost:3000/api/v1/search?q=rust"
 
 - **ドキュメント**: API ドキュメントは `GET /api/docs` で確認できます
 - **Issues**: バグは GitHub Issues へ報告してください
-- **パフォーマンス**: インサイトには `/metrics` エンドポイントを使用してください
+- **パフォーマンス**: インサイトには `/api/v1/metrics` エンドポイントを使用してください
 - **監視**: 本番監視には Prometheus の導入を推奨します
+- **詳細**: より詳細な本番運用情報は `README_PRODUCTION.md` を参照してください
 
 ---
 
-## 🎯 最近の改善点
+## 🎯 アーキテクチャの特徴
 
-この CMS バックエンドは大規模リファクタにより、以下の改善を実施しています。
+この CMS バックエンドは、統合された単一バイナリ `cms-server` として実装されています。
+
+### 統合されたバイナリ構成
+
+**メインバイナリ**: `cms-server`
+
+- cms-lightweight, cms-simple, cms-unified の機能を統合
+- feature フラグにより本番モード/開発モードを切り替え可能
+- 単一のエントリポイントで全機能を提供
+
+**補助バイナリ**:
+
+- `cms-admin`: 管理・運用用 CLI
+- `cms-migrate`: データベースマイグレーション
+- 開発支援ツール (dev-tools feature): `dev-tools`, `admin_server`, `run_docs` など
 
 ### ✅ パフォーマンス改善
 
-- **データベース接続プーリング**: PostgreSQL 向けに SQLx 等で実装
+- **データベース接続プーリング**: PostgreSQL 向けに Diesel + deadpool で実装
 - **Redis キャッシュ**: 自動無効化を含む多層キャッシュ戦略
 - **レートリミッター**: エンドポイント毎のインテリジェントな制御
 - **非同期処理**: Tokio ベースの完全な async/await 実装
 
 ### ✅ セキュリティ改善
 
-- **Biscuit 認証**: Capability ベースのトークン認証 (単一方式に統一)
+- **Biscuit 認証**: Capability ベースのトークン認証 (Ed25519 署名)
+- **API キー認証**: Argon2 ハッシュ + SHA-256 lookup hash による O(1) 検証
 - **入力検証**: カスタムエラーハンドリングを含む包括的な検証
 - **SQL インジェクション防止**: パラメタライズドクエリと型安全性
 - **CORS 保護**: 設定可能なクロスオリジン制御
-- **Refresh Token Rotation**: 盗難リフレッシュトークン無効化のためのバージョン付き JTI 戦略
+- **Refresh Token Rotation**: セッションバージョン管理による再利用攻撃防止
 
 ### ✅ スケーラビリティ機能
 
-- **水平スケーリング**: ロードバランサとの互換性を意識したステートレス設計
+- **水平スケーリング**: ステートレス設計でロードバランサ対応
 - **接続管理**: DB/キャッシュ接続の最適化
 - **メモリ効率**: 効率的なデータ構造とメモリ管理
 - **リソース最適化**: 高スループット向けのチューニング
@@ -704,8 +705,9 @@ curl "http://localhost:3000/api/v1/search?q=rust"
 
 - **OpenAPI ドキュメント**: 自動生成される Swagger UI
 - **型安全**: Rust による実行時エラー低減
-- **エラーハンドリング**: カスタムエラー型による網羅的な処理
-- **テスト**: 信頼性向上のためのユニット・統合テスト
+- **統一レスポンス**: `ApiResponse<T>` による一貫したAPI設計
+- **コントラクトテスト**: insta によるスナップショットテスト
+- **包括的テスト**: ユニット・統合・E2Eテスト
 
 ### ✅ モニタリング & 可観測性
 
@@ -713,3 +715,4 @@ curl "http://localhost:3000/api/v1/search?q=rust"
 - **ヘルスチェック**: すべてのサービスに対する詳細ヘルス監視
 - **構造化ログ**: tracing サポートによる詳細ログ
 - **パフォーマンストラッキング**: リクエスト時間などの分析
+- **Grafana ダッシュボード**: 認証統合進捗監視など
