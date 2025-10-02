@@ -37,6 +37,13 @@ ARG RUSTFLAGS="-C debuginfo=0 -C strip=symbols"  # allow override via build-arg
 WORKDIR /app
 
 # System build dependencies (kept minimal). We install only what is required to compile.
+# Pinned versions (Ubuntu 22.04 LTS):
+# - build-essential: 12.9ubuntu3
+# - pkg-config: 0.29.2-1ubuntu3
+# - binutils: 2.38-4ubuntu2.6
+# - libssl-dev: 3.0.2-0ubuntu1.18
+# - libpq-dev: 14.13-0ubuntu0.22.04.1
+# - nasm: 2.15.05-1
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
         apt-get update \
@@ -47,7 +54,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
             libssl-dev \
             libpq-dev \
             nasm \
-        && rm -rf /var/lib/apt/lists/*
+        && apt-get clean \
+        && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Cache dirs (shared across BuildKit mounts)
 ENV CARGO_HOME=/usr/local/cargo \
@@ -69,13 +77,13 @@ COPY --from=planner /app/recipe.json ./recipe.json
 RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
         --mount=type=cache,id=cargo-index,target=/usr/local/cargo/git,sharing=locked \
         --mount=type=cache,id=cargo-target,target=/usr/local/cargo/target \
-        if [ "$USE_CHEF" = "true" ]; then \
+        if [ "${USE_CHEF}" = "true" ]; then \
             echo "[chef] Cooking dependency layer"; \
             feature_flags=""; \
-            if [ "$NO_DEFAULT_FEATURES" = "true" ]; then feature_flags="--no-default-features"; fi; \
-            if [ -n "$FEATURES" ]; then feature_flags="$feature_flags --features $FEATURES"; fi; \
-            (cargo chef cook --release --recipe-path recipe.json $feature_flags --locked || \
-             cargo chef cook --release --recipe-path recipe.json $feature_flags); \
+            if [ "${NO_DEFAULT_FEATURES}" = "true" ]; then feature_flags="--no-default-features"; fi; \
+            if [ -n "${FEATURES}" ]; then feature_flags="${feature_flags} --features ${FEATURES}"; fi; \
+            (cargo chef cook --release --recipe-path recipe.json ${feature_flags} --locked || \
+             cargo chef cook --release --recipe-path recipe.json ${feature_flags}); \
         else \
             echo "[chef] Skipped (USE_CHEF=false)"; \
         fi
@@ -161,11 +169,10 @@ WORKDIR /app
 # Create non-root user/group early so COPY --chown can set ownership directly
 RUN set -eux; \
     groupadd --system -g "${APP_GID}" cms || true; \
-    # -l prevents creating an excessively long home directory entry in /etc/passwd in some base images
     useradd --system -l -g "${APP_GID}" -u "${APP_UID}" --home /app --shell /usr/sbin/nologin cms || true
 
 # Determine target triple (optional informational file)
-RUN set -eux; if [ -n "$TARGET" ]; then echo "$TARGET" > /tmp/target-triple; else echo "" > /tmp/target-triple; fi
+RUN set -eux; if [ -n "${TARGET}" ]; then echo "${TARGET}" > /tmp/target-triple; else echo "" > /tmp/target-triple; fi
 ENV TARGET_TRIPLE_FILE=/tmp/target-triple
 
 # Copy primary binary & assets with ownership set directly
