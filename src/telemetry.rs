@@ -891,14 +891,11 @@ mod tests {
     #[serial]
     fn test_init_telemetry_invalid_log_output_bubbles_error() {
         with_var("LOG_OUTPUT", Some("file:"), || {
-            match TELEMETRY_STATE.get() {
-                Some(_) => {
-                    init_telemetry(false).expect("should reuse existing telemetry");
-                }
-                None => {
-                    let err = init_telemetry(false).expect_err("invalid output should error");
-                    assert!(matches!(err, TelemetryError::MissingLogOutputPath));
-                }
+            if let Some(_) = TELEMETRY_STATE.get() {
+                init_telemetry(false).expect("should reuse existing telemetry");
+            } else {
+                let err = init_telemetry(false).expect_err("invalid output should error");
+                assert!(matches!(err, TelemetryError::MissingLogOutputPath));
             }
         });
     }
