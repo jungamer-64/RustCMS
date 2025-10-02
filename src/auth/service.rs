@@ -175,7 +175,7 @@ impl AuthService {
         remember_me: bool,
     ) -> Result<AuthResponse> {
         let session_id = SessionId::new();
-        let (access_exp, refresh_exp) = self.compute_expiries(remember_me);
+        let (access_exp, refresh_exp) = self.compute_expiries(remember_me)?;
         let refresh_version = 1u32;
         self.insert_session(&user, &session_id, refresh_exp, refresh_version)
             .await;
@@ -210,7 +210,7 @@ impl AuthService {
     ) -> Result<(crate::utils::auth_response::AuthTokens, UserInfo)> {
         let parsed = biscuit::parse_refresh_biscuit(refresh_token, &self.biscuit_public_key)?;
         let (new_version, user) = self.bump_and_load_user(&parsed).await?; // version bump -> 旧トークン失効
-        let (access_exp, refresh_exp) = self.compute_expiries(false);
+        let (access_exp, refresh_exp) = self.compute_expiries(false)?;
         let (access_token, new_refresh_token, expires_in) = self.issue_access_and_refresh(
             &user,
             &parsed.session_id,
@@ -321,7 +321,7 @@ impl AuthService {
             .map_err(|_| AuthError::UserNotFound)?;
         Self::ensure_active(&user)?;
         let session_id = SessionId::new();
-        let (access_exp, refresh_exp) = self.compute_expiries(false);
+        let (access_exp, refresh_exp) = self.compute_expiries(false)?;
         self.insert_session(&user, &session_id, refresh_exp, 1)
             .await;
         let token = biscuit::build_token(
@@ -345,18 +345,21 @@ impl AuthService {
         Ok(())
     }
 
-    fn compute_expiries(&self, remember_me: bool) -> (DateTime<Utc>, DateTime<Utc>) {
+    fn compute_expiries(&self, remember_me: bool) -> Result<(DateTime<Utc>, DateTime<Utc>)> {
         let now = Utc::now();
         let access_ttl = if remember_me {
             ChronoDuration::seconds(
-                i64::try_from(self.config.remember_me_access_ttl_secs)
-                    .expect("validated remember_me_access_ttl_secs"),
+                i64::try_from(self.config.remember_me_access_ttl_secs).map_err(|_| {
+                    crate::AppError::ConfigValidationError(
+                        "auth.remember_me_access_ttl_secs is too large for i64".to_string(),
+                    )
+                })?,
             )
         } else {
             ChronoDuration::seconds(self.access_ttl_secs)
         };
         let refresh_ttl = ChronoDuration::seconds(self.refresh_ttl_secs);
-        (now + access_ttl, now + refresh_ttl)
+        Ok((now + access_ttl, now + refresh_ttl))
     }
 
     async fn insert_session(
