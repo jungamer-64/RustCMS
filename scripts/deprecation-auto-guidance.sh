@@ -24,10 +24,10 @@ if [ -f "$STATE_FILE" ]; then
   STREAK=$(cat "$STATE_FILE" || echo 0)
 fi
 STREAK=$((STREAK+1))
-echo $STREAK > "$STATE_FILE"
+echo "$STREAK" > "$STATE_FILE"
 echo "[auto-guidance] Zero streak: $STREAK" >&2
 
-if [ $STREAK -ge 3 ]; then
+if [ "$STREAK" -ge 3 ]; then
   cat <<'EOF'
 All deprecated auth flat field references have been zero for the current consecutive runs.
 
@@ -38,5 +38,6 @@ Recommended next steps:
   3. Remove 'legacy-auth-flat' feature & LoginResponse schema.
   4. Regenerate OpenAPI clients and announce in CHANGELOG (Phase 4).
 EOF
+fi
 
 exit 0
