@@ -263,13 +263,18 @@ impl SearchService {
     }
 
     /// Perform best-effort shutdown/flush of the search backend (commit pending writes)
+    ///
+    /// # Errors
+    /// Returns an error if the index writer fails to commit pending changes.
     #[allow(clippy::unused_async)]
     pub async fn shutdown(&self) -> Result<()> {
         // Acquire the writer lock and commit pending changes
-        let mut writer = self.writer.write().await;
-        writer
-            .commit()
-            .map_err(|e| crate::AppError::Internal(format!("Search commit failed: {e}")))?;
+        {
+            let mut writer = self.writer.write().await;
+            writer
+                .commit()
+                .map_err(|e| crate::AppError::Internal(format!("Search commit failed: {e}")))?;
+        } // Lock is dropped here explicitly
         Ok(())
     }
 }
