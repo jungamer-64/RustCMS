@@ -41,6 +41,10 @@ static API_KEY_FAILURE_LIMITER: Lazy<ApiKeyFailureLimiterAdapter> =
 ///
 /// 下流ハンドラは `req.extensions().get::<ApiKeyAuthInfo>()` で参照し、
 /// キーの所有者や権限を元にアクセス制御を行えます。
+/// 
+/// **注意**: この型は後方互換性のために残されていますが、内部的には
+/// `AuthContext` に変換されて使用されます。新しいコードでは
+/// `AuthContext` を直接使用することを推奨します。
 #[derive(Clone, Debug)]
 pub struct ApiKeyAuthInfo {
     /// 検証済み API キーの識別子
@@ -69,6 +73,7 @@ pub const HEADER_NAME: &str = "X-API-Key";
 ///
 /// # Returns
 /// 成功時は検証済み情報を extensions に格納し、次のミドルウェア/ハンドラへフォワードします。
+#[allow(clippy::cognitive_complexity)]
 pub async fn api_key_auth_layer(
     mut req: Request<Body>,
     next: Next,
@@ -152,17 +157,39 @@ pub async fn api_key_auth_layer(
 
     // 成功: 該当 lookup_hash の失敗カウントをクリア (早期 +1 を相殺)
     API_KEY_FAILURE_LIMITER.clear(&lookup_hash);
+    
+    let permissions = api_key.get_permissions();
+    
+    // API Key 認証を経由した場合も、Biscuit ベースの AuthContext を生成
+    let auth_context = match state
+        .auth_create_biscuit_from_api_key(api_key.user_id, permissions.clone())
+        .await
+    {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            warn!(?e, "Failed to create auth context from API key");
+            record_fail("context_creation_failed");
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, "Auth context creation failed"));
+        }
+    };
+    
+    // 後方互換性のため ApiKeyAuthInfo も格納
     let info = ApiKeyAuthInfo {
         api_key_id: api_key.id,
         user_id: api_key.user_id,
-        permissions: api_key.get_permissions(),
+        permissions,
     };
+    
     #[cfg(feature = "monitoring")]
     gauge!("api_key_rate_limit_tracked_keys")
         .set(usize_to_f64(API_KEY_FAILURE_LIMITER.tracked_len()));
     #[cfg(feature = "monitoring")]
     counter!("api_key_auth_success_total").increment(1);
-    debug!(api_key_id=%info.api_key_id, user_id=%info.user_id, perms=?info.permissions, "API key authenticated");
+    debug!(api_key_id=%info.api_key_id, user_id=%info.user_id, perms=?info.permissions, "API key authenticated and converted to Biscuit context");
+    
+    // 新しい統一認証コンテキストを格納
+    req.extensions_mut().insert(auth_context);
+    // 後方互換性のために ApiKeyAuthInfo も格納
     req.extensions_mut().insert(info);
 
     Ok(next.run(req).await)

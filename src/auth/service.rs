@@ -117,6 +117,9 @@ impl AuthService {
     }
 
     /// Backward-compatible constructor from Database
+    ///
+    /// # Errors
+    /// Returns error if key pair initialization or repository setup fails.
     pub fn new(config: &AuthConfig, database: &crate::database::Database) -> Result<Self> {
         let repo: Arc<dyn UserRepository> = Arc::new(database.clone()) as Arc<dyn UserRepository>;
         Self::new_with_repo(config, repo)
@@ -126,6 +129,7 @@ impl AuthService {
     ///
     /// # Errors
     /// - 資格情報が不正 / ユーザが存在しない / パスワードハッシュ検証失敗時。
+    #[allow(clippy::cognitive_complexity)]
     pub async fn authenticate_user(&self, request: LoginRequest) -> Result<User> {
         info!(target: "auth", "login_attempt");
         let user = self
@@ -226,16 +230,6 @@ impl AuthService {
         Ok((tokens, user_info))
     }
 
-    #[cfg(feature = "legacy-auth-flat")]
-    #[deprecated(note = "Use verify_biscuit(state, token) or auth_middleware (removal planned)")]
-    /// (後方互換) access biscuit を検証する。
-    ///
-    /// # Errors
-    /// - トークン不正 / 期限切れ / セッション不整合。
-    pub async fn verify_jwt(&self, token: &str) -> Result<AuthContext> {
-        self.verify_biscuit_generic(token, Some("access")).await
-    }
-
     /// access biscuit を検証し `AuthContext` を返す。
     ///
     /// # Errors
@@ -297,6 +291,9 @@ impl AuthService {
     }
 
     /// ヘルスチェック: セッションストア健全性確認（DB 非依存）。
+    ///
+    /// # Errors
+    /// Returns error if session store operations fail.
     pub async fn health_check(&self) -> Result<()> {
         // For now, just attempt an in-memory session operation
         let _ = self.get_active_session_count().await;
@@ -467,5 +464,53 @@ impl AuthService {
                 warn!(role = %role, "role not found in config, falling back to default permissions");
                 vec!["read".to_string()]
             })
+    }
+
+    /// API Key に基づいて短時間有効な Biscuit トークンを生成する。
+    /// 
+    /// API Key 認証を経由してリクエストが来た場合、API Key に関連付けられたユーザ情報を元に
+    /// Biscuit トークンを生成して、システム内では統一的に Biscuit ベースの認証コンテキストを使用します。
+    /// 
+    /// # Arguments
+    /// * `user_id` - API Key に関連付けられたユーザID
+    /// * `permissions` - API Key に付与された権限のリスト
+    /// 
+    /// # Errors
+    /// - ユーザが見つからない場合
+    /// - Biscuit トークンの生成に失敗した場合
+    pub async fn create_biscuit_from_api_key(
+        &self,
+        user_id: Uuid,
+        permissions: Vec<String>,
+    ) -> Result<AuthContext> {
+        let user = self
+            .user_repo
+            .get_user_by_id(user_id)
+            .await
+            .map_err(|_| AuthError::UserNotFound)?;
+        Self::ensure_active(&user)?;
+        
+        // API Key用の一時的なセッションIDを生成
+        let session_id = SessionId::new();
+        
+        // API Key 認証の場合、パーミッションは API Key 自身に付与されたものを使用
+        let role = UserRole::parse_str(&user.role).unwrap_or(UserRole::Subscriber);
+        
+        debug!(
+            target: "auth",
+            user_id=%user.id,
+            session=%mask_session_id(&session_id),
+            role=%role.as_str(),
+            permissions=?permissions,
+            "biscuit_token_created_from_api_key"
+        );
+        
+        Ok(AuthContext {
+            user_id: user.id,
+            username: user.username,
+            role,
+            session_id,
+            permissions,
+        })
     }
 }

@@ -7,14 +7,16 @@ use axum::{
 };
 
 /// Authorization ヘッダの簡易パーサ
-/// 許容スキーム: "Bearer" / "Biscuit"（どちらも同等に扱う）
+/// Biscuit 認証トークンをサポート (Bearer または Biscuit スキーム)
 #[must_use]
 pub fn parse_authorization_header(value: &str) -> Option<&str> {
     let v = value.trim();
-    if let Some(rest) = v.strip_prefix("Bearer ") {
+    // Biscuit スキームを優先的にチェック
+    if let Some(rest) = v.strip_prefix("Biscuit ") {
         return Some(rest.trim());
     }
-    if let Some(rest) = v.strip_prefix("Biscuit ") {
+    // Bearer スキームもサポート (Biscuit トークンを搬送)
+    if let Some(rest) = v.strip_prefix("Bearer ") {
         return Some(rest.trim());
     }
     None

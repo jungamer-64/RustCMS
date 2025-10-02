@@ -360,8 +360,8 @@ impl AppState {
     ///
     /// # Errors
     /// 各サービス（DB/キャッシュ/検索/認証）の初期化に失敗した場合、エラーを返します。
-    // Allow cognitive complexity: feature-gated initialization requires branching and is clearer consolidated here.
-    #[allow(clippy::cognitive_complexity)]
+    // Allow cognitive complexity and line count: feature-gated initialization requires branching and is clearer consolidated here.
+    #[allow(clippy::cognitive_complexity, clippy::too_many_lines)]
     pub async fn from_config(config: Config) -> Result<Self> {
         info!("🔧 Initializing application state from provided Config");
 
@@ -666,6 +666,8 @@ impl AppState {
     /// notification to any subscribed background tasks and perform best-effort
     /// cleanup of services (flush writers, close pools, etc.). This function
     /// should be called during application graceful shutdown.
+    // Allow cognitive complexity: feature-gated cleanup requires branching for multiple services.
+    #[allow(clippy::cognitive_complexity)]
     pub async fn shutdown(&self) {
         info!("AppState shutdown initiated");
         // Send broadcast (ignore error if there are no receivers)
@@ -1010,6 +1012,27 @@ impl AppState {
         token: &str,
     ) -> crate::Result<crate::auth::AuthContext> {
         timed_op!(self, "auth", self.auth.verify_biscuit(token))
+    }
+
+    #[cfg(feature = "auth")]
+    /// `API Key` に基づいて `Biscuit` ベースの `AuthContext` を作成します。
+    ///
+    /// `API Key` 認証を経由した場合も、システム内では統一的に `Biscuit` ベースの認証コンテキストを
+    /// 使用することで、認証メカニズムを統一化します。
+    ///
+    /// # Errors
+    ///
+    /// ユーザーが見つからない場合やコンテキストの作成に失敗した場合にエラーを返します。
+    pub async fn auth_create_biscuit_from_api_key(
+        &self,
+        user_id: uuid::Uuid,
+        permissions: Vec<String>,
+    ) -> crate::Result<crate::auth::AuthContext> {
+        timed_op!(
+            self,
+            "auth",
+            self.auth.create_biscuit_from_api_key(user_id, permissions)
+        )
     }
 
     /// Health check wrapper for `AuthService` that records timing
