@@ -10,18 +10,6 @@ import json
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
-#!/usr/bin/env python3
-"""Resolve GitHub Action refs to full commit SHAs and pin workflows.
-
-Usage: export GITHUB_TOKEN=...; python3 scripts/pin_github_actions.py
-"""
-import os
-import re
-import sys
-import json
-from urllib.request import Request, urlopen
-from urllib.error import HTTPError
-
 TOKEN = os.environ.get('GITHUB_TOKEN')
 if not TOKEN:
     print('Set GITHUB_TOKEN in env first', file=sys.stderr)
@@ -111,7 +99,7 @@ def process_file(path):
         action = m.group('action')
         ref = m.group('ref')
         indent = m.group('indent')
-        prefix = m.group('prefix')
+        # prefix = m.group('prefix')  # Not used currently, reserved for future use
         # local actions like ./ or . should be skipped
         if action.startswith('.') or action.startswith('./'):
             out.append(ln)
