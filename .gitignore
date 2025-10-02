@@ -109,3 +109,7 @@ uploads/*
 
 # GitHub App credentials
 gha-creds-*.json
+
+
+scripts/__pycache__/*
+scripts/*.pyc
