@@ -37,8 +37,8 @@ fn date_formatting() {
     const RFC3339_FORMAT: &str = "%Y-%m-%dT%H:%M:%SZ";
     const HUMAN_FORMAT: &str = "%Y-%m-%d";
     
-    assert!(!RFC3339_FORMAT.is_empty());
-    assert!(!HUMAN_FORMAT.is_empty());
+    assert_eq!(RFC3339_FORMAT, "%Y-%m-%dT%H:%M:%SZ");
+    assert_eq!(HUMAN_FORMAT, "%Y-%m-%d");
 }
 
 #[test]
@@ -109,9 +109,10 @@ fn cache_ttl_constants() {
     const LONG_TTL: u64 = 3600;     // 1 hour
     const VERY_LONG_TTL: u64 = 86400; // 24 hours
     
-    assert!(SHORT_TTL < MEDIUM_TTL);
-    assert!(MEDIUM_TTL < LONG_TTL);
-    assert!(LONG_TTL < VERY_LONG_TTL);
+    assert_eq!(SHORT_TTL, 60);
+    assert_eq!(MEDIUM_TTL, 300);
+    assert_eq!(LONG_TTL, 3600);
+    assert_eq!(VERY_LONG_TTL, 86400);
 }
 
 #[test]
@@ -162,9 +163,9 @@ fn security_header_values() {
     let content_type_options = "nosniff";
     let frame_options = "DENY";
     
-    assert!(!xss_protection.is_empty());
-    assert!(!content_type_options.is_empty());
-    assert!(!frame_options.is_empty());
+    assert_eq!(xss_protection, "1; mode=block");
+    assert_eq!(content_type_options, "nosniff");
+    assert_eq!(frame_options, "DENY");
 }
 
 #[test]

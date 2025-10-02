@@ -48,10 +48,12 @@ use uuid::Uuid;
 
 // Reusable dummy password hash for tests. Centralize the value so it's easier
 // to change or spot in test output.
+#[allow(dead_code)]
 const DUMMY_HASH: &str = "$argon2id$v=19$m=65536,t=3,p=4$YWJj$YWJj";
 
 /// Like `build_db`, but returns a `Result` so callers can distinguish
 /// between "no DATABASE_URL set" (Ok(None)) and a connection error (Err).
+#[allow(dead_code)]
 pub async fn build_db_result()
 -> Result<Option<cms_backend::database::Database>, cms_backend::AppError> {
     use cms_backend::config::DatabaseConfig;
@@ -81,6 +83,7 @@ pub async fn build_db_result()
 
 /// Convenience helper mirroring legacy behavior: returns `None` when the
 /// database is unavailable and logs any initialization errors.
+#[allow(dead_code)]
 pub async fn build_db() -> Option<cms_backend::database::Database> {
     match build_db_result().await {
         Ok(db_opt) => db_opt,
@@ -94,6 +97,7 @@ pub async fn build_db() -> Option<cms_backend::database::Database> {
 
 /// Builds an `AuthService` instance for tests with configurable TTLs.
 #[cfg(all(feature = "auth", feature = "database"))]
+#[allow(dead_code)]
 pub async fn build_auth(
     db: &cms_backend::database::Database,
     access_ttl: u64,
@@ -117,6 +121,7 @@ pub async fn build_auth(
 
 /// Creates a dummy `User` model for testing purposes.
 #[cfg(all(feature = "auth", feature = "database"))]
+#[allow(dead_code)]
 pub fn dummy_user() -> cms_backend::models::User {
     // The `User` model stores `role` as `String` (see src/models/user.rs), so
     // we convert from the `UserRole` enum to the string representation here.

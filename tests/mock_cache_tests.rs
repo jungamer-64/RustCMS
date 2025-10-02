@@ -86,7 +86,7 @@ mod tests {
 
         let result = mock_cache.delete("test_key");
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
     }
 
     #[test]
@@ -184,7 +184,7 @@ mod tests {
         for i in 0..5 {
             mock_cache
                 .expect_set()
-                .withf(move |k, _, _| k == &format!("batch_key_{}", i))
+                .withf(move |k, _, _| k == format!("batch_key_{}", i))
                 .times(1)
                 .returning(|_, _, _| Ok(()));
         }

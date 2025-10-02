@@ -5,7 +5,7 @@
 #[test]
 fn log_level_hierarchy() {
     // Test log level hierarchy
-    let levels = vec!["error", "warn", "info", "debug", "trace"];
+    let levels = ["error", "warn", "info", "debug", "trace"];
     
     assert_eq!(levels[0], "error"); // Most severe
     assert_eq!(levels[4], "trace"); // Least severe
@@ -47,8 +47,9 @@ fn metrics_collection_intervals() {
     const NORMAL_INTERVAL: u64 = 60;   // 1 minute
     const SLOW_INTERVAL: u64 = 300;    // 5 minutes
     
-    assert!(FAST_INTERVAL < NORMAL_INTERVAL);
-    assert!(NORMAL_INTERVAL < SLOW_INTERVAL);
+    assert_eq!(FAST_INTERVAL, 10);
+    assert_eq!(NORMAL_INTERVAL, 60);
+    assert_eq!(SLOW_INTERVAL, 300);
 }
 
 #[test]
@@ -128,7 +129,7 @@ fn metrics_aggregation_types() {
 #[test]
 fn histogram_bucket_sizes() {
     // Test histogram bucket configuration
-    let buckets = vec![10.0, 50.0, 100.0, 500.0, 1000.0];
+    let buckets = [10.0, 50.0, 100.0, 500.0, 1000.0];
     
     for i in 1..buckets.len() {
         assert!(buckets[i] > buckets[i - 1]);
@@ -181,8 +182,9 @@ fn log_retention_periods() {
     const MEDIUM_RETENTION: u32 = 30;  // 30 days
     const LONG_RETENTION: u32 = 90;    // 90 days
     
-    assert!(SHORT_RETENTION < MEDIUM_RETENTION);
-    assert!(MEDIUM_RETENTION < LONG_RETENTION);
+    assert_eq!(SHORT_RETENTION, 7);
+    assert_eq!(MEDIUM_RETENTION, 30);
+    assert_eq!(LONG_RETENTION, 90);
 }
 
 #[test]
@@ -212,6 +214,7 @@ fn async_logging_buffer_sizes() {
     const MEDIUM_BUFFER: usize = 8192;
     const LARGE_BUFFER: usize = 65536;
     
-    assert!(SMALL_BUFFER < MEDIUM_BUFFER);
-    assert!(MEDIUM_BUFFER < LARGE_BUFFER);
+    assert_eq!(SMALL_BUFFER, 1024);
+    assert_eq!(MEDIUM_BUFFER, 8192);
+    assert_eq!(LARGE_BUFFER, 65536);
 }

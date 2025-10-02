@@ -132,7 +132,7 @@ mod tests {
 
         let result = mock_repo.delete_post(post_id);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
     }
 
     #[test]
@@ -148,7 +148,7 @@ mod tests {
 
         let result = mock_repo.delete_post(post_id);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), false);
+        assert!(!result.unwrap());
     }
 
     #[test]

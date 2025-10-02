@@ -232,8 +232,8 @@ fn model_field_constraints() {
     const MAX_TITLE_LENGTH: usize = 255;
     const MAX_SLUG_LENGTH: usize = 255;
 
-    assert!(MAX_USERNAME_LENGTH > 0);
-    assert!(MAX_EMAIL_LENGTH >= MAX_USERNAME_LENGTH);
-    assert!(MAX_TITLE_LENGTH > 0);
-    assert!(MAX_SLUG_LENGTH >= MAX_TITLE_LENGTH);
+    assert_eq!(MAX_USERNAME_LENGTH, 50);
+    assert_eq!(MAX_EMAIL_LENGTH, 255);
+    assert_eq!(MAX_TITLE_LENGTH, 255);
+    assert_eq!(MAX_SLUG_LENGTH, 255);
 }
