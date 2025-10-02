@@ -178,6 +178,7 @@ struct TelemetryState {
 }
 
 impl TelemetryState {
+    #[allow(clippy::missing_const_for_fn)]
     fn new(guards: Vec<non_blocking::WorkerGuard>, log_output: LogOutput) -> Self {
         Self { _guards: guards, log_output }
     }
@@ -201,6 +202,7 @@ pub struct TelemetryHandle {
 }
 
 impl TelemetryHandle {
+    #[allow(clippy::missing_const_for_fn)]
     fn from_arc(inner: Arc<TelemetryState>) -> Self {
         Self { inner }
     }
@@ -524,6 +526,20 @@ pub fn init_telemetry_with_verbose(verbose: bool) -> Result<(), TelemetryError> 
     init_telemetry(verbose).map(|_| ())
 }
 
+#[cfg(feature = "monitoring")]
+fn init_metrics() {
+    // TODO(monitoring): Reintroduce metrics/exporter plumbing when ready.
+    tracing::info!("Metrics initialization feature is enabled.");
+}
+
+#[cfg(feature = "monitoring")]
+/// Gracefully shutdown telemetry systems
+#[allow(clippy::missing_const_for_fn)]
+pub fn shutdown_telemetry() {
+    // TODO(monitoring): Gracefully drain metric/exporter resources once implemented.
+    // No-op for now. Dropping WorkerGuards will flush buffers when the process exits.
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -534,6 +550,7 @@ mod tests {
         thread,
         time::{Duration, Instant},
     };
+    #[allow(clippy::single_match_else)]
     fn read_until_contains(path: &Path, needle: &str) -> String {
         let deadline = Instant::now() + Duration::from_secs(5);
         let mut last_contents = String::new();
@@ -551,6 +568,7 @@ mod tests {
                 }
             }
 
+            #[allow(clippy::manual_assert)]
             if Instant::now() >= deadline {
                 panic!("expected to find '{needle}' in {path:?} but only saw: {last_contents}");
             }
@@ -802,6 +820,7 @@ mod tests {
         match parsed {
             LogOutput::File(path, Rotation::Daily) => {
                 assert_eq!(path, log_path);
+                #[allow(clippy::redundant_clone)]
                 let (_writer, guards) =
                     setup_writer(&LogOutput::File(path.clone(), Rotation::Daily))
                         .expect("setup writer");
@@ -837,10 +856,13 @@ mod tests {
                             init_telemetry(false).expect("second init should reuse handle");
                         TelemetryHandle::flush();
                         assert!(handle.ptr_eq(&second));
-                        assert_eq!(
-                            second.log_file_path().map(|p| p.to_path_buf()),
-                            Some(log_path.clone())
-                        );
+                        #[allow(clippy::redundant_closure_for_method_calls)]
+                        {
+                            assert_eq!(
+                                second.log_file_path().map(|p| p.to_path_buf()),
+                                Some(log_path.clone())
+                            );
+                        }
                     });
                 });
             });
@@ -849,6 +871,7 @@ mod tests {
 
     #[test]
     #[serial]
+    #[allow(clippy::single_match_else)]
     fn test_init_telemetry_invalid_log_format_bubbles_error() {
         with_var("LOG_FORMAT", Some("invalid"), || {
             match TELEMETRY_STATE.get() {
@@ -880,17 +903,4 @@ mod tests {
             }
         });
     }
-}
-
-#[cfg(feature = "monitoring")]
-fn init_metrics() {
-    // TODO(monitoring): Reintroduce metrics/exporter plumbing when ready.
-    tracing::info!("Metrics initialization feature is enabled.");
-}
-
-#[cfg(feature = "monitoring")]
-/// Gracefully shutdown telemetry systems
-pub fn shutdown_telemetry() {
-    // TODO(monitoring): Gracefully drain metric/exporter resources once implemented.
-    // No-op for now. Dropping WorkerGuards will flush buffers when the process exits.
 }
