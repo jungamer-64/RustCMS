@@ -1,6 +1,6 @@
 [package]
 name = "cms-backend"
-version = "2.0.0"
+version = "3.0.0"
 edition = "2024"
 authors = ["CMS Development Team"]
 description = "scalable CMS backend with PostgreSQL, Diesel ORM, Tantivy search, biscuit-auth, WebAuthn, and rustls (Pure Rust)"
@@ -10,6 +10,8 @@ keywords = ["cms", "backend", "postgresql", "tantivy", "biscuit-auth", "webauthn
 categories = ["web-programming", "database"]
 autobins = false
 default-run = "cms-server"
+
+
 
 
 [lib]
@@ -185,6 +187,7 @@ pretty_assertions = "1.4"
 proptest = "1.4"
 rstest = "0.26"
 serial_test = "3.0"
+tempfile = "3.8"
 # TEMP: disable testcontainers until bollard version alignment resolved
 # testcontainers = "0.25"
 tokio-test = "0.4"
@@ -201,14 +204,11 @@ rpassword = "7.3"
 [features]
 # Feature list (alphabetical keys). Arrays are sorted for consistency.
 auth = ["dep:argon2", "dep:biscuit-auth"]
-auth-flat-fields = [] # temporary backward-compatible flattened auth token fields (remove in 3.0.0)
 cache = ["dep:deadpool-redis", "dep:redis"]
 dev-tools = []
-legacy-auth-flat = [] # expose deprecated LoginResponse schema & flattened fields in OpenAPI
-legacy-admin-token = [] # expose deprecated ADMIN_TOKEN based auth utils & middleware (to be removed in 3.0.0)
 compression = []
 database = ["dep:deadpool-diesel", "dep:diesel", "dep:diesel-derive-enum", "dep:diesel_migrations", "dep:r2d2"]
-default = ["auth", "cache", "compression", "database", "email", "search", "auth-flat-fields"]
+default = ["auth", "cache", "compression", "database", "email", "search"]
 development = ["monitoring", "search"]
 dev = ["auth", "database"]
 email = ["dep:lettre"]
