@@ -131,37 +131,53 @@ impl AuthService {
     /// - 資格情報が不正 / ユーザが存在しない / パスワードハッシュ検証失敗時。
     pub async fn authenticate_user(&self, request: LoginRequest) -> Result<User> {
         info!(target: "auth", "login_attempt");
-        let user = self
-            .user_repo
-            .get_user_by_email(request.email.as_str())
+        
+        let user = self.fetch_user_by_email(&request.email).await?;
+        Self::ensure_active(&user)?;
+        Self::verify_user_password(&user, &request.password)?;
+        self.update_login_timestamp(&user).await?;
+        
+        info!(target: "auth", user_id=%user.id, "login_success");
+        Ok(user)
+    }
+
+    /// Fetch user by email address
+    async fn fetch_user_by_email(&self, email: &str) -> Result<User> {
+        self.user_repo
+            .get_user_by_email(email)
             .await
             .map_err(|_| {
                 warn!(target: "auth", "login_failed: user_not_found");
-                AuthError::UserNotFound
-            })?;
-        Self::ensure_active(&user)?;
-        if let Some(password_hash) = &user.password_hash {
-            match password::verify_password(&request.password, password_hash) {
-                Ok(true) => {}
-                Ok(false) => {
-                    warn!(target: "auth", user_id=%user.id, "login_failed: invalid_credentials");
-                    return Err(AuthError::InvalidCredentials.into());
-                }
-                Err(e) => {
-                    error!(target: "auth", user_id=%user.id, err=%e, "password_verify_error");
-                    return Err(AuthError::PasswordHash(e.to_string()).into());
-                }
-            }
-        } else {
+                AuthError::UserNotFound.into()
+            })
+    }
+
+    /// Verify user's password against stored hash
+    fn verify_user_password(user: &User, password: &str) -> Result<()> {
+        let password_hash = user.password_hash.as_ref().ok_or_else(|| {
             warn!(target: "auth", user_id=%user.id, "login_failed: no_password_hash");
-            return Err(AuthError::InvalidCredentials.into());
+            AuthError::InvalidCredentials
+        })?;
+
+        match password::verify_password(password, password_hash) {
+            Ok(true) => Ok(()),
+            Ok(false) => {
+                warn!(target: "auth", user_id=%user.id, "login_failed: invalid_credentials");
+                Err(AuthError::InvalidCredentials.into())
+            }
+            Err(e) => {
+                error!(target: "auth", user_id=%user.id, err=%e, "password_verify_error");
+                Err(AuthError::PasswordHash(e.to_string()).into())
+            }
         }
+    }
+
+    /// Update user's last login timestamp
+    async fn update_login_timestamp(&self, user: &User) -> Result<()> {
         self.user_repo
             .update_last_login(user.id)
             .await
-            .map_err(|e| AuthError::Database(e.to_string()))?;
-        info!(target: "auth", user_id=%user.id, "login_success");
-        Ok(user)
+            .map_err(|e| AuthError::Database(e.to_string()).into())
     }
 
     /// 認証後にセッションとトークンを生成して `AuthResponse` を返す。
