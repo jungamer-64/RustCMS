@@ -42,6 +42,10 @@ mod api_key_adapter_tests {
     #[tokio::test]
     async fn adapter_blocks_after_threshold() {
         // Ensure env threshold determinism; backend reads on construction.
+        // SAFETY: This unsafe block is used in a test environment to set environment variables.
+        // The test runs in isolation, and these variables are only used for configuring
+        // the rate limiter test. There is no data race risk as tests run sequentially
+        // or in separate processes with tokio::test.
         unsafe {
             std::env::set_var("API_KEY_FAIL_WINDOW_SECS", "60");
             std::env::set_var("API_KEY_FAIL_THRESHOLD", "2"); // block after >2 failures
