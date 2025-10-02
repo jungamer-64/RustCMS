@@ -1,0 +1,295 @@
+name: Continuous Benchmarking
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'src/**'
+      - 'benches/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'benches/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  schedule:
+    # Run benchmarks daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  benchmark:
+    name: Run Performance Benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for baseline comparison
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bench-
+            ${{ runner.os }}-cargo-
+
+      - name: Install Criterion
+        run: |
+          cargo install cargo-criterion || true
+
+      - name: Setup benchmark environment
+        run: |
+          echo "Setting up benchmark environment..."
+          mkdir -p biscuit_keys
+          # Generate test keys if they don't exist
+          if [ ! -f biscuit_keys/root.key ]; then
+            echo "Generating test keys..."
+            # Add key generation command here if needed
+          fi
+
+      - name: Download baseline benchmarks
+        if: github.event_name == 'pull_request'
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-baseline
+          path: target/criterion
+        continue-on-error: true
+
+      - name: Run authentication benchmarks
+        run: |
+          cargo bench --bench auth_benchmark -- --output-format bencher | tee auth-bench.txt
+          cargo criterion --bench auth_benchmark --message-format json > auth-results.json || true
+
+      - name: Run cache benchmarks
+        run: |
+          cargo bench --bench cache_benchmark -- --output-format bencher | tee cache-bench.txt
+          cargo criterion --bench cache_benchmark --message-format json > cache-results.json || true
+
+      - name: Run search benchmarks
+        run: |
+          cargo bench --bench search_benchmark -- --output-format bencher | tee search-bench.txt
+          cargo criterion --bench search_benchmark --message-format json > search-results.json || true
+
+      - name: Run database benchmarks
+        run: |
+          cargo bench --bench database_benchmark -- --output-format bencher | tee database-bench.txt
+          cargo criterion --bench database_benchmark --message-format json > database-results.json || true
+
+      - name: Combine benchmark results
+        run: |
+          cat auth-bench.txt cache-bench.txt search-bench.txt database-bench.txt > all-benchmarks.txt
+
+      - name: Build benchmark analyzer
+        run: |
+          cargo build --release --bin benchmark-analyzer || echo "Analyzer build skipped"
+
+      - name: Analyze benchmark results (Python)
+        run: |
+          # Create analysis script
+          cat > analyze.py << 'EOF'
+          import sys
+          
+          def parse_bencher_line(line):
+              # Parse bencher format: test name ... bench: xxx ns/iter (+/- yyy)
+              if 'bench:' not in line:
+                  return None
+              parts = line.split('bench:')
+              if len(parts) < 2:
+                  return None
+              name = parts[0].replace('test', '').strip()
+              time_part = parts[1].split('ns/iter')[0].strip()
+              try:
+                  time_ns = int(time_part.replace(',', ''))
+                  return (name, time_ns)
+              except:
+                  return None
+          
+          with open('all-benchmarks.txt', 'r') as f:
+              for line in f:
+                  result = parse_bencher_line(line)
+                  if result:
+                      name, time_ns = result
+                      time_ms = time_ns / 1_000_000
+                      if time_ms > 100:
+                          print(f"⚠️  {name}: {time_ms:.2f}ms (may need optimization)")
+                      elif time_ms < 1:
+                          print(f"✅ {name}: {time_ms:.3f}ms (excellent)")
+                      else:
+                          print(f"✓  {name}: {time_ms:.2f}ms (good)")
+          EOF
+          
+          python3 analyze.py || true
+
+      - name: Analyze benchmark results (Rust tool)
+        if: github.event_name == 'pull_request'
+        run: |
+          # Use Rust analyzer if available and JSON results exist
+          if [ -f "target/release/benchmark-analyzer" ] && [ -f "auth-results.json" ]; then
+            echo "🔍 Running Rust benchmark analyzer..."
+            ./target/release/benchmark-analyzer auth-results.json baseline/auth-results.json 2>/dev/null || true
+          fi
+
+      - name: Generate performance report
+        if: always()
+        run: |
+          # Create markdown report
+          cat > benchmark-report.md << 'EOF'
+          # Benchmark Results
+          
+          EOF
+          
+          echo "**Run Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> benchmark-report.md
+          echo "**Commit**: ${{ github.sha }}" >> benchmark-report.md
+          echo "**Branch**: ${{ github.ref }}" >> benchmark-report.md
+          echo "" >> benchmark-report.md
+          echo "## Summary" >> benchmark-report.md
+          echo "" >> benchmark-report.md
+          
+          echo "### Authentication Benchmarks" >> benchmark-report.md
+          grep "auth/" all-benchmarks.txt | head -20 >> benchmark-report.md || true
+          echo "" >> benchmark-report.md
+          
+          echo "### Cache Benchmarks" >> benchmark-report.md
+          grep "cache/" all-benchmarks.txt | head -20 >> benchmark-report.md || true
+          echo "" >> benchmark-report.md
+          
+          echo "### Search Benchmarks" >> benchmark-report.md
+          grep "search/" all-benchmarks.txt | head -20 >> benchmark-report.md || true
+          echo "" >> benchmark-report.md
+          
+          echo "### Database Benchmarks" >> benchmark-report.md
+          grep "database/" all-benchmarks.txt | head -20 >> benchmark-report.md || true
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: |
+            all-benchmarks.txt
+            benchmark-report.md
+            *-results.json
+            target/criterion/
+          retention-days: 30
+
+      - name: Save baseline for main branch
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-baseline
+          path: target/criterion/
+          retention-days: 90
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('benchmark-report.md', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 📊 Benchmark Results\n\n${report}\n\n` +
+                    `Full results available in [artifacts](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`
+            });
+
+      - name: Check for performance regressions
+        if: github.event_name == 'pull_request'
+        run: |
+          # Simple regression check
+          if grep -q "⚠️" all-benchmarks.txt; then
+            echo "::warning::Performance regressions detected. Review benchmark results."
+          fi
+
+      - name: Generate nightly report
+        if: github.event_name == 'schedule'
+        run: |
+          echo "# Nightly Benchmark Report - $(date)" > nightly-report.md
+          echo "" >> nightly-report.md
+          echo "## System Information" >> nightly-report.md
+          echo "- Runner: $(uname -a)" >> nightly-report.md
+          echo "- CPU: $(nproc) cores" >> nightly-report.md
+          echo "- Memory: $(free -h | grep Mem | awk '{print $2}')" >> nightly-report.md
+          echo "" >> nightly-report.md
+          echo "## Benchmark Results" >> nightly-report.md
+          cat benchmark-report.md >> nightly-report.md
+
+      - name: Upload nightly report
+        if: github.event_name == 'schedule'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-benchmark-report-${{ github.run_number }}
+          path: nightly-report.md
+          retention-days: 365
+
+  benchmark-comparison:
+    name: Compare with Baseline
+    runs-on: ubuntu-latest
+    needs: benchmark
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download current results
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: current/
+
+      - name: Download baseline results
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-baseline
+          path: baseline/
+        continue-on-error: true
+
+      - name: Compare results
+        run: |
+          echo "# Benchmark Comparison" > comparison.md
+          echo "" >> comparison.md
+          echo "Comparing current PR results with main branch baseline..." >> comparison.md
+          echo "" >> comparison.md
+          
+          if [ -d "baseline/" ] && [ -d "current/" ]; then
+            echo "✅ Both baseline and current results available for comparison." >> comparison.md
+            # Add more sophisticated comparison logic here
+          else
+            echo "⚠️ Baseline not available. This is the first benchmark run or baseline expired." >> comparison.md
+          fi
+
+      - name: Upload comparison
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-comparison-${{ github.sha }}
+          path: comparison.md
+          retention-days: 30
