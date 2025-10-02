@@ -120,7 +120,6 @@ tracing-opentelemetry = { version = "0.31" }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "registry", "fmt"] }
 tracing-appender = "0.2"
 log = "0.4"
-atty = "0.2"
 
 # ===== CONFIGURATION =====
 clap = { version = "4.4", features = ["derive", "env"] }

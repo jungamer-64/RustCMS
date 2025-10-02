@@ -9,13 +9,12 @@ use std::{
     error::Error,
     fmt::{self, Display},
     fs,
-    io::{self, Write},
+    io::{self, IsTerminal, Write},
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
 };
 
-use atty::Stream as AttyStream;
 use once_cell::sync::OnceCell;
 use tracing_appender::non_blocking;
 use tracing_subscriber::{
@@ -303,10 +302,10 @@ fn install_telemetry(verbose: bool) -> Result<TelemetryState, TelemetryError> {
         LogFormat::Text => {
             let use_ansi = match &log_output {
                 LogOutput::Stdout => {
-                    atty::is(AttyStream::Stdout) && env::var_os("NO_COLOR").is_none()
+                    io::stdout().is_terminal() && env::var_os("NO_COLOR").is_none()
                 }
                 LogOutput::Stderr => {
-                    atty::is(AttyStream::Stderr) && env::var_os("NO_COLOR").is_none()
+                    io::stderr().is_terminal() && env::var_os("NO_COLOR").is_none()
                 }
                 LogOutput::File(_, _) => false,
             };
