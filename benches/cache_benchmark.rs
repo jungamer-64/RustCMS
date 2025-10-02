@@ -181,7 +181,7 @@ fn bench_cache_mixed_workload(c: &mut Criterion) {
                             } else {
                                 // 30% writes
                                 let key = CacheKey::from(format!("key_{}", rng.gen_range(0..100)));
-                                let value = CacheValue::String(format!("value_{}", rng.gen::<u32>()));
+                                let value = CacheValue::String(format!("value_{}", rng.gen_range(0..u32::MAX)));
                                 cache.set(&key, value).ok();
                                 Ok(None)
                             }
