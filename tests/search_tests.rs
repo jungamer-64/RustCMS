@@ -123,7 +123,7 @@ mod search_tests {
         let op: FilterOperator = serde_json::from_str(json_gt).expect("deserialize failed");
         assert!(matches!(op, FilterOperator::GreaterThan));
 
-        let json_lt = r#""lessthan""#;
+        let json_lt = "\"lessthan\"";
         let op: FilterOperator = serde_json::from_str(json_lt).expect("deserialize failed");
         assert!(matches!(op, FilterOperator::LessThan));
     }
@@ -180,7 +180,7 @@ mod search_tests {
     fn search_request_minimal() {
         let json = r#"{"query": "test"}"#;
         let req: SearchRequest = serde_json::from_str(json).expect("deserialize failed");
-        
+
         assert_eq!(req.query, "test");
         assert!(req.filters.is_none());
         assert!(req.facets.is_none());
