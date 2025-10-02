@@ -6,9 +6,9 @@
 //! - Query performance
 //! - Transaction handling
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
 use cms_backend::database::Pool;
-use uuid::Uuid;
+use std::hint::black_box;
 
 fn setup_pool() -> Pool {
     // In a real benchmark, you'd connect to a test database
