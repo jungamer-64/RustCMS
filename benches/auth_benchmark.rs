@@ -20,20 +20,24 @@ use uuid::Uuid;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
+mod common;
+use common::{config, concurrency_levels};
+
 // ============================================================================
 // Setup and Configuration
 // ============================================================================
 
 /// Create authentication service for benchmarking
 fn create_auth_service() -> BiscuitAuthService {
-    let config = BiscuitConfig {
-        root_key_path: "./biscuit_keys/root.key".to_string(),
-        public_key_path: "./biscuit_keys/public.key".to_string(),
+    let bench_config = config();
+    let biscuit_config = BiscuitConfig {
+        root_key_path: bench_config.biscuit_root_key_path.clone(),
+        public_key_path: bench_config.biscuit_public_key_path.clone(),
         token_expiry_seconds: 3600,
         refresh_token_expiry_seconds: 86400,
     };
     
-    BiscuitAuthService::new(config)
+    BiscuitAuthService::new(biscuit_config)
         .expect("Failed to initialize authentication service")
 }
 
@@ -267,7 +271,8 @@ fn bench_concurrent_token_generation(c: &mut Criterion) {
     let auth_service = Arc::new(create_auth_service());
     let mut group = c.benchmark_group("auth/concurrent_token_generation");
 
-    for concurrency in [1, 5, 10, 20, 50].iter() {
+    // Use dynamic concurrency levels based on CPU count
+    for concurrency in concurrency_levels().iter() {
         group.bench_with_input(
             BenchmarkId::from_parameter(concurrency),
             concurrency,
@@ -324,7 +329,8 @@ fn bench_concurrent_token_verification(c: &mut Criterion) {
     let tokens = Arc::new(tokens);
     let mut group = c.benchmark_group("auth/concurrent_token_verification");
 
-    for concurrency in [1, 5, 10, 20, 50].iter() {
+    // Use dynamic concurrency levels based on CPU count
+    for concurrency in concurrency_levels().iter() {
         group.bench_with_input(
             BenchmarkId::from_parameter(concurrency),
             concurrency,

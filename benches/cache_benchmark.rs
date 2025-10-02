@@ -20,6 +20,9 @@ use std::sync::Arc;
 use tokio::runtime::Runtime;
 use rand::Rng;
 
+mod common;
+use common::{concurrency_levels, handle_bench_error};
+
 // ============================================================================
 // Setup and Configuration
 // ============================================================================
@@ -316,7 +319,8 @@ fn bench_concurrent_cache_reads(c: &mut Criterion) {
     
     let mut group = c.benchmark_group("cache/concurrent_reads");
 
-    for concurrency in [1, 5, 10, 20, 50].iter() {
+    // Use dynamic concurrency levels based on CPU count
+    for concurrency in concurrency_levels().iter() {
         group.bench_with_input(
             BenchmarkId::from_parameter(concurrency),
             concurrency,
@@ -354,7 +358,8 @@ fn bench_concurrent_cache_writes(c: &mut Criterion) {
     
     let mut group = c.benchmark_group("cache/concurrent_writes");
 
-    for concurrency in [1, 5, 10, 20, 50].iter() {
+    // Use dynamic concurrency levels based on CPU count
+    for concurrency in concurrency_levels().iter() {
         group.bench_with_input(
             BenchmarkId::from_parameter(concurrency),
             concurrency,

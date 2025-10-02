@@ -20,11 +20,14 @@ use tempfile::TempDir;
 use uuid::Uuid;
 use chrono::Utc;
 
+mod common;
+use common::{generate_test_content, generate_test_tags};
+
 // ============================================================================
 // Setup and Configuration
 // ============================================================================
 
-/// Create search engine instance for benchmarking
+/// Create search engine instance for benchmarking with proper cleanup
 fn create_search_engine() -> (SearchEngine, TempDir) {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let search_engine = SearchEngine::new(temp_dir.path().to_str().unwrap())
@@ -64,18 +67,17 @@ fn create_custom_document(id: usize, title: &str, content: &str, tags: Vec<Strin
     }
 }
 
-/// Generate large document (for testing different sizes)
+/// Generate large document (for testing different sizes) - uses common utility
 fn create_large_document(id: usize, content_size: usize) -> Document {
-    let base_content = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ";
-    let repetitions = content_size / base_content.len() + 1;
-    let content = base_content.repeat(repetitions);
+    let content = generate_test_content(content_size);
+    let tags = generate_test_tags(2);
     
     Document {
         id: Uuid::new_v4(),
         title: format!("Large Document {}", id),
-        content: content[..content_size].to_string(),
+        content,
         excerpt: Some(format!("Large document excerpt {}", id)),
-        tags: vec!["large".to_string(), "test".to_string()],
+        tags,
         author: "benchmark_author".to_string(),
         created_at: Utc::now(),
     }
