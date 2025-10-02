@@ -19,8 +19,14 @@ fn route_paths_follow_conventions() {
     ];
 
     for path in api_paths {
-        assert!(path.starts_with("/api/v1"), "API path should start with /api/v1: {}", path);
-        assert!(!path.ends_with('/') || path == "/api/v1", "API path should not have trailing slash: {}", path);
+        assert!(
+            path.starts_with("/api/v1"),
+            "API path should start with /api/v1: {path}"
+        );
+        assert!(
+            !path.ends_with('/') || path == "/api/v1",
+            "API path should not have trailing slash: {path}"
+        );
     }
 }
 
@@ -33,7 +39,10 @@ fn route_auth_paths_consistent() {
     ];
 
     for path in auth_paths {
-        assert!(path.starts_with("/api/v1/auth/"), "Auth path should start with /api/v1/auth/: {}", path);
+        assert!(
+            path.starts_with("/api/v1/auth/"),
+            "Auth path should start with /api/v1/auth/: {path}"
+        );
     }
 }
 
@@ -47,7 +56,10 @@ fn route_admin_paths_protected() {
     ];
 
     for path in admin_paths {
-        assert!(path.starts_with("/api/v1/admin/"), "Admin path should start with /api/v1/admin/: {}", path);
+        assert!(
+            path.starts_with("/api/v1/admin/"),
+            "Admin path should start with /api/v1/admin/: {path}"
+        );
     }
 }
 
@@ -59,8 +71,14 @@ fn route_structure_validation() {
     let protected_routes = ["/api/v1/posts", "/api/v1/users"];
 
     // All routes should start with /
-    for route in public_routes.iter().chain(auth_routes.iter()).chain(protected_routes.iter()) {
-        assert!(route.starts_with('/'), "Route should start with /: {}", route);
+    let all_routes = [
+        public_routes.as_slice(),
+        auth_routes.as_slice(),
+        protected_routes.as_slice(),
+    ]
+    .concat();
+    for route in all_routes {
+        assert!(route.starts_with('/'), "Route should start with /: {route}");
     }
 }
 
@@ -75,7 +93,10 @@ fn route_api_versioning() {
     ];
 
     for route in versioned_routes {
-        assert!(route.contains("/v1/"), "Route should include version: {}", route);
+        assert!(
+            route.contains("/v1/"),
+            "Route should include version: {route}"
+        );
     }
 }
 
@@ -91,7 +112,14 @@ fn route_naming_conventions() {
 
     for route in routes {
         // Should use lowercase and hyphens
-        assert_eq!(route, route.to_lowercase(), "Route should be lowercase: {}", route);
-        assert!(!route.contains('_'), "Route should use hyphens, not underscores: {}", route);
+        assert_eq!(
+            route,
+            route.to_lowercase(),
+            "Route should be lowercase: {route}"
+        );
+        assert!(
+            !route.contains('_'),
+            "Route should use hyphens, not underscores: {route}"
+        );
     }
 }
