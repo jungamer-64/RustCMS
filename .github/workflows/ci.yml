@@ -1,26 +1,25 @@
- 
 name: CI
 
 on:
   push:
-    branches: [ main ]
-    tags: [ 'v*.*.*' ]
+    branches: [main]
+    tags: ["v*.*.*"]
     paths-ignore:
-      - 'README.md'
-      - 'README_PRODUCTION.md'
-      - 'docs/**'
-      - '**/*.md'
-      - 'LICENSE'
+      - "README.md"
+      - "README_PRODUCTION.md"
+      - "docs/**"
+      - "**/*.md"
+      - "LICENSE"
   pull_request:
-    branches: [ main ]
+    branches: [main]
     paths-ignore:
-      - 'README.md'
-      - 'README_PRODUCTION.md'
-      - 'docs/**'
-      - '**/*.md'
-      - 'LICENSE'
+      - "README.md"
+      - "README_PRODUCTION.md"
+      - "docs/**"
+      - "**/*.md"
+      - "LICENSE"
   schedule:
-    - cron: '23 3 * * *' # Security audit daily (merged from security.yml)
+    - cron: "23 3 * * *" # Security audit daily (merged from security.yml)
   # Allow manual dispatch for debugging CI changes & on-demand security/coverage runs
   workflow_dispatch: {}
 
@@ -49,20 +48,20 @@ jobs:
     permissions:
       contents: read
     steps:
-  # TODO: pin this action to a full commit SHA for immutability (e.g. actions/checkout@<full-sha>)
+      # TODO: pin this action to a full commit SHA for immutability (e.g. actions/checkout@<full-sha>)
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
       - name: Setup toolchain (stable)
-  # TODO: pin this action to a full commit SHA for immutability
+        # TODO: pin this action to a full commit SHA for immutability
         uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
         with:
           components: rustfmt, clippy
 
       - name: Cache (Swatinem/rust-cache)
-  # TODO: pin this action to a full commit SHA for immutability
+        # TODO: pin this action to a full commit SHA for immutability
         uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0
         with:
           workspaces: . -> target
@@ -110,14 +109,14 @@ jobs:
             cargo-features: "--no-default-features --features auth,cache,compression,database,search"
     steps:
       # TODO: pin this action to a full commit SHA for immutability
-      
+
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
       - name: Setup toolchain ${{ matrix.toolchain }}
-  # TODO: pin this action to a full commit SHA for immutability
+        # TODO: pin this action to a full commit SHA for immutability
         uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
         with:
           toolchain: ${{ matrix.toolchain }}
@@ -127,7 +126,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Cache (Swatinem/rust-cache)
-  # TODO: pin this action to a full commit SHA for immutability
+        # TODO: pin this action to a full commit SHA for immutability
         uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0
         with:
           workspaces: . -> target
@@ -193,7 +192,7 @@ jobs:
           cargo insta test
       - name: Upload test log
         if: always()
-        
+
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: test-log-${{ matrix.toolchain }}-${{ matrix.feature-set }}
@@ -209,7 +208,7 @@ jobs:
       contents: read
     steps:
       # TODO: pin this action to a full commit SHA for immutability
-      
+
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
@@ -223,7 +222,6 @@ jobs:
           bash scripts/deprecation-scan.sh --src-only --json > deprecation_counts.json
           echo "--- JSON counts ---"; cat deprecation_counts.json
       - name: Upload deprecation scan artifacts
-        
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: deprecation-scan-${{ github.sha }}
@@ -236,7 +234,7 @@ jobs:
           bash scripts/deprecation-auto-guidance.sh | tee guidance.txt
       - name: Upload guidance
         if: always()
-        
+
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: deprecation-guidance-${{ github.sha }}
@@ -260,7 +258,6 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB: rustcms_test
         ports:
           - 5432:5432
@@ -270,7 +267,6 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/checkout@v4
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
@@ -300,7 +296,6 @@ jobs:
       - name: Run DB migrations for integration
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           set -euo pipefail
           cargo build --bin cms-migrate --quiet || true
@@ -310,9 +305,6 @@ jobs:
             echo "cms-migrate binary not found; skipping migrations";
           fi
       - name: Run integration tests
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           set -euo pipefail
           echo "Using BISCUIT_PRIVATE_KEY_B64=${BISCUIT_PRIVATE_KEY_B64:-<none>}"
@@ -327,8 +319,6 @@ jobs:
     needs: lint
     if: github.event_name != 'pull_request' || github.base_ref == 'main' || github.event_name == 'schedule'
     steps:
-      
-      - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
@@ -391,15 +381,12 @@ jobs:
     needs: lint
     if: github.event_name != 'pull_request' || github.base_ref == 'main' || github.event_name == 'schedule'
     steps:
-      # TODO: pin this action to a full commit SHA for immutability
-      
-      - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
       - name: Cache cargo registry & index
         # TODO: pin this action to a full commit SHA for immutability
-        
+
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
         with:
           path: |
@@ -423,16 +410,13 @@ jobs:
       CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
     steps:
       - name: Checkout repository
-        # TODO: pin this action to a full commit SHA for immutability
-      
-        uses: actions/checkout@v4
         uses: actions/checkout@v4
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
         with:
           components: rustfmt, clippy
       - name: Cache cargo & target
-        
+
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
         with:
           path: |
@@ -443,7 +427,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-coverage-
       - name: Cache cargo-tarpaulin binary
-        
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
         with:
           path: ~/.cargo/bin/cargo-tarpaulin
@@ -457,14 +440,14 @@ jobs:
         run: cargo tarpaulin --verbose --workspace --out Lcov --timeout 240
       - name: Upload coverage to Codacy
         if: env.CODACY_PROJECT_TOKEN != ''
-        
+
         uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699
         with:
           project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
           coverage-reports: lcov.info
       - name: Upload LCOV artifact
         if: always()
-        
+
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: lcov-report
