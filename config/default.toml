@@ -34,6 +34,7 @@ cors_origins = ["http://localhost:3000"]
 # Rate limiting defaults
 rate_limit_requests = 100
 rate_limit_window = 60
+enable_login_rate_limiting = true
 
 [database]
 # Use environment variable to avoid committing secrets. Set DATABASE_URL in your environment.
