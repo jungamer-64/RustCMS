@@ -36,20 +36,20 @@ pub struct Duration {
 }
 
 impl Duration {
-    pub fn from_nanos(nanos: u64) -> Self {
+    pub const fn from_nanos(nanos: u64) -> Self {
         Self { nanos }
     }
 
-    #[allow(dead_code)]
-    pub fn as_secs_f64(&self) -> f64 {
+    #[allow(dead_code, clippy::cast_precision_loss)]
+    pub fn as_secs_f64(self) -> f64 {
         self.nanos as f64 / 1_000_000_000.0
     }
 
-    pub fn as_millis(&self) -> u64 {
+    pub const fn as_millis(self) -> u64 {
         self.nanos / 1_000_000
     }
 
-    pub fn as_micros(&self) -> u64 {
+    pub const fn as_micros(self) -> u64 {
         self.nanos / 1_000
     }
 }
