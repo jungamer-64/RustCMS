@@ -287,6 +287,131 @@ impl AppStateBuilder {
     }
 }
 
+// Helper functions for from_config
+
+/// Helper: Get environment variable interval or default
+fn get_interval_from_env(key: &str, default: u64) -> u64 {
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
+}
+
+/// Helper: Initialize database service if feature enabled
+#[cfg(feature = "database")]
+async fn initialize_database(config: &Config) -> Result<Database> {
+    info!("🗄️ Connecting to PostgreSQL database...");
+    let db = Database::new(&config.database).await?;
+    info!("✅ Database connection established");
+    Ok(db)
+}
+
+/// Helper: Initialize auth service if feature enabled
+#[cfg(feature = "auth")]
+async fn initialize_auth(
+    config: &crate::config::AuthConfig,
+    #[cfg(feature = "database")] database: Option<&Database>,
+) -> Result<AuthService> {
+    info!("🔐 Setting up authentication service...");
+    
+    #[cfg(feature = "database")]
+    {
+        if let Some(db) = database {
+            let auth = AuthService::new(config, db)?;
+            info!("✅ Authentication service initialized");
+            Ok(auth)
+        } else {
+            Err(crate::AppError::Internal("Auth requires database but database not initialized".to_string()))
+        }
+    }
+    
+    #[cfg(not(feature = "database"))]
+    {
+        // Auth feature requires database - this should not compile
+        compile_error!("auth feature requires database feature to be enabled");
+    }
+}
+
+/// Helper: Initialize cache service if feature enabled
+#[cfg(feature = "cache")]
+async fn initialize_cache(config: &crate::config::RedisConfig) -> Result<CacheService> {
+    info!("🚀 Setting up cache service...");
+    let cache = CacheService::new(config).await?;
+    info!("✅ Cache service initialized");
+    Ok(cache)
+}
+
+/// Helper: Initialize search service if feature enabled
+#[cfg(feature = "search")]
+async fn initialize_search(config: crate::config::SearchConfig) -> Result<SearchService> {
+    info!("🔍 Setting up search service...");
+    let search = SearchService::new(config).await?;
+    info!("✅ Search service initialized");
+    Ok(search)
+}
+
+/// Helper: Spawn auth session cleanup background task
+#[cfg(feature = "auth")]
+fn spawn_auth_cleanup_task(state: &AppState) {
+    let state_clone = state.clone();
+    let mut shutdown_rx = state_clone.shutdown_tx.subscribe();
+    let interval_secs = get_interval_from_env("AUTH_SESSION_CLEAN_INTERVAL_SECS", 300);
+    
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
+        loop {
+            tokio::select! {
+                _ = ticker.tick() => {
+                    // cleanup_expired_sessions doesn't return Result, just call it
+                    state_clone.auth.cleanup_expired_sessions().await;
+                    
+                    let active = state_clone.auth.get_active_session_count().await as u64;
+                    if let Ok(mut m) = state_clone.metrics.try_write() {
+                        m.active_sessions = active;
+                    }
+                }
+                Ok(()) = shutdown_rx.recv() => {
+                    info!("Auth cleanup task received shutdown");
+                    break;
+                }
+                else => { break; }
+            }
+        }
+    });
+}
+
+/// Helper: Spawn CSRF token cleanup background task
+fn spawn_csrf_cleanup_task(state: &AppState) {
+    let state_clone = state.clone();
+    let mut shutdown_rx = state_clone.shutdown_tx.subscribe();
+    let cleanup_interval_secs = get_interval_from_env("CSRF_CLEANUP_INTERVAL_SECS", 1800);
+    
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(cleanup_interval_secs));
+        loop {
+            tokio::select! {
+                _ = ticker.tick() => {
+                    // cleanup_expired_tokens doesn't return Result, just call it
+                    state_clone.csrf.cleanup_expired_tokens().await;
+                }
+                Ok(()) = shutdown_rx.recv() => {
+                    info!("CSRF cleanup task received shutdown");
+                    break;
+                }
+                else => { break; }
+            }
+        }
+    });
+}
+
+/// Helper: Spawn all background maintenance tasks
+fn spawn_background_tasks(state: &AppState) {
+    #[cfg(feature = "auth")]
+    spawn_auth_cleanup_task(state);
+    
+    spawn_csrf_cleanup_task(state);
+}
+
 /// Health status for individual services
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct HealthStatus {
@@ -360,8 +485,7 @@ impl AppState {
     ///
     /// # Errors
     /// 各サービス（DB/キャッシュ/検索/認証）の初期化に失敗した場合、エラーを返します。
-    // Allow cognitive complexity and line count: feature-gated initialization requires branching and is clearer consolidated here.
-    #[allow(clippy::cognitive_complexity, clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines)] // Still long due to feature gates, but improved
     pub async fn from_config(config: Config) -> Result<Self> {
         info!("🔧 Initializing application state from provided Config");
 
@@ -385,115 +509,42 @@ impl AppState {
         // Initialize services conditionally based on features
         #[cfg(feature = "database")]
         {
-            info!("🗄️ Connecting to PostgreSQL database...");
-            app_state_builder.database = Some(Database::new(&config.database).await?);
-            info!("✅ Database connection established");
+            app_state_builder.database = Some(initialize_database(&config).await?);
         }
 
         #[cfg(feature = "auth")]
         {
-            info!("🔐 Setting up authentication service...");
-            #[cfg(feature = "database")]
-            {
-                app_state_builder.auth = Some(AuthService::new(
-                    &config.auth,
-                    app_state_builder.database.as_ref().unwrap(),
-                )?);
-            }
-            #[cfg(not(feature = "database"))]
-            {
-                app_state_builder.auth = Some(AuthService::new_standalone(&config.auth).await?);
-            }
-            info!("✅ Authentication service initialized");
+            app_state_builder.auth = Some(initialize_auth(
+                &config.auth,
+                #[cfg(feature = "database")]
+                app_state_builder.database.as_ref(),
+            ).await?);
         }
 
         #[cfg(feature = "cache")]
         {
-            info!("🚀 Setting up cache service...");
-            app_state_builder.cache = Some(CacheService::new(&config.redis).await?);
-            info!("✅ Cache service initialized");
+            app_state_builder.cache = Some(initialize_cache(&config.redis).await?);
         }
 
         #[cfg(feature = "search")]
         {
-            info!("🔍 Setting up search service...");
-            app_state_builder.search = Some(SearchService::new(config.search.clone()).await?);
-            info!("✅ Search service initialized");
+            app_state_builder.search = Some(initialize_search(config.search.clone()).await?);
         }
 
         let mut app_state = app_state_builder.build();
-        // Override default limiter with configured values
-        let max_reqs = u32::try_from(config.security.rate_limit_requests).unwrap_or(u32::MAX);
+        
+        // Configure rate limiter
+        let max_reqs = u32::try_from(config.security.rate_limit_requests).unwrap_or_else(|_| {
+            warn!("Invalid rate_limit_requests value, using u32::MAX");
+            u32::MAX
+        });
         app_state.rate_limiter = Arc::new(FixedWindowLimiter::new(
             max_reqs,
             config.security.rate_limit_window,
         ));
 
-        // --- Background maintenance tasks ---
-        #[cfg(feature = "auth")]
-        {
-            // Clone for task
-            let state_clone = app_state.clone();
-            // Create a receiver for shutdown notifications
-            let mut shutdown_rx = state_clone.shutdown_tx.subscribe();
-            // Cleanup interval (seconds) via env or default 300
-            let interval_secs: u64 = std::env::var("AUTH_SESSION_CLEAN_INTERVAL_SECS")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(300);
-            tokio::spawn(async move {
-                let mut ticker =
-                    tokio::time::interval(std::time::Duration::from_secs(interval_secs));
-                loop {
-                    tokio::select! {
-                        _ = ticker.tick() => {
-                            // Clean expired
-                            state_clone.auth.cleanup_expired_sessions().await;
-                            // Update metric snapshot
-                            let active = state_clone.auth.get_active_session_count().await as u64;
-                            if let Ok(mut m) = state_clone.metrics.try_write() {
-                                // try_write to avoid blocking
-                                m.active_sessions = active;
-                            }
-                        }
-                        Ok(()) = shutdown_rx.recv() => {
-                            info!("Auth cleanup task received shutdown");
-                            break;
-                        }
-                        else => {
-                            // Channel closed or other; break to be safe
-                            break;
-                        }
-                    }
-                }
-            });
-        }
-
-        // CSRF token cleanup task (security hardening)
-        {
-            let state_clone = app_state.clone();
-            let mut shutdown_rx = state_clone.shutdown_tx.subscribe();
-            let cleanup_interval_secs: u64 = std::env::var("CSRF_CLEANUP_INTERVAL_SECS")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(1800); // 30 minutes default
-            tokio::spawn(async move {
-                let mut ticker =
-                    tokio::time::interval(std::time::Duration::from_secs(cleanup_interval_secs));
-                loop {
-                    tokio::select! {
-                        _ = ticker.tick() => {
-                            state_clone.csrf.cleanup_expired_tokens().await;
-                        }
-                        Ok(()) = shutdown_rx.recv() => {
-                            info!("CSRF cleanup task received shutdown");
-                            break;
-                        }
-                        else => { break; }
-                    }
-                }
-            });
-        }
+        // Spawn background maintenance tasks
+        spawn_background_tasks(&app_state);
 
         info!("🎉 Application state initialized successfully");
         Ok(app_state)
