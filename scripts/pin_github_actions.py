@@ -19,6 +19,10 @@ WORKFLOW_GLOB = '.github/workflows'
 
 
 def gh_api_get(url):
+    # Security: Validate URL to prevent file:// scheme injection
+    if not url.startswith('https://api.github.com/'):
+        raise ValueError(f'Invalid GitHub API URL: {url}')
+
     req = Request(url)
     req.add_header('Authorization', f'token {TOKEN}')
     req.add_header('Accept', 'application/vnd.github.v3+json')
