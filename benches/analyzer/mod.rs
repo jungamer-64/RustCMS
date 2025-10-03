@@ -103,11 +103,10 @@ impl BenchmarkAnalyzer {
 
     /// Load benchmark results from JSON file
     pub fn load_results<P: AsRef<Path>>(&mut self, path: P) -> Result<(), String> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read file: {}", e))?;
-        
-        let results: Vec<BenchmarkResult> = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+        let content = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {e}"))?;
+
+        let results: Vec<BenchmarkResult> =
+            serde_json::from_str(&content).map_err(|e| format!("Failed to parse JSON: {e}"))?;
 
         for result in results {
             self.results.insert(result.name.clone(), result);
@@ -118,11 +117,11 @@ impl BenchmarkAnalyzer {
 
     /// Load baseline results for comparison
     pub fn load_baseline<P: AsRef<Path>>(&mut self, path: P) -> Result<(), String> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read baseline: {}", e))?;
-        
-        let results: Vec<BenchmarkResult> = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse baseline: {}", e))?;
+        let content =
+            fs::read_to_string(path).map_err(|e| format!("Failed to read baseline: {e}"))?;
+
+        let results: Vec<BenchmarkResult> =
+            serde_json::from_str(&content).map_err(|e| format!("Failed to parse baseline: {e}"))?;
 
         let mut baseline = HashMap::new();
         for result in results {
@@ -147,21 +146,26 @@ impl BenchmarkAnalyzer {
         }
 
         comparisons.sort_by(|a, b| {
-            b.change_percent.abs().partial_cmp(&a.change_percent.abs()).unwrap()
+            b.change_percent
+                .abs()
+                .partial_cmp(&a.change_percent.abs())
+                .unwrap()
         });
 
         comparisons
     }
 
     /// Compare two benchmark results
+    #[allow(clippy::cast_precision_loss, clippy::unused_self)]
     fn compare_results(
         &self,
         name: &str,
         baseline: &BenchmarkResult,
         current: &BenchmarkResult,
     ) -> BenchmarkComparison {
-        let change = (current.mean.nanos as f64 - baseline.mean.nanos as f64) 
-            / baseline.mean.nanos as f64 * 100.0;
+        let change = (current.mean.nanos as f64 - baseline.mean.nanos as f64)
+            / baseline.mean.nanos as f64
+            * 100.0;
 
         let significance = if change.abs() > 10.0 {
             Significance::High
@@ -185,13 +189,16 @@ impl BenchmarkAnalyzer {
     }
 
     /// Categorize performance based on targets
-    #[allow(dead_code)]
-    pub fn categorize_performance(&self, target_nanos: u64) -> HashMap<String, PerformanceCategory> {
+    #[allow(dead_code, clippy::cast_precision_loss)]
+    pub fn categorize_performance(
+        &self,
+        target_nanos: u64,
+    ) -> HashMap<String, PerformanceCategory> {
         let mut categories = HashMap::new();
 
         for (name, result) in &self.results {
             let ratio = result.mean.nanos as f64 / target_nanos as f64;
-            
+
             let category = if ratio <= 1.0 {
                 PerformanceCategory::Excellent
             } else if ratio <= 1.2 {
@@ -265,6 +272,7 @@ pub struct ReportGenerator;
 
 impl ReportGenerator {
     /// Generate Markdown report
+    #[allow(clippy::format_push_string, clippy::too_many_lines)]
     pub fn generate_markdown(
         summary: &BenchmarkSummary,
         comparisons: &[BenchmarkComparison],
@@ -272,62 +280,63 @@ impl ReportGenerator {
         let mut report = String::new();
 
         report.push_str("# Benchmark Analysis Report\n\n");
-        report.push_str(&format!("**Date**: {}\n\n", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")));
+        let date = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
+        report.push_str(&format!("**Date**: {date}\n\n"));
 
         // Summary section
         report.push_str("## Summary\n\n");
-        report.push_str(&format!("- Total benchmarks: {}\n", summary.total_benchmarks));
-        report.push_str(&format!("- Average time: {:.2}ms\n", summary.average_time.as_millis()));
-        
+        let total = summary.total_benchmarks;
+        report.push_str(&format!("- Total benchmarks: {total}\n"));
+        let avg = summary.average_time.as_millis();
+        report.push_str(&format!("- Average time: {avg:.2}ms\n"));
+
         if let Some(fastest) = &summary.fastest {
-            report.push_str(&format!("- Fastest: {} ({:.2}µs)\n", 
-                fastest.name, fastest.mean.as_micros()));
+            let name = &fastest.name;
+            let micros = fastest.mean.as_micros();
+            report.push_str(&format!("- Fastest: {name} ({micros:.2}µs)\n"));
         }
-        
+
         if let Some(slowest) = &summary.slowest {
-            report.push_str(&format!("- Slowest: {} ({:.2}ms)\n\n", 
-                slowest.name, slowest.mean.as_millis()));
+            let name = &slowest.name;
+            let millis = slowest.mean.as_millis();
+            report.push_str(&format!("- Slowest: {name} ({millis:.2}ms)\n\n"));
         }
 
         // Regressions section
-        let regressions: Vec<_> = comparisons.iter()
-            .filter(|c| c.is_regression)
-            .collect();
+        let regressions: Vec<_> = comparisons.iter().filter(|c| c.is_regression).collect();
 
         if !regressions.is_empty() {
             report.push_str("## ⚠️ Performance Regressions\n\n");
             report.push_str("| Benchmark | Baseline | Current | Change |\n");
             report.push_str("|-----------|----------|---------|--------|\n");
-            
+
             for comp in regressions {
+                let name = &comp.name;
+                let baseline = comp.baseline_mean.as_millis();
+                let current = comp.current_mean.as_millis();
+                let change = comp.change_percent;
                 report.push_str(&format!(
-                    "| {} | {:.2}ms | {:.2}ms | **+{:.1}%** |\n",
-                    comp.name,
-                    comp.baseline_mean.as_millis(),
-                    comp.current_mean.as_millis(),
-                    comp.change_percent
+                    "| {name} | {baseline:.2}ms | {current:.2}ms | **+{change:.1}%** |\n"
                 ));
             }
             report.push('\n');
         }
 
         // Improvements section
-        let improvements: Vec<_> = comparisons.iter()
-            .filter(|c| c.is_improvement)
-            .collect();
+        let improvements: Vec<_> = comparisons.iter().filter(|c| c.is_improvement).collect();
 
         if !improvements.is_empty() {
             report.push_str("## ✅ Performance Improvements\n\n");
             report.push_str("| Benchmark | Baseline | Current | Change |\n");
             report.push_str("|-----------|----------|---------|--------|\n");
-            
+
             for comp in improvements {
+                let name = &comp.name;
+                let baseline = comp.baseline_mean.as_millis();
+                let current = comp.current_mean.as_millis();
+                let change = comp.change_percent;
                 report.push_str(&format!(
-                    "| {} | {:.2}ms | {:.2}ms | **{:.1}%** |\n",
-                    comp.name,
-                    comp.baseline_mean.as_millis(),
-                    comp.current_mean.as_millis(),
-                    comp.change_percent
+                    "| {name} | {baseline:.2}ms | {current:.2}ms | **{change:.1}%** |\n"
                 ));
             }
             report.push('\n');
@@ -338,7 +347,7 @@ impl ReportGenerator {
             report.push_str("## All Comparisons\n\n");
             report.push_str("| Benchmark | Baseline | Current | Change | Status |\n");
             report.push_str("|-----------|----------|---------|--------|--------|\n");
-            
+
             for comp in comparisons {
                 let status = if comp.is_regression {
                     "⚠️ Regression"
@@ -348,13 +357,12 @@ impl ReportGenerator {
                     "➖ Stable"
                 };
 
+                let name = &comp.name;
+                let baseline = comp.baseline_mean.as_millis();
+                let current = comp.current_mean.as_millis();
+                let change = comp.change_percent;
                 report.push_str(&format!(
-                    "| {} | {:.2}ms | {:.2}ms | {:+.1}% | {} |\n",
-                    comp.name,
-                    comp.baseline_mean.as_millis(),
-                    comp.current_mean.as_millis(),
-                    comp.change_percent,
-                    status
+                    "| {name} | {baseline:.2}ms | {current:.2}ms | {change:+.1}% | {status} |\n"
                 ));
             }
         }
@@ -376,13 +384,12 @@ impl ReportGenerator {
                 "Stable"
             };
 
+            let name = &comp.name;
+            let baseline = comp.baseline_mean.as_millis();
+            let current = comp.current_mean.as_millis();
+            let change = comp.change_percent;
             csv.push_str(&format!(
-                "{},{:.2},{:.2},{:+.2},{}\n",
-                comp.name,
-                comp.baseline_mean.as_millis(),
-                comp.current_mean.as_millis(),
-                comp.change_percent,
-                status
+                "{name},{baseline:.2},{current:.2},{change:+.2},{status}\n"
             ));
         }
 
@@ -390,6 +397,7 @@ impl ReportGenerator {
     }
 
     /// Generate HTML report
+    #[allow(clippy::format_push_string, clippy::too_many_lines)]
     pub fn generate_html(
         summary: &BenchmarkSummary,
         comparisons: &[BenchmarkComparison],
@@ -410,14 +418,16 @@ impl ReportGenerator {
         html.push_str("</head>\n<body>\n");
 
         html.push_str("<h1>Benchmark Analysis Report</h1>\n");
-        html.push_str(&format!("<p>Generated: {}</p>\n", 
-            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")));
+        let date = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
+        html.push_str(&format!("<p>Generated: {date}</p>\n"));
 
         // Summary
         html.push_str("<h2>Summary</h2>\n");
         html.push_str("<ul>\n");
-        html.push_str(&format!("<li>Total benchmarks: {}</li>\n", summary.total_benchmarks));
-        html.push_str(&format!("<li>Average time: {:.2}ms</li>\n", summary.average_time.as_millis()));
+        let total = summary.total_benchmarks;
+        html.push_str(&format!("<li>Total benchmarks: {total}</li>\n"));
+        let avg = summary.average_time.as_millis();
+        html.push_str(&format!("<li>Average time: {avg:.2}ms</li>\n"));
         html.push_str("</ul>\n");
 
         // Comparisons table
@@ -435,15 +445,12 @@ impl ReportGenerator {
                     ("stable", "➖ Stable")
                 };
 
+                let name = &comp.name;
+                let baseline = comp.baseline_mean.as_millis();
+                let current = comp.current_mean.as_millis();
+                let change = comp.change_percent;
                 html.push_str(&format!(
-                    "<tr><td>{}</td><td>{:.2}ms</td><td>{:.2}ms</td><td class=\"{}\">{:+.1}%</td><td class=\"{}\">{}</td></tr>\n",
-                    comp.name,
-                    comp.baseline_mean.as_millis(),
-                    comp.current_mean.as_millis(),
-                    status_class,
-                    comp.change_percent,
-                    status_class,
-                    status_text
+                    "<tr><td>{name}</td><td>{baseline:.2}ms</td><td>{current:.2}ms</td><td class=\"{status_class}\">{change:+.1}%</td><td class=\"{status_class}\">{status_text}</td></tr>\n"
                 ));
             }
 
@@ -484,11 +491,10 @@ impl BenchmarkCli {
 
         // Save reports
         fs::write("benchmark-report.md", markdown)
-            .map_err(|e| format!("Failed to write markdown: {}", e))?;
-        fs::write("benchmark-report.csv", csv)
-            .map_err(|e| format!("Failed to write CSV: {}", e))?;
+            .map_err(|e| format!("Failed to write markdown: {e}"))?;
+        fs::write("benchmark-report.csv", csv).map_err(|e| format!("Failed to write CSV: {e}"))?;
         fs::write("benchmark-report.html", html)
-            .map_err(|e| format!("Failed to write HTML: {}", e))?;
+            .map_err(|e| format!("Failed to write HTML: {e}"))?;
 
         println!("✅ Reports generated successfully:");
         println!("   - benchmark-report.md");
