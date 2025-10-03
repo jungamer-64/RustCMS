@@ -76,7 +76,7 @@ pub fn prune_versions(dir: &Path, keep: usize) -> std::io::Result<()> {
     let to_remove_count = versions.len() - keep;
     for &v in versions.iter().take(to_remove_count) {
         for prefix in ["biscuit_private_v", "biscuit_public_v"] {
-            let path = dir.join(format!("{}{}.b64", prefix, v));
+            let path = dir.join(format!("{prefix}{v}.b64"));
             if path.exists() {
                 fs::remove_file(&path)?;
                 println!("Pruned old version file {}", path.display());
