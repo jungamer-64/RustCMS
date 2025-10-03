@@ -30,10 +30,7 @@ mod benchmark_tests {
     fn assert_duration_in_range(duration: Duration, min: Duration, max: Duration) {
         assert!(
             duration >= min && duration <= max,
-            "Duration {:?} not in range [{:?}, {:?}]",
-            duration,
-            min,
-            max
+            "Duration {duration:?} not in range [{min:?}, {max:?}]"
         );
     }
 
@@ -47,7 +44,7 @@ mod benchmark_tests {
         #[test]
         fn test_token_generation_performance() {
             // Simulate token generation
-            let (_, duration) = measure_time(|| {
+            let ((), duration) = measure_time(|| {
                 for _ in 0..100 {
                     // Mock token generation
                     std::thread::sleep(Duration::from_micros(100));
@@ -61,7 +58,7 @@ mod benchmark_tests {
         #[test]
         fn test_token_verification_performance() {
             // Mock token verification should be fast
-            let (_, duration) = measure_time(|| {
+            let ((), duration) = measure_time(|| {
                 for _ in 0..1000 {
                     std::thread::sleep(Duration::from_micros(10));
                 }
@@ -73,7 +70,7 @@ mod benchmark_tests {
         #[test]
         fn test_password_hashing_performance() {
             // Password hashing should be intentionally slow
-            let (_, duration) = measure_time(|| {
+            let ((), duration) = measure_time(|| {
                 std::thread::sleep(Duration::from_millis(100));
             });
 
@@ -120,12 +117,14 @@ mod benchmark_tests {
         #[test]
         fn test_cache_set_performance() {
             let mut cache = HashMap::new();
-            let (_, duration) = measure_time(|| {
+            let ((), duration) = measure_time(|| {
                 for i in 0..1000 {
-                    cache.insert(format!("key_{}", i), format!("value_{}", i));
+                    cache.insert(format!("key_{i}"), format!("value_{i}"));
                 }
             });
 
+            // Ensure cache is read to avoid collection_is_never_read warning
+            assert_eq!(cache.len(), 1000);
             assert!(duration < Duration::from_millis(10));
         }
 
@@ -133,12 +132,12 @@ mod benchmark_tests {
         fn test_cache_get_performance() {
             let mut cache = HashMap::new();
             for i in 0..1000 {
-                cache.insert(format!("key_{}", i), format!("value_{}", i));
+                cache.insert(format!("key_{i}"), format!("value_{i}"));
             }
 
-            let (_, duration) = measure_time(|| {
+            let ((), duration) = measure_time(|| {
                 for i in 0..1000 {
-                    let _ = cache.get(&format!("key_{}", i));
+                    let _ = cache.get(&format!("key_{i}"));
                 }
             });
 
@@ -153,8 +152,9 @@ mod benchmark_tests {
             {
                 let mut c = cache.lock().unwrap();
                 for i in 0..100 {
-                    c.insert(format!("key_{}", i), i);
+                    c.insert(format!("key_{i}"), i);
                 }
+                drop(c); // Explicitly drop the lock to avoid significant_drop_tightening warning
             }
 
             let handles: Vec<_> = (0..10)
@@ -180,13 +180,13 @@ mod benchmark_tests {
 
             // Fill to capacity
             for i in 0..capacity {
-                cache.insert(format!("key_{}", i), i);
+                cache.insert(format!("key_{i}"), i);
             }
 
             // Measure eviction behavior
-            let (_, duration) = measure_time(|| {
+            let ((), duration) = measure_time(|| {
                 for i in capacity..capacity + 50 {
-                    cache.insert(format!("key_{}", i), i);
+                    cache.insert(format!("key_{i}"), i);
                     if cache.len() > capacity {
                         if let Some(first_key) = cache.keys().next().cloned() {
                             cache.remove(&first_key);
@@ -216,15 +216,17 @@ mod benchmark_tests {
         #[test]
         fn test_document_indexing_performance() {
             let mut index = Vec::new();
-            let (_, duration) = measure_time(|| {
+            let ((), duration) = measure_time(|| {
                 for i in 0..100 {
                     index.push(MockDocument {
                         id: i,
-                        content: format!("Document content {}", i),
+                        content: format!("Document content {i}"),
                     });
                 }
             });
 
+            // Ensure index is read to avoid collection_is_never_read warning
+            assert_eq!(index.len(), 100);
             assert!(duration < Duration::from_millis(10));
         }
 
@@ -234,7 +236,7 @@ mod benchmark_tests {
             for i in 0..1000 {
                 index.push(MockDocument {
                     id: i,
-                    content: format!("rust programming {}", i),
+                    content: format!("rust programming {i}"),
                 });
             }
 
@@ -255,7 +257,7 @@ mod benchmark_tests {
             let documents: Vec<_> = (0..500)
                 .map(|i| MockDocument {
                     id: i,
-                    content: format!("Document {}", i),
+                    content: format!("Document {i}"),
                 })
                 .collect();
 
@@ -270,7 +272,7 @@ mod benchmark_tests {
             let index: Vec<_> = (0..1000)
                 .map(|i| MockDocument {
                     id: i,
-                    content: format!("Document {}", i),
+                    content: format!("Document {i}"),
                 })
                 .collect();
 
@@ -317,7 +319,7 @@ mod benchmark_tests {
             }
 
             let pool = MockPool::new(10);
-            let (_, duration) = measure_time(|| {
+            let ((), duration) = measure_time(|| {
                 for i in 0..1000 {
                     let _ = pool.get(i);
                 }
@@ -328,7 +330,7 @@ mod benchmark_tests {
 
         #[test]
         fn test_query_performance() {
-            let (_, duration) = measure_time(|| {
+            let ((), duration) = measure_time(|| {
                 // Mock query execution
                 std::thread::sleep(Duration::from_micros(100));
             });
@@ -338,7 +340,7 @@ mod benchmark_tests {
 
         #[test]
         fn test_transaction_performance() {
-            let (_, duration) = measure_time(|| {
+            let ((), duration) = measure_time(|| {
                 // Mock transaction
                 std::thread::sleep(Duration::from_micros(500));
             });
@@ -380,7 +382,7 @@ mod benchmark_tests {
         #[test]
         fn test_end_to_end_performance() {
             // Simulate full request cycle
-            let (_, duration) = measure_time(|| {
+            let ((), duration) = measure_time(|| {
                 // Auth check
                 std::thread::sleep(Duration::from_micros(100));
                 // Cache lookup
@@ -401,14 +403,14 @@ mod benchmark_tests {
             cache.insert("user:1", "cached_data");
 
             let (result, duration) = measure_time(|| {
-                // Try cache first
-                if let Some(data) = cache.get("user:1") {
-                    Some(data.to_string())
-                } else {
-                    // Fallback to database
-                    std::thread::sleep(Duration::from_micros(200));
-                    Some("db_data".to_string())
-                }
+                cache.get("user:1").map_or_else(
+                    || {
+                        // Fallback to database
+                        std::thread::sleep(Duration::from_micros(200));
+                        Some("db_data".to_string())
+                    },
+                    |data| Some((*data).to_string()),
+                )
             });
 
             assert!(result.is_some());
@@ -421,8 +423,8 @@ mod benchmark_tests {
             let query = "rust programming";
 
             // First query (miss)
-            let (_, miss_duration) = measure_time(|| {
-                if cache.get(query).is_some() {
+            let ((), miss_duration) = measure_time(|| {
+                if cache.contains_key(query) {
                     // Cache hit
                 } else {
                     // Perform search
@@ -432,7 +434,7 @@ mod benchmark_tests {
             });
 
             // Second query (hit)
-            let (_, hit_duration) = measure_time(|| {
+            let ((), hit_duration) = measure_time(|| {
                 let _ = cache.get(query);
             });
 
@@ -461,11 +463,12 @@ mod benchmark_tests {
         }
 
         #[test]
+        #[allow(clippy::cast_precision_loss)]
         fn test_linear_scaling() {
             let mut results = Vec::new();
 
-            for size in [10, 100, 1000].iter() {
-                let (_, duration) = measure_time(|| {
+            for size in &[10, 100, 1000] {
+                let (_sum, duration) = measure_time(|| {
                     let mut sum = 0;
                     for i in 0..*size {
                         sum += i;
@@ -488,23 +491,23 @@ mod benchmark_tests {
             use std::collections::HashMap;
 
             let mut map = HashMap::new();
-            for i in 0..10000 {
+            for i in 0..10_000 {
                 map.insert(i, i * 2);
             }
 
             let mut durations = Vec::new();
 
             for _ in 0..10 {
-                let (_, duration) = measure_time(|| {
+                let ((), duration) = measure_time(|| {
                     let _ = map.get(&5000);
                 });
                 durations.push(duration);
             }
 
             // All lookups should be similar (within 10x)
-            let min = durations.iter().min().unwrap();
-            let max = durations.iter().max().unwrap();
-            assert!(max.as_nanos() < min.as_nanos() * 10);
+            let minimum = durations.iter().min().unwrap();
+            let maximum = durations.iter().max().unwrap();
+            assert!(maximum.as_nanos() < minimum.as_nanos() * 10);
         }
     }
 
@@ -536,12 +539,12 @@ mod benchmark_tests {
                 handle.join().unwrap();
             }
 
-            assert_eq!(counter.load(Ordering::SeqCst), 10000);
+            assert_eq!(counter.load(Ordering::SeqCst), 10_000);
         }
 
         #[test]
         fn test_large_data_processing() {
-            let data: Vec<_> = (0..100000).collect();
+            let data: Vec<_> = (0..100_000).collect();
 
             let (result, duration) = measure_time(|| data.iter().map(|x| x * 2).sum::<usize>());
 
@@ -550,7 +553,7 @@ mod benchmark_tests {
         }
 
         #[test]
-        #[ignore] // Long running test
+        #[ignore = "Long running test - requires 5 seconds to complete"]
         fn test_sustained_load() {
             use std::time::Instant;
 

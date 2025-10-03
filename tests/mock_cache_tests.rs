@@ -4,8 +4,8 @@
 
 #[cfg(test)]
 mod tests {
-    use mockall::predicate::*;
     use mockall::mock;
+    use mockall::predicate::*;
     use std::error::Error;
 
     // Define cache operations trait
@@ -20,7 +20,7 @@ mod tests {
     // Create mock
     mock! {
         pub CacheService {}
-        
+
         impl CacheService for CacheService {
             fn get(&self, key: &str) -> Result<Option<String>, Box<dyn Error>>;
             fn set(&self, key: &str, value: &str, ttl_seconds: u64) -> Result<(), Box<dyn Error>>;
@@ -184,14 +184,14 @@ mod tests {
         for i in 0..5 {
             mock_cache
                 .expect_set()
-                .withf(move |k, _, _| k == format!("batch_key_{}", i))
+                .withf(move |k, _, _| k == format!("batch_key_{i}"))
                 .times(1)
                 .returning(|_, _, _| Ok(()));
         }
 
         for i in 0..5 {
-            let key = format!("batch_key_{}", i);
-            mock_cache.set(&key, &format!("value_{}", i), 300).unwrap();
+            let key = format!("batch_key_{i}");
+            mock_cache.set(&key, &format!("value_{i}"), 300).unwrap();
         }
     }
 }

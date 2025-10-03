@@ -200,14 +200,14 @@ fn test_cache_stampede_protection_simulation() {
     use std::collections::HashMap;
     let mut cache: HashMap<String, String> = HashMap::new();
 
-    // Simulate cache hit
-    if cache.get("key").is_some() {
+        // Simulate cache hit
+    if cache.contains_key("key") {
         // Hit
     } else {
         // Miss - would normally trigger computation
         cache.insert("key".to_string(), "value".to_string());
     }
-
+    
     // Verify cache was populated
     assert!(cache.contains_key("key"));
 }

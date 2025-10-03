@@ -202,15 +202,17 @@ fn slug_generation_pattern() {
 }
 
 #[test]
-fn uuid_format_validation() {
-    // Test UUID format
+fn uuid_generation() {
+    use uuid::Uuid;
+    
+    // Test that generated UUIDs are well-formed
     let uuid_str = "550e8400-e29b-41d4-a716-446655440000";
     
+    // UUID v4 format: 8-4-4-4-12
     assert_eq!(uuid_str.len(), 36);
     assert_eq!(uuid_str.matches('-').count(), 4);
     
     // Verify UUID can be parsed
-    use uuid::Uuid;
     assert!(Uuid::parse_str(uuid_str).is_ok());
 }
 

@@ -10,7 +10,7 @@ use axum::response::IntoResponse;
 fn test_authentication_error_display() {
     let err = AppError::Authentication("Invalid credentials".to_string());
     assert_eq!(err.summary(), "authentication failure");
-    let display = format!("{}", err);
+    let display = format!("{err}");
     assert!(display.contains("Invalid credentials"));
 }
 
@@ -18,7 +18,7 @@ fn test_authentication_error_display() {
 fn test_authorization_error_display() {
     let err = AppError::Authorization("Insufficient permissions".to_string());
     assert_eq!(err.summary(), "authorization failure");
-    let display = format!("{}", err);
+    let display = format!("{err}");
     assert!(display.contains("Insufficient permissions"));
 }
 
@@ -65,7 +65,7 @@ fn test_parse_error_display() {
         context: "parsing user input".to_string(),
     };
     assert_eq!(err.summary(), "parse error");
-    let display = format!("{}", err);
+    let display = format!("{err}");
     assert!(display.contains("Invalid format"));
     assert!(display.contains("parsing user input"));
 }
@@ -79,7 +79,7 @@ fn test_file_error_display() {
         source: io_err,
     };
     assert_eq!(err.summary(), "file operation error");
-    let display = format!("{}", err);
+    let display = format!("{err}");
     assert!(display.contains("read"));
     assert!(display.contains("/tmp/test.txt"));
 }
@@ -91,7 +91,7 @@ fn test_network_error_display() {
         source: "Connection timeout".to_string(),
     };
     assert_eq!(err.summary(), "network error");
-    let display = format!("{}", err);
+    let display = format!("{err}");
     assert!(display.contains("api.example.com"));
     assert!(display.contains("timeout"));
 }
@@ -256,7 +256,7 @@ fn test_multiple_error_types_display() {
     ];
     
     for err in errors {
-        let display = format!("{}", err);
+        let display = format!("{err}");
         assert!(!display.is_empty());
         assert!(!err.summary().is_empty());
     }

@@ -43,14 +43,13 @@ async fn test_async_task_completion() {
 #[tokio::test]
 async fn test_multiple_async_tasks() {
     // Test multiple concurrent async tasks
-    let tasks: Vec<_> = (0..10)
-        .map(|i| {
-            tokio::spawn(async move {
-                tokio::time::sleep(Duration::from_millis(10)).await;
-                i * 2
-            })
-        })
-        .collect();
+    let mut tasks = Vec::new();
+    for i in 0..10 {
+        tasks.push(tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            i * 2
+        }));
+    }
     
     for (i, task) in tasks.into_iter().enumerate() {
         let result = task.await.unwrap();
@@ -64,13 +63,13 @@ fn test_string_allocation_performance() {
     let start = std::time::Instant::now();
     
     let mut strings = Vec::new();
-    for i in 0..10000 {
-        strings.push(format!("string_{}", i));
+    for i in 0..10_000 {
+        strings.push(format!("string_{i}"));
     }
     
     let elapsed = start.elapsed();
     
-    assert_eq!(strings.len(), 10000);
+    assert_eq!(strings.len(), 10_000);
     assert!(elapsed < Duration::from_secs(1));
 }
 
@@ -79,8 +78,8 @@ fn test_vec_prealloation_efficiency() {
     // Test that preallocation improves performance
     let start = std::time::Instant::now();
     
-    let mut vec = Vec::with_capacity(10000);
-    for i in 0..10000 {
+    let mut vec = Vec::with_capacity(10_000);
+    for i in 0..10_000 {
         vec.push(i);
     }
     
@@ -96,9 +95,10 @@ fn test_hashmap_performance() {
     
     let start = std::time::Instant::now();
     
+    // Create large HashMap
     let mut map = HashMap::new();
-    for i in 0..10000 {
-        map.insert(i, format!("value_{}", i));
+    for i in 0..10_000 {
+        map.insert(i, format!("value_{i}"));
     }
     
     let elapsed = start.elapsed();
@@ -175,14 +175,11 @@ fn test_memory_efficiency_with_arc() {
     use std::sync::Arc;
     
     let data = Arc::new(vec![0u8; 1000]);
-    let mut clones = Vec::new();
-    
-    for _ in 0..100 {
-        clones.push(Arc::clone(&data));
-    }
+    let clones: Vec<_> = (0..100).map(|_| Arc::clone(&data)).collect();
     
     // All clones should point to the same data
     assert_eq!(Arc::strong_count(&data), 101); // original + 100 clones
+    assert_eq!(clones.len(), 100);
 }
 
 #[test]
@@ -318,17 +315,19 @@ fn test_clone_performance() {
 }
 
 #[test]
-fn test_iteration_performance() {
-    let data: Vec<i64> = (0..100000).collect();
+fn test_large_dataset_performance() {
+    // Test performance with large dataset
+    let data: Vec<i64> = (0..100_000).collect();
     
     let start = std::time::Instant::now();
     
+    // Simulate data processing
     let sum: i64 = data.iter().sum();
     
-    let elapsed = start.elapsed();
+    let duration = start.elapsed();
     
-    assert_eq!(sum, (0..100000).sum::<i64>());
-    assert!(elapsed < Duration::from_millis(100));
+    assert_eq!(sum, (0..100_000).sum::<i64>());
+    assert!(duration.as_millis() < 100);
 }
 
 #[test]
@@ -418,6 +417,8 @@ fn test_memory_allocation_patterns() {
     
     // Preallocated vec should be faster or equal
     assert!(elapsed2 <= elapsed1 || elapsed1 < Duration::from_millis(1));
+    assert_eq!(vec1.len(), 1000);
+    assert_eq!(vec2.len(), 1000);
 }
 
 #[tokio::test]
@@ -430,7 +431,7 @@ async fn test_graceful_shutdown_simulation() {
                 // Graceful shutdown
                 "shutdown"
             }
-            _ = tokio::time::sleep(Duration::from_secs(10)) => {
+            () = tokio::time::sleep(Duration::from_secs(10)) => {
                 "timeout"
             }
         }

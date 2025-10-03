@@ -5,11 +5,11 @@
 
 #[cfg(test)]
 mod tests {
-    use mockall::predicate::*;
-    use mockall::mock;
-    use uuid::Uuid;
     use cms_backend::models::post::{Post, PostStatus};
+    use mockall::mock;
+    use mockall::predicate::*;
     use std::error::Error;
+    use uuid::Uuid;
 
     // Define a trait for database operations
     pub trait PostRepository {
@@ -23,7 +23,7 @@ mod tests {
     // Create a mock implementation
     mock! {
         pub PostRepository {}
-        
+
         impl PostRepository for PostRepository {
             fn create_post(&self, title: &str, content: &str) -> Result<Post, Box<dyn Error>>;
             fn find_post_by_id(&self, id: Uuid) -> Result<Option<Post>, Box<dyn Error>>;
@@ -37,7 +37,7 @@ mod tests {
         Post {
             id,
             title: title.to_string(),
-            slug: title.to_lowercase().replace(" ", "-"),
+            slug: title.to_lowercase().replace(' ', "-"),
             content: "Sample content".to_string(),
             excerpt: Some("Sample excerpt".to_string()),
             author_id: Uuid::new_v4(),

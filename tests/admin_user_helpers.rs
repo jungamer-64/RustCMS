@@ -35,8 +35,8 @@ async fn admin_user_create_update_delete() {
     };
 
     let suffix = random_suffix();
-    let username = format!("test_user_{}", suffix);
-    let email = format!("test+{}@example.com", suffix);
+    let username = format!("test_user_{suffix}");
+    let email = format!("test+{suffix}@example.com");
 
     // Create
     let create_req = CreateUserRequest {
@@ -53,7 +53,7 @@ async fn admin_user_create_update_delete() {
     assert_eq!(created.email, email);
 
     // Update (email + role + deactivate)
-    let new_email = format!("updated+{}@example.com", suffix);
+    let new_email = format!("updated+{suffix}@example.com");
     let update_req = UpdateUserRequest {
         username: None,
         email: Some(new_email.clone()),

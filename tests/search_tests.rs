@@ -120,12 +120,14 @@ mod search_tests {
         assert!(matches!(op, FilterOperator::Contains));
 
         let json_gt = r#""greaterthan""#;
-        let op: FilterOperator = serde_json::from_str(json_gt).expect("deserialize failed");
-        assert!(matches!(op, FilterOperator::GreaterThan));
+        let greater_than_op: FilterOperator =
+            serde_json::from_str(json_gt).expect("deserialize failed");
+        assert!(matches!(greater_than_op, FilterOperator::GreaterThan));
 
         let json_lt = "\"lessthan\"";
-        let op: FilterOperator = serde_json::from_str(json_lt).expect("deserialize failed");
-        assert!(matches!(op, FilterOperator::LessThan));
+        let less_than_op: FilterOperator =
+            serde_json::from_str(json_lt).expect("deserialize failed");
+        assert!(matches!(less_than_op, FilterOperator::LessThan));
     }
 
     #[test]
