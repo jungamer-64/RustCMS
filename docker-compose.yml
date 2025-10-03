@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # PostgreSQL Database
@@ -22,6 +22,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
 
   # Elasticsearch
   elasticsearch:
@@ -39,10 +45,13 @@ services:
     networks:
       - cms_network
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      test:
+        ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
+    security_opt:
+      - no-new-privileges:true
 
   # Redis (セッション・キャッシュ用)
   redis:
@@ -59,6 +68,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
 
   # CMS Application
   cms-backend:
@@ -117,6 +131,8 @@ services:
       - cms_network
     profiles:
       - development
+    security_opt:
+      - no-new-privileges:true
 
   # Elasticsearch Head (Elasticsearch管理用 - 開発時のみ)
   elasticsearch-head:
@@ -128,6 +144,11 @@ services:
       - cms_network
     profiles:
       - development
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
 
 volumes:
   postgres_data:
