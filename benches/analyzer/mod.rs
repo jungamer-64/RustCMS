@@ -69,19 +69,19 @@ pub struct BenchmarkComparison {
 /// Statistical significance level
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Significance {
-    High,      // > 10% change
-    Medium,    // 5-10% change
-    Low,       // 1-5% change
-    None,      // < 1% change
+    High,   // > 10% change
+    Medium, // 5-10% change
+    Low,    // 1-5% change
+    None,   // < 1% change
 }
 
 /// Performance category
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PerformanceCategory {
-    Excellent,   // Within targets
-    Good,        // 10-20% slower
-    Fair,        // 20-50% slower
-    Poor,        // > 50% slower
+    Excellent, // Within targets
+    Good,      // 10-20% slower
+    Fair,      // 20-50% slower
+    Poor,      // > 50% slower
 }
 
 // ============================================================================
