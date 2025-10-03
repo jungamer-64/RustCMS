@@ -514,6 +514,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_duration_conversions() {
         let duration = Duration::from_nanos(1_500_000_000);
         assert_eq!(duration.as_secs_f64(), 1.5);
@@ -524,7 +525,7 @@ mod tests {
     #[test]
     fn test_significance_levels() {
         let analyzer = BenchmarkAnalyzer::new();
-        
+
         let baseline = BenchmarkResult {
             name: "test".to_string(),
             mean: Duration::from_nanos(1_000_000),
@@ -574,13 +575,16 @@ mod tests {
         };
 
         let categories = test_analyzer.categorize_performance(target);
-        assert_eq!(categories.get("fast"), Some(&PerformanceCategory::Excellent));
+        assert_eq!(
+            categories.get("fast"),
+            Some(&PerformanceCategory::Excellent)
+        );
     }
 
     #[test]
     fn test_summary_generation() {
         let mut analyzer = BenchmarkAnalyzer::new();
-        
+
         analyzer.results.insert(
             "test1".to_string(),
             BenchmarkResult {
@@ -623,7 +627,7 @@ mod tests {
 
         let comparisons = vec![];
         let markdown = ReportGenerator::generate_markdown(&summary, &comparisons);
-        
+
         assert!(markdown.contains("Benchmark Analysis Report"));
         assert!(markdown.contains("Total benchmarks: 2"));
     }
