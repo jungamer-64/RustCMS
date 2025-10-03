@@ -16,7 +16,7 @@ use std::env;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    
+
     if args.len() < 2 {
         eprintln!("❌ Error: Missing required arguments");
         eprintln!();
@@ -28,7 +28,7 @@ fn main() {
         std::process::exit(1);
     }
 
-    match analyzer::BenchmarkCli::run(args) {
+    match analyzer::BenchmarkCli::run(&args) {
         Ok(()) => {
             println!();
             println!("✨ Analysis complete!");

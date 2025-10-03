@@ -469,7 +469,7 @@ impl ReportGenerator {
 pub struct BenchmarkCli;
 
 impl BenchmarkCli {
-    pub fn run(args: Vec<String>) -> Result<(), String> {
+    pub fn run(args: &[String]) -> Result<(), String> {
         if args.len() < 2 {
             return Err("Usage: benchmark-analyzer <results.json> [baseline.json]".to_string());
         }
