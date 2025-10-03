@@ -32,10 +32,12 @@ def gh_api_get(url):
     except HTTPError as e:
         try:
             body = e.read().decode('utf-8')
-        except Exception:
+        except Exception as decode_err:
+            print(f'Warning: Failed to decode HTTP error body: {decode_err}', file=sys.stderr)
             body = ''
         return body, e.code
     except Exception as e:
+        print(f'Warning: Request failed: {e}', file=sys.stderr)
         return str(e), None
 
 
