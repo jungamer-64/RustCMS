@@ -1,6 +1,6 @@
 //! Create Post Example
 //!
-//! Conceptual example showing post creation in RustCMS.
+//! Conceptual example showing post creation in `RustCMS`.
 
 fn main() {
     println!("=== CMS Backend Create Post Example ===\n");
