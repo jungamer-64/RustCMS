@@ -200,14 +200,14 @@ fn test_cache_stampede_protection_simulation() {
     use std::collections::HashMap;
     let mut cache: HashMap<String, String> = HashMap::new();
 
-        // Simulate cache hit
+    // Simulate cache hit
     if cache.contains_key("key") {
         // Hit
     } else {
         // Miss - would normally trigger computation
         cache.insert("key".to_string(), "value".to_string());
     }
-    
+
     // Verify cache was populated
     assert!(cache.contains_key("key"));
 }
@@ -243,7 +243,7 @@ fn test_distributed_rate_limiting_key() {
     let node_id = "node1";
     let ip = "192.168.1.1";
 
-    let key = format!("rate_limit:{}:{}", node_id, ip);
+    let key = format!("rate_limit:{node_id}:{ip}");
 
     assert!(key.contains(node_id));
     assert!(key.contains(ip));
@@ -279,7 +279,7 @@ fn test_cache_namespace() {
     let namespace = "v1";
     let key = "user:123";
 
-    let namespaced_key = format!("{}:{}", namespace, key);
+    let namespaced_key = format!("{namespace}:{key}");
 
     assert_eq!(namespaced_key, "v1:user:123");
 }
@@ -408,6 +408,9 @@ fn test_write_back_cache_pattern() {
     // Write to cache only
     cache.insert(key.to_string(), value.to_string());
     dirty_keys.push(key.to_string());
+
+    // Verify cache contains the data
+    assert_eq!(cache.get(key), Some(&value.to_string()));
 
     // Mark as needing database sync
     assert!(dirty_keys.contains(&key.to_string()));
