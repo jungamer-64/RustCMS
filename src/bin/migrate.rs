@@ -124,29 +124,32 @@ enum Commands {
 
 /// Initialize logging with appropriate level
 ///
-/// # Safety
-///
-/// This function sets the `RUST_LOG` environment variable before any threads are created.
-/// It must be called at the very start of `main()` before any other operations.
-///
-/// # Note
-///
-/// Consider using a structured logging configuration instead for production use
-/// to avoid environment variable mutation.
-fn initialize_logging(debug: bool) {
+/// This function uses `tracing_subscriber` to configure logging directly
+/// without modifying environment variables, which is safer in multi-threaded contexts.
+fn initialize_logging(debug: bool) -> Result<()> {
+    use tracing_subscriber::{fmt, EnvFilter};
+
     let log_level = if debug { "debug" } else { "info" };
-    // SAFETY: This is called at program startup before any threads are spawned.
-    // The environment variable is only used for logging configuration.
-    unsafe {
-        std::env::set_var("RUST_LOG", log_level);
-    }
+    
+    // Create a filter that respects RUST_LOG if set, otherwise uses the provided level
+    let filter = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new(log_level))
+        .map_err(|e| AppError::Internal(format!("Failed to initialize logging: {e}")))?;
+
+    // Initialize the subscriber
+    fmt()
+        .with_env_filter(filter)
+        .try_init()
+        .map_err(|e| AppError::Internal(format!("Failed to set up logging subscriber: {e}")))?;
+
+    Ok(())
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    initialize_logging(cli.debug);
+    initialize_logging(cli.debug)?;
     let _config = cms_backend::utils::init::init_logging_and_config()?;
 
     print_banner();
@@ -195,10 +198,10 @@ async fn execute_command(cli: &Cli, state: &AppState) -> Result<()> {
             verify,
         } => {
             let options = MigrateOptions {
-                no_seed: *no_seed,
-                backup: *backup,
-                verify: *verify,
-                dry_run: cli.dry_run,
+                seeding: if *no_seed { SeedingMode::Disable } else { SeedingMode::Enable },
+                backup: if *backup { BackupMode::Enable } else { BackupMode::Disable },
+                verification: if *verify { VerificationMode::Enable } else { VerificationMode::Disable },
+                execution: if cli.dry_run { ExecutionMode::DryRun } else { ExecutionMode::Execute },
             };
             handle_migrate(state, options).await
         }
@@ -219,19 +222,51 @@ async fn execute_command(cli: &Cli, state: &AppState) -> Result<()> {
 /// Migration operation options
 #[derive(Debug, Default)]
 struct MigrateOptions {
-    no_seed: bool,
-    backup: bool,
-    verify: bool,
-    dry_run: bool,
+    seeding: SeedingMode,
+    backup: BackupMode,
+    verification: VerificationMode,
+    execution: ExecutionMode,
+}
+
+/// Seeding mode for database initialization
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum SeedingMode {
+    #[default]
+    Enable,
+    Disable,
+}
+
+/// Backup mode before operations
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum BackupMode {
+    #[default]
+    Enable,
+    Disable,
+}
+
+/// Verification mode after operations
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum VerificationMode {
+    Enable,
+    #[default]
+    Disable,
+}
+
+/// Execution mode for operations
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum ExecutionMode {
+    #[default]
+    Execute,
+    DryRun,
 }
 
 #[instrument(skip(state))]
 async fn handle_migrate(state: &AppState, options: MigrateOptions) -> Result<()> {
     let MigrateOptions {
-        no_seed,
+        seeding,
         backup,
-        verify,
-        dry_run,
+        verification,
+        execution,
     } = options;
     let start = Instant::now();
 
@@ -249,15 +284,15 @@ async fn handle_migrate(state: &AppState, options: MigrateOptions) -> Result<()>
         info!("  {}. {}", idx + 1, name);
     }
 
-    if dry_run {
+    if execution == ExecutionMode::DryRun {
         info!("🔍 DRY-RUN: Would apply {} migration(s)", pending.len());
         return Ok(());
     }
 
     // Create backup if requested
-    if backup {
+    if backup == BackupMode::Enable {
         info!("💾 Creating pre-migration backup...");
-        create_backup(state, "./backups/pre-migration").await?;
+        create_backup(state, "./backups/pre-migration")?;
     }
 
     // Apply migrations
@@ -268,13 +303,13 @@ async fn handle_migrate(state: &AppState, options: MigrateOptions) -> Result<()>
     info!("✅ Migrations completed in {:?}", duration);
 
     // Verify if requested
-    if verify {
+    if verification == VerificationMode::Enable {
         info!("🔍 Verifying database integrity...");
         verify_database(state).await?;
     }
 
     // Seed database if requested
-    if !no_seed {
+    if seeding == SeedingMode::Enable {
         info!("🌱 Seeding database...");
         seed_database(state, false).await?;
     }
@@ -311,7 +346,7 @@ async fn handle_rollback(state: &AppState, steps: usize, force: bool, dry_run: b
 
     // Create backup before rollback
     info!("💾 Creating pre-rollback backup...");
-    create_backup(state, "./backups/pre-rollback").await?;
+    create_backup(state, "./backups/pre-rollback")?;
 
     // Perform rollback
     rollback_migrations(state, steps).await?;
@@ -326,49 +361,76 @@ async fn handle_reset(
     confirm_db_name: Option<&str>,
     dry_run: bool,
 ) -> Result<()> {
-    warn!("🚨 DANGER: This will DROP ALL TABLES!");
-    warn!("🚨 ALL DATA WILL BE PERMANENTLY LOST!");
+    display_reset_warnings();
+    let db_name = extract_database_name();
+    confirm_reset_operation(confirm_db_name, &db_name)?;
 
-    // Require database name confirmation
-    let db_name = std::env::var("DATABASE_URL")
+    if dry_run {
+        info!("� DRY-RUN: Would reset database '{db_name}'");
+        return Ok(());
+    }
+
+    perform_reset(state).await?;
+    info!("✅ Database reset completed");
+    Ok(())
+}
+
+/// Display danger warnings for reset operation
+fn display_reset_warnings() {
+    warn!("�🚨 DANGER: This will DROP ALL TABLES!");
+    warn!("🚨 ALL DATA WILL BE PERMANENTLY LOST!");
+}
+
+/// Extract database name from DATABASE_URL
+fn extract_database_name() -> String {
+    std::env::var("DATABASE_URL")
         .ok()
         .and_then(|url| {
             url.split('/')
                 .next_back()
                 .map(|s| s.split('?').next().unwrap_or(s).to_string())
         })
-        .unwrap_or_else(|| "unknown".to_string());
+        .unwrap_or_else(|| "unknown".to_string())
+}
 
+/// Confirm reset operation with user or provided name
+fn confirm_reset_operation(confirm_db_name: Option<&str>, db_name: &str) -> Result<()> {
     if let Some(provided_name) = confirm_db_name {
-        if provided_name != db_name {
-            return Err(AppError::BadRequest(format!(
-                "Database name mismatch. Expected '{db_name}', got '{provided_name}'"
-            )));
-        }
+        validate_provided_db_name(provided_name, db_name)?;
     } else {
-        println!("\nType the database name '{db_name}' to confirm:");
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
-
-        if input.trim() != db_name {
-            info!("❌ Reset cancelled");
-            return Ok(());
-        }
+        prompt_for_confirmation(db_name)?;
     }
+    Ok(())
+}
 
-    if dry_run {
-        info!("🔍 DRY-RUN: Would reset database '{}'", db_name);
-        return Ok(());
+/// Validate provided database name matches actual name
+fn validate_provided_db_name(provided_name: &str, expected_name: &str) -> Result<()> {
+    if provided_name != expected_name {
+        return Err(AppError::BadRequest(format!(
+            "Database name mismatch. Expected '{expected_name}', got '{provided_name}'"
+        )));
     }
+    Ok(())
+}
 
-    // Create final backup
+/// Prompt user for confirmation by typing database name
+fn prompt_for_confirmation(db_name: &str) -> Result<()> {
+    println!("\nType the database name '{db_name}' to confirm:");
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+
+    if input.trim() != db_name {
+        info!("❌ Reset cancelled");
+        return Err(AppError::BadRequest("Reset cancelled by user".to_string()));
+    }
+    Ok(())
+}
+
+/// Perform the actual database reset
+async fn perform_reset(state: &AppState) -> Result<()> {
     warn!("💾 Creating final backup before reset...");
-    create_backup(state, "./backups/final-before-reset").await?;
-
-    // Reset database
+    create_backup(state, "./backups/final-before-reset")?;
     reset_database(state).await?;
-
-    info!("✅ Database reset completed");
     Ok(())
 }
 
@@ -458,7 +520,7 @@ async fn handle_backup(state: &AppState, path: &str, compress: bool) -> Result<(
         path.to_string()
     };
 
-    create_backup(state, &backup_path).await?;
+    create_backup(state, &backup_path)?;
 
     info!("✅ Backup created: {backup_path}");
     Ok(())
@@ -485,7 +547,7 @@ async fn handle_restore(state: &AppState, path: &str, force: bool, dry_run: bool
         return Ok(());
     }
 
-    restore_backup(state, path).await?;
+    restore_backup(state, path)?;
 
     info!("✅ Database restored from {}", path);
     Ok(())
@@ -512,9 +574,31 @@ async fn rollback_migrations(state: &AppState, steps: usize) -> Result<()> {
 }
 
 async fn reset_database(state: &AppState) -> Result<()> {
+    drop_all_tables(state).await?;
+    recreate_schema(state).await?;
+    Ok(())
+}
+
+/// Drop all database tables
+async fn drop_all_tables(state: &AppState) -> Result<()> {
     info!("🗑️  Dropping all tables...");
 
-    let drop_statements = vec![
+    let drop_statements = get_drop_table_statements();
+
+    for statement in drop_statements {
+        debug!("Executing: {statement}");
+        let _ = state.db_execute_sql(statement).await.map_err(|e| {
+            debug!("Note: {e} (this may be expected)");
+            e
+        });
+    }
+
+    Ok(())
+}
+
+/// Get all DROP TABLE statements for database reset
+fn get_drop_table_statements() -> Vec<&'static str> {
+    vec![
         "DROP TABLE IF EXISTS audit_logs CASCADE",
         "DROP TABLE IF EXISTS api_keys CASCADE",
         "DROP TABLE IF EXISTS user_sessions CASCADE",
@@ -530,41 +614,49 @@ async fn reset_database(state: &AppState) -> Result<()> {
         "DROP TABLE IF EXISTS settings CASCADE",
         "DROP TABLE IF EXISTS __diesel_schema_migrations CASCADE",
         "DROP TABLE IF EXISTS schema_migrations CASCADE",
-    ];
+    ]
+}
 
-    for statement in drop_statements {
-        debug!("Executing: {}", statement);
-        let _ = state.db_execute_sql(statement).await.map_err(|e| {
-            debug!("Note: {} (this may be expected)", e);
-            e
-        });
-    }
-
+/// Recreate database schema from migrations
+async fn recreate_schema(state: &AppState) -> Result<()> {
     info!("🔄 Recreating schema...");
     run_migrations(state).await?;
-
     state.db_ensure_schema_migrations_compat().await?;
-
     Ok(())
 }
 
 async fn seed_database(state: &AppState, force: bool) -> Result<()> {
+    check_existing_data(state, force).await?;
+    create_admin_user(state).await?;
+    create_sample_content(state).await?;
+    display_security_warnings();
+
+    Ok(())
+}
+
+/// Check if database already has data and handle accordingly
+async fn check_existing_data(state: &AppState, force: bool) -> Result<()> {
     let existing_users: i64 = state.db_admin_users_count().await?;
 
     if existing_users > 0 && !force {
         info!(
-            "📊 Database already contains {} user(s), skipping seeding",
-            existing_users
+            "📊 Database already contains {existing_users} user(s), skipping seeding"
         );
         info!("💡 Use --force to reseed anyway");
-        return Ok(());
+        return Err(AppError::BadRequest("Database already seeded".to_string()));
     }
 
     if force && existing_users > 0 {
         warn!("⚠️  Force seeding with existing data");
     }
 
+    Ok(())
+}
+
+/// Create the default admin user
+async fn create_admin_user(state: &AppState) -> Result<()> {
     info!("👤 Creating admin user...");
+    
     let admin_user = cms_backend::models::CreateUserRequest {
         username: "admin".to_string(),
         email: "admin@example.com".to_string(),
@@ -574,10 +666,16 @@ async fn seed_database(state: &AppState, force: bool) -> Result<()> {
         last_name: Some(String::new()),
     };
 
-    let _admin = state.db_create_user(admin_user).await?;
+    state.db_create_user(admin_user).await?;
     info!("✅ Admin user created");
 
+    Ok(())
+}
+
+/// Create sample content for demonstration
+async fn create_sample_content(state: &AppState) -> Result<()> {
     info!("📝 Creating sample content...");
+    
     let sample_post = cms_backend::models::CreatePostRequest {
         title: "Welcome to Enterprise CMS".to_string(),
         content: "High-performance, scalable CMS built with Rust and PostgreSQL.".to_string(),
@@ -596,16 +694,27 @@ async fn seed_database(state: &AppState, force: bool) -> Result<()> {
     state.db_create_post(sample_post).await?;
     info!("✅ Sample content created");
 
+    Ok(())
+}
+
+/// Display security warnings about default credentials
+fn display_security_warnings() {
     warn!("⚠️  Default admin password is 'admin123'");
     warn!("⚠️  Change this immediately in production!");
-
-    Ok(())
 }
 
 async fn verify_database(state: &AppState) -> Result<()> {
     info!("🔍 Verifying database integrity...");
 
-    // Basic health check
+    verify_database_health(state).await?;
+    verify_critical_tables(state).await?;
+    verify_migration_history(state).await?;
+
+    Ok(())
+}
+
+/// Verify database health and connectivity
+async fn verify_database_health(state: &AppState) -> Result<()> {
     let health = state.health_check().await?;
 
     if health.database.status != "up" {
@@ -618,8 +727,11 @@ async fn verify_database(state: &AppState) -> Result<()> {
 
     info!("✓ Database connection: OK");
     info!("✓ Response time: {}ms", health.database.response_time_ms);
+    Ok(())
+}
 
-    // Verify critical tables exist
+/// Verify that all critical tables exist
+async fn verify_critical_tables(state: &AppState) -> Result<()> {
     let critical_tables = vec![
         "users",
         "posts",
@@ -633,48 +745,55 @@ async fn verify_database(state: &AppState) -> Result<()> {
     for table in critical_tables {
         match state
             .db_execute_sql(&format!(
-                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{}'",
-                table
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{table}'"
             ))
             .await
         {
-            Ok(_) => debug!("✓ Table exists: {}", table),
+            Ok(_) => debug!("✓ Table exists: {table}"),
             Err(e) => {
-                error!("❌ Critical table missing: {}", table);
+                error!("❌ Critical table missing: {table}");
                 return Err(AppError::Internal(format!(
-                    "Critical table '{}' is missing: {}",
-                    table, e
+                    "Critical table '{table}' is missing: {e}"
                 )));
             }
         }
     }
 
     info!("✓ All critical tables present");
+    Ok(())
+}
 
-    // Verify schema migration history with detailed validation
+/// Verify migration history and integrity
+async fn verify_migration_history(state: &AppState) -> Result<()> {
     match state
         .db_execute_sql("SELECT COUNT(*) FROM __diesel_schema_migrations")
         .await
     {
         Ok(_) => {
             info!("✓ Migration history intact");
-
-            // Additional validation: Check for migration integrity
-            let applied = state.db_fetch_applied_migrations().await?;
-            if applied.is_empty() {
-                warn!("⚠️  No migrations applied yet - database may be empty");
-            } else {
-                info!("✓ {} migration(s) applied", applied.len());
-
-                // Verify migrations are in order (no gaps)
-                for (idx, migration) in applied.iter().enumerate() {
-                    debug!("  {}. {}", idx + 1, migration);
-                }
-            }
+            verify_applied_migrations(state).await?;
         }
         Err(e) => {
-            warn!("⚠️  Cannot verify migration history: {}", e);
+            warn!("⚠️  Cannot verify migration history: {e}");
             warn!("⚠️  This may indicate database is not initialized");
+        }
+    }
+
+    Ok(())
+}
+
+/// Verify applied migrations details
+async fn verify_applied_migrations(state: &AppState) -> Result<()> {
+    let applied = state.db_fetch_applied_migrations().await?;
+    
+    if applied.is_empty() {
+        warn!("⚠️  No migrations applied yet - database may be empty");
+    } else {
+        info!("✓ {} migration(s) applied", applied.len());
+
+        // Verify migrations are in order (no gaps)
+        for (idx, migration) in applied.iter().enumerate() {
+            debug!("  {}. {migration}", idx + 1);
         }
     }
 
@@ -684,8 +803,16 @@ async fn verify_database(state: &AppState) -> Result<()> {
 async fn check_referential_integrity(state: &AppState) -> Result<()> {
     info!("🔗 Checking referential integrity...");
 
-    // Check for orphaned records in critical relationships
-    let integrity_checks = vec![
+    let integrity_checks = get_integrity_check_queries();
+    let has_orphans = run_integrity_checks(state, &integrity_checks).await;
+
+    report_integrity_results(has_orphans);
+    Ok(())
+}
+
+/// Get list of referential integrity check queries
+fn get_integrity_check_queries() -> Vec<(&'static str, &'static str)> {
+    vec![
         (
             "posts.author_id → users.id",
             "SELECT COUNT(*) FROM posts p WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = p.author_id)",
@@ -706,69 +833,92 @@ async fn check_referential_integrity(state: &AppState) -> Result<()> {
             "user_sessions.user_id → users.id",
             "SELECT COUNT(*) FROM user_sessions s WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = s.user_id)",
         ),
-    ];
+    ]
+}
 
+/// Run integrity checks on database
+async fn run_integrity_checks(
+    state: &AppState,
+    integrity_checks: &[(&str, &str)],
+) -> bool {
     let has_orphans = false;
 
     for (relationship, query) in integrity_checks {
         match state.db_execute_sql(query).await {
             Ok(_) => {
-                // In a real implementation, we'd parse the count
-                debug!("✓ Integrity check passed: {}", relationship);
+                debug!("✓ Integrity check passed: {relationship}");
             }
             Err(e) => {
-                // Table might not exist yet (during initial migration)
-                debug!("Note: Cannot check {} - {}", relationship, e);
+                debug!("Note: Cannot check {relationship} - {e}");
             }
         }
     }
 
+    has_orphans
+}
+
+/// Report integrity check results
+fn report_integrity_results(has_orphans: bool) {
     if has_orphans {
         warn!("⚠️  Found orphaned records - consider data cleanup");
     } else {
         info!("✓ Referential integrity OK");
     }
-
-    Ok(())
 }
 
 async fn check_data_consistency(state: &AppState) -> Result<()> {
     info!("🔍 Checking data consistency...");
 
-    // Verify user count matches
+    check_record_counts(state).await?;
+    check_email_format(state).await;
+    check_author_references(state).await;
+    check_session_expiration(state).await;
+
+    info!("✅ Data consistency checks completed");
+    Ok(())
+}
+
+/// Check basic record counts
+async fn check_record_counts(state: &AppState) -> Result<()> {
     let user_count = state.db_admin_users_count().await?;
-    info!("✓ User count: {}", user_count);
+    info!("✓ User count: {user_count}");
 
     if user_count == 0 {
         warn!("⚠️  No users found - database may need seeding");
     }
 
     let post_count = state.db_admin_posts_count().await?;
-    info!("✓ Post count: {}", post_count);
+    info!("✓ Post count: {post_count}");
 
-    // Additional consistency checks
+    Ok(())
+}
 
-    // Check for users without valid email format (basic validation)
+/// Check email format validity
+async fn check_email_format(state: &AppState) {
     debug!("Checking email format consistency...");
     match state
         .db_execute_sql("SELECT COUNT(*) FROM users WHERE email NOT LIKE '%@%'")
         .await
     {
         Ok(_) => debug!("✓ Email format check passed"),
-        Err(e) => warn!("⚠️  Email format check failed: {}", e),
+        Err(e) => warn!("⚠️  Email format check failed: {e}"),
     }
+}
 
-    // Check for posts without authors
+/// Check post author references
+async fn check_author_references(state: &AppState) {
     debug!("Checking post author references...");
     match state
         .db_execute_sql("SELECT COUNT(*) FROM posts WHERE author_id NOT IN (SELECT id FROM users)")
         .await
     {
         Ok(_) => debug!("✓ Post author references valid"),
-        Err(e) => warn!("⚠️  Post author reference check failed: {}", e),
+        Err(e) => warn!("⚠️  Post author reference check failed: {e}"),
     }
+}
 
-    // Check for expired sessions (older than 30 days)
+/// Check for expired sessions
+async fn check_session_expiration(state: &AppState) {
     debug!("Checking session expiration...");
     match state
         .db_execute_sql(
@@ -777,14 +927,11 @@ async fn check_data_consistency(state: &AppState) -> Result<()> {
         .await
     {
         Ok(_) => debug!("✓ Session expiration check completed"),
-        Err(e) => debug!("Session check skipped: {}", e),
+        Err(e) => debug!("Session check skipped: {e}"),
     }
-
-    info!("✅ Data consistency checks completed");
-    Ok(())
 }
 
-async fn create_backup(_state: &AppState, path: &str) -> Result<()> {
+fn create_backup(_state: &AppState, path: &str) -> Result<()> {
     // Create backup directory
     if let Some(parent) = std::path::Path::new(path).parent() {
         std::fs::create_dir_all(parent)?;
@@ -803,7 +950,7 @@ async fn create_backup(_state: &AppState, path: &str) -> Result<()> {
     Ok(())
 }
 
-async fn restore_backup(_state: &AppState, path: &str) -> Result<()> {
+fn restore_backup(_state: &AppState, path: &str) -> Result<()> {
     info!("🔄 Restoring from: {path}");
 
     // Verify backup file exists
