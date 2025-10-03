@@ -15,10 +15,25 @@ mod analyzer;
 use std::env;
 
 /// Main function that returns Result for better error handling
+///
+/// # Security Note
+///
+/// This tool uses `env::args_os()` to handle command-line arguments, including
+/// those that may contain invalid UTF-8. While the documentation warns against
+/// relying on `args[0]` for security purposes, this tool:
+/// 
+/// 1. **Does NOT use args[0] for security decisions** - only for usage display
+/// 2. **Validates all arguments** - converts OsString to String with error handling
+/// 3. **Operates on local files only** - no network or privileged operations
+/// 4. **Is a development tool** - not exposed in production environments
+///
+/// The args[0] value (program name) is only used for displaying usage information
+/// and does not influence any security-critical decisions.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Security: Use env::args_os() to handle invalid UTF-8 arguments gracefully
-    // Convert OsString to String, propagating errors for non-UTF-8 arguments
-    // Note: We don't rely on args[0] for security purposes, only for usage display
+    // SAFETY: Using env::args_os() to handle invalid UTF-8 arguments gracefully.
+    // All arguments are validated and converted to UTF-8 String before use.
+    // The first argument (program name) is only used for display purposes in
+    // error messages and does not affect program logic or security decisions.
     let args: Vec<String> = env::args_os()
         .map(std::ffi::OsString::into_string)
         .collect::<Result<Vec<String>, _>>()
