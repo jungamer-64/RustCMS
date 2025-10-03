@@ -52,6 +52,10 @@ services:
       retries: 5
     security_opt:
       - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /usr/share/elasticsearch/tmp
 
   # Redis (セッション・キャッシュ用)
   redis:
@@ -133,6 +137,10 @@ services:
       - development
     security_opt:
       - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/lib/pgadmin
 
   # Elasticsearch Head (Elasticsearch管理用 - 開発時のみ)
   elasticsearch-head:
