@@ -1,3 +1,14 @@
+-- ============================================================================
+-- Initial Database Schema Migration
+-- ============================================================================
+-- Database: PostgreSQL 14+
+-- Purpose: Create core tables for RustCMS
+--
+-- Note: This file is optimized for PostgreSQL. TSQLLint warnings about
+-- missing SET statements (ANSI_NULLS, QUOTED_IDENTIFIER, NOCOUNT, etc.) 
+-- are specific to Microsoft SQL Server and do not apply to PostgreSQL.
+-- ============================================================================
+
 -- Create users table
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY,
