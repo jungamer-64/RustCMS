@@ -317,39 +317,60 @@ fn parse_version(name: &str) -> Option<u32> {
     })
 }
 
-/// Handles all output operations
-fn handle_outputs(args: &Args, priv_b64: &str, pub_b64: &str) -> cms_backend::Result<()> {
-    let format = args.format.as_ref().map(|f| match f {
+/// Converts OutputFormat enum to string representation
+fn format_to_str(format: &OutputFormat) -> &'static str {
+    match format {
         OutputFormat::Files => "files",
         OutputFormat::Env => "env",
         OutputFormat::Both => "both",
         OutputFormat::Stdout => "stdout",
-    });
+    }
+}
+
+/// Writes keys to file system
+fn handle_files_output(args: &Args, priv_b64: &str, pub_b64: &str) -> cms_backend::Result<()> {
+    let dir = args.out_dir.as_ref().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "out_dir is required for 'files' format",
+        )
+    })?;
+    write_key_files(args, dir, priv_b64, pub_b64)
+}
+
+/// Writes keys to environment file
+fn handle_env_output(args: &Args, priv_b64: &str, pub_b64: &str) -> cms_backend::Result<()> {
+    let file = args.env_file.as_ref().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "env_file is required for 'env' format",
+        )
+    })?;
+    write_env_file(args, file, priv_b64, pub_b64)
+}
+
+/// Writes keys to both files and environment
+fn handle_both_output(args: &Args, priv_b64: &str, pub_b64: &str) -> cms_backend::Result<()> {
+    let dir = args.out_dir.as_deref().unwrap_or(Path::new("keys"));
+    let file = args.env_file.as_deref().unwrap_or(Path::new(".env"));
+    write_key_files(args, dir, priv_b64, pub_b64)?;
+    write_env_file(args, file, priv_b64, pub_b64)?;
+    Ok(())
+}
+
+/// Handles all output operations
+fn handle_outputs(args: &Args, priv_b64: &str, pub_b64: &str) -> cms_backend::Result<()> {
+    let format = args.format.as_ref().map(format_to_str);
 
     match format {
         Some("files") | None if args.out_dir.is_some() => {
-            let dir = args.out_dir.as_ref().ok_or_else(|| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "out_dir is required for 'files' format",
-                )
-            })?;
-            write_key_files(args, dir, priv_b64, pub_b64)?;
+            handle_files_output(args, priv_b64, pub_b64)?;
         }
         Some("env") | None if args.env_file.is_some() => {
-            let file = args.env_file.as_ref().ok_or_else(|| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "env_file is required for 'env' format",
-                )
-            })?;
-            write_env_file(args, file, priv_b64, pub_b64)?;
+            handle_env_output(args, priv_b64, pub_b64)?;
         }
         Some("both") => {
-            let dir = args.out_dir.as_deref().unwrap_or(Path::new("keys"));
-            let file = args.env_file.as_deref().unwrap_or(Path::new(".env"));
-            write_key_files(args, dir, priv_b64, pub_b64)?;
-            write_env_file(args, file, priv_b64, pub_b64)?;
+            handle_both_output(args, priv_b64, pub_b64)?;
         }
         Some("stdout") | None => {
             debug!("Keys only written to stdout");
