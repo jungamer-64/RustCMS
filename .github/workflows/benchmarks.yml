@@ -38,13 +38,13 @@ jobs:
           fetch-depth: 0  # Need full history for baseline comparison
 
       - name: Setup Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@11df97af8e8102fd60b60a77dfbf58d40cd843b8 # ratchet:actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
           components: rustfmt, clippy
 
       - name: Cache Cargo dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@6849a6489940f00c2f30c0fb92c6274307ccb58a # ratchet:actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -73,7 +73,7 @@ jobs:
 
       - name: Download baseline benchmarks
         if: github.event_name == 'pull_request'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # ratchet:actions/download-artifact@v4
         with:
           name: benchmark-baseline
           path: target/criterion
@@ -186,7 +186,7 @@ jobs:
 
       - name: Upload benchmark results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874 # ratchet:actions/upload-artifact@v4
         with:
           name: benchmark-results-${{ github.sha }}
           path: |
@@ -198,7 +198,7 @@ jobs:
 
       - name: Save baseline for main branch
         if: github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874 # ratchet:actions/upload-artifact@v4
         with:
           name: benchmark-baseline
           path: target/criterion/
@@ -206,7 +206,7 @@ jobs:
 
       - name: Comment PR with results
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # ratchet:actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
