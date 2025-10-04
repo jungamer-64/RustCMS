@@ -89,19 +89,20 @@ impl TelemetryError {
                 )
             }
             Self::MissingLogOutputPath => {
-                "LOG_OUTPUT=file:<path> requires a file path, e.g. 'file:/var/log/app.log'".to_string()
+                "LOG_OUTPUT=file:<path> requires a file path, e.g. 'file:/var/log/app.log'"
+                    .to_string()
             }
             Self::DirectoryPathProvided(path) => {
-                format!("LOG_OUTPUT path '{path}' must include a file name, e.g. 'file:{path}app.log'")
+                format!(
+                    "LOG_OUTPUT path '{path}' must include a file name, e.g. 'file:{path}app.log'"
+                )
             }
             Self::UnknownLogRotationToken(token) => {
                 format!(
                     "Unknown log rotation token '{token}'; expected one of 'daily', 'hourly', or 'never'",
                 )
             }
-            Self::TooManyLogOutputTokens => {
-                "Too many tokens supplied to LOG_OUTPUT".to_string()
-            }
+            Self::TooManyLogOutputTokens => "Too many tokens supplied to LOG_OUTPUT".to_string(),
             Self::UnsupportedLogScheme(scheme) => {
                 format!("Unsupported LOG_OUTPUT scheme '{scheme}'")
             }
@@ -179,7 +180,10 @@ struct TelemetryState {
 impl TelemetryState {
     #[allow(clippy::missing_const_for_fn)]
     fn new(guards: Vec<non_blocking::WorkerGuard>, log_output: LogOutput) -> Self {
-        Self { _guards: guards, log_output }
+        Self {
+            _guards: guards,
+            log_output,
+        }
     }
 
     fn flush() {
@@ -264,9 +268,7 @@ impl<'a> MakeWriter<'a> for LogWriter {
 ///
 /// 環境変数の解析やサブスクライバの構築に失敗した場合、[`TelemetryError`] を返します。
 pub fn init_telemetry(verbose: bool) -> Result<TelemetryHandle, TelemetryError> {
-    let state = TELEMETRY_STATE.get_or_try_init(|| {
-        install_telemetry(verbose).map(Arc::new)
-    })?;
+    let state = TELEMETRY_STATE.get_or_try_init(|| install_telemetry(verbose).map(Arc::new))?;
 
     Ok(TelemetryHandle::from_arc(Arc::clone(state)))
 }
@@ -387,8 +389,7 @@ fn determine_env_filter(verbose: bool, app_env: &str) -> Result<EnvFilter, Telem
 
     let crate_name = env!("CARGO_PKG_NAME");
     let dev_suffix = load_filter_suffix("LOG_FILTER_DEV_SUFFIX_FILE", DEFAULT_FILTER_DEV_SUFFIX);
-    let prod_suffix =
-        load_filter_suffix("LOG_FILTER_PROD_SUFFIX_FILE", DEFAULT_FILTER_PROD_SUFFIX);
+    let prod_suffix = load_filter_suffix("LOG_FILTER_PROD_SUFFIX_FILE", DEFAULT_FILTER_PROD_SUFFIX);
 
     let default_filter = if verbose || app_env.eq_ignore_ascii_case("development") {
         format!("debug,{crate_name}=debug,{dev_suffix}")
@@ -412,9 +413,7 @@ fn determine_log_format(app_env: &str) -> Result<LogFormat, TelemetryError> {
         "prod" | "production" | "staging" => Ok(LogFormat::Json),
         "dev" | "development" | "debug" | "local" | "test" => Ok(LogFormat::Text),
         other => {
-            eprintln!(
-                "WARN: Unrecognized APP_ENV '{other}'; falling back to json log format"
-            );
+            eprintln!("WARN: Unrecognized APP_ENV '{other}'; falling back to json log format");
             Ok(LogFormat::Json)
         }
     }
@@ -423,7 +422,8 @@ fn determine_log_format(app_env: &str) -> Result<LogFormat, TelemetryError> {
 fn determine_log_output(app_env: &str) -> Result<LogOutput, TelemetryError> {
     env::var("LOG_OUTPUT").map_or_else(
         |_| {
-            if app_env.eq_ignore_ascii_case("production") || app_env.eq_ignore_ascii_case("staging") {
+            if app_env.eq_ignore_ascii_case("production") || app_env.eq_ignore_ascii_case("staging")
+            {
                 Ok(LogOutput::Stderr)
             } else {
                 Ok(LogOutput::Stdout)
@@ -486,7 +486,7 @@ impl LogOutput {
     /// Parse and validate log file path
     fn parse_log_path(parts: &mut std::str::SplitWhitespace) -> Result<PathBuf, TelemetryError> {
         let path_str = parts.next().expect("path should exist after validation");
-        
+
         if path_str.ends_with('/') {
             return Err(TelemetryError::DirectoryPathProvided(path_str.to_string()));
         }
@@ -611,7 +611,6 @@ mod tests {
         }
     }
 
-
     use serial_test::serial;
     use temp_env::with_var;
     use tempfile::tempdir;
@@ -686,8 +685,8 @@ mod tests {
         assert_eq!(determine_log_format("debug").unwrap(), LogFormat::Text);
         assert_eq!(determine_log_format("test").unwrap(), LogFormat::Text);
 
-    // Unknown values now fall back to JSON format while warning via stderr.
-    assert_eq!(determine_log_format("qa").unwrap(), LogFormat::Json);
+        // Unknown values now fall back to JSON format while warning via stderr.
+        assert_eq!(determine_log_format("qa").unwrap(), LogFormat::Json);
     }
 
     #[test]
@@ -786,7 +785,9 @@ mod tests {
             _ => panic!("expected file"),
         }
 
-        let f = "file:/tmp/keyvalue.log rotation=daily".parse::<LogOutput>().unwrap();
+        let f = "file:/tmp/keyvalue.log rotation=daily"
+            .parse::<LogOutput>()
+            .unwrap();
         match f {
             LogOutput::File(path, rotation) => {
                 assert_eq!(path, PathBuf::from("/tmp/keyvalue.log"));
@@ -795,7 +796,9 @@ mod tests {
             _ => panic!("expected file"),
         }
 
-        let f = "file:/tmp/unknown.log foo=bar".parse::<LogOutput>().unwrap();
+        let f = "file:/tmp/unknown.log foo=bar"
+            .parse::<LogOutput>()
+            .unwrap();
         match f {
             LogOutput::File(path, rotation) => {
                 assert_eq!(path, PathBuf::from("/tmp/unknown.log"));
