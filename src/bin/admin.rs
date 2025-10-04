@@ -21,17 +21,14 @@ mod handlers;
 mod util;
 
 use clap::Parser;
-use cms_backend::{Result, AppError};
-use tracing::{info, error, warn, instrument};
+use cms_backend::{AppError, Result};
 use std::time::Instant;
+use tracing::{error, info, instrument, warn};
 
 use crate::cli::{Cli, Commands};
 use crate::handlers::{
-    analytics::handle_analytics_action, 
-    content::handle_content_action,
-    security::handle_security_action, 
-    system::handle_system_action, 
-    user::handle_user_action_state,
+    analytics::handle_analytics_action, content::handle_content_action,
+    security::handle_security_action, system::handle_system_action, user::handle_user_action_state,
 };
 
 /// Application metadata for logging and diagnostics
@@ -43,12 +40,12 @@ const APP_AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
 async fn main() -> Result<()> {
     // Parse CLI arguments first for early validation
     let cli = Cli::parse();
-    
+
     // Run with detailed error reporting
     if let Err(e) = run(cli).await {
         error!("Fatal error: {}", e);
         error!("Error chain:");
-        
+
         // Print full error chain for debugging
         let mut current_error: &dyn std::error::Error = &e;
         let mut depth = 0;
@@ -57,18 +54,18 @@ async fn main() -> Result<()> {
             error!("  {}: {}", depth, source);
             current_error = source;
         }
-        
+
         // Return appropriate exit code
         std::process::exit(1);
     }
-    
+
     Ok(())
 }
 
 #[instrument(skip(cli))]
 async fn run(cli: Cli) -> Result<()> {
     let start = Instant::now();
-    
+
     // Initialize application state with verbosity control
     let app_state = cms_backend::utils::init::init_app_state_with_verbose(cli.verbose)
         .await
@@ -76,31 +73,18 @@ async fn run(cli: Cli) -> Result<()> {
             AppError::Internal(format!("Failed to initialize application state: {}", e))
         })?;
 
-    info!(
-        "🔧 {} v{} by {}",
-        APP_NAME, APP_VERSION, APP_AUTHORS
-    );
+    info!("🔧 {} v{} by {}", APP_NAME, APP_VERSION, APP_AUTHORS);
 
     // Validate prerequisites
     validate_prerequisites(&app_state).await?;
 
     // Execute command with comprehensive error handling
     let result = match cli.command {
-        Commands::User { action } => {
-            handle_user_action_state(action, &app_state).await
-        }
-        Commands::Content { action } => {
-            handle_content_action(action, &app_state)
-        }
-        Commands::System { action } => {
-            handle_system_action(action, &app_state).await
-        }
-        Commands::Analytics { action } => {
-            handle_analytics_action(action, &app_state)
-        }
-        Commands::Security { action } => {
-            handle_security_action(action, &app_state)
-        }
+        Commands::User { action } => handle_user_action_state(action, &app_state).await,
+        Commands::Content { action } => handle_content_action(action, &app_state),
+        Commands::System { action } => handle_system_action(action, &app_state).await,
+        Commands::Analytics { action } => handle_analytics_action(action, &app_state),
+        Commands::Security { action } => handle_security_action(action, &app_state),
     };
 
     // Report execution time
@@ -121,7 +105,7 @@ async fn run(cli: Cli) -> Result<()> {
 #[instrument(skip(app_state))]
 async fn validate_prerequisites(app_state: &cms_backend::AppState) -> Result<()> {
     info!("Validating prerequisites...");
-    
+
     // Security: Check if running as root (warn but don't block)
     // Note: This check is Unix-specific and requires libc crate.
     // For production deployment, consider running as non-root user.
@@ -130,49 +114,49 @@ async fn validate_prerequisites(app_state: &cms_backend::AppState) -> Result<()>
         warn!("💡 For enhanced security, run as non-root user");
         warn!("💡 Example: sudo -u cms-admin ./admin ...");
     }
-    
+
     // Check database connectivity with timeout
     let health_check_timeout = std::time::Duration::from_secs(10);
-    let health_result = tokio::time::timeout(
-        health_check_timeout,
-        app_state.health_check()
-    ).await;
-    
+    let health_result = tokio::time::timeout(health_check_timeout, app_state.health_check()).await;
+
     match health_result {
         Ok(Ok(health)) => {
             if health.database.status != "up" {
                 error!("Database is not available: {:?}", health.database.error);
                 return Err(AppError::Internal(
-                    "Database connection failed. Please verify database is running.".to_string()
+                    "Database connection failed. Please verify database is running.".to_string(),
                 ));
             }
-            
-            info!("✓ Database: {} ({}ms)", 
-                  health.database.status, 
-                  health.database.response_time_ms);
+
+            info!(
+                "✓ Database: {} ({}ms)",
+                health.database.status, health.database.response_time_ms
+            );
             info!("✓ Cache: {}", health.cache.status);
             info!("✓ Search: {}", health.search.status);
-            
+
             // Warn if response times are high
             if health.database.response_time_ms > 1000.0 {
-                warn!("⚠️  Database response time is high ({:.2}ms) - performance may be degraded", 
-                      health.database.response_time_ms);
+                warn!(
+                    "⚠️  Database response time is high ({:.2}ms) - performance may be degraded",
+                    health.database.response_time_ms
+                );
             }
         }
         Ok(Err(e)) => {
             error!("Health check failed: {}", e);
             return Err(AppError::Internal(
-                "System health check failed. Please verify all services are running.".to_string()
+                "System health check failed. Please verify all services are running.".to_string(),
             ));
         }
         Err(_) => {
             error!("Health check timed out after {:?}", health_check_timeout);
             return Err(AppError::Internal(
-                "Health check timed out. Database may be unresponsive.".to_string()
+                "Health check timed out. Database may be unresponsive.".to_string(),
             ));
         }
     }
-    
+
     info!("All prerequisites validated");
     Ok(())
 }
@@ -180,13 +164,13 @@ async fn validate_prerequisites(app_state: &cms_backend::AppState) -> Result<()>
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_app_metadata() {
         assert_eq!(APP_NAME, "cms-admin");
         assert_eq!(APP_VERSION, env!("CARGO_PKG_VERSION"));
     }
-    
+
     #[tokio::test]
     async fn test_cli_parsing() {
         // Test basic CLI parsing
