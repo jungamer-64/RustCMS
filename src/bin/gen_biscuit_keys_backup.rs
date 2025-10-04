@@ -1,7 +1,7 @@
-use flate2::{Compression, write::GzEncoder};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
+use flate2::{write::GzEncoder, Compression};
 
 pub fn timestamp() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -42,9 +42,7 @@ pub fn ensure_parent_dir(parent: Option<&Path>) {
 }
 
 pub fn perform_backup(path: &Path, bak: &Path) -> std::io::Result<()> {
-    if matches!(fs::rename(path, bak), Ok(())) {
-        println!("Backed up {} -> {}", path.display(), bak.display());
-    } else {
+    if path.exists() {
         fs::copy(path, bak)?;
         println!("Backed up (copied) {} -> {}", path.display(), bak.display());
     }
