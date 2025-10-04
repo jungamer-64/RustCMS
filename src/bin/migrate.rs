@@ -260,6 +260,47 @@ enum ExecutionMode {
     DryRun,
 }
 
+/// Displays pending migration information
+fn display_pending_migrations(pending: &[String]) -> Result<()> {
+    if pending.is_empty() {
+        info!("✅ No pending migrations");
+        return Ok(());
+    }
+
+    info!("Found {} pending migration(s):", pending.len());
+    for (idx, name) in pending.iter().enumerate() {
+        info!("  {}. {}", idx + 1, name);
+    }
+    Ok(())
+}
+
+/// Performs pre-migration backup if enabled
+fn perform_backup_if_enabled(state: &AppState, backup: BackupMode) -> Result<()> {
+    if backup == BackupMode::Enable {
+        info!("💾 Creating pre-migration backup...");
+        create_backup(state, "./backups/pre-migration")?;
+    }
+    Ok(())
+}
+
+/// Performs post-migration verification if enabled
+async fn verify_if_enabled(state: &AppState, verification: VerificationMode) -> Result<()> {
+    if verification == VerificationMode::Enable {
+        info!("🔍 Verifying database integrity...");
+        verify_database(state).await?;
+    }
+    Ok(())
+}
+
+/// Performs database seeding if enabled
+async fn seed_if_enabled(state: &AppState, seeding: SeedingMode) -> Result<()> {
+    if seeding == SeedingMode::Enable {
+        info!("🌱 Seeding database...");
+        seed_database(state, false).await?;
+    }
+    Ok(())
+}
+
 #[instrument(skip(state))]
 async fn handle_migrate(state: &AppState, options: MigrateOptions) -> Result<()> {
     let MigrateOptions {
@@ -303,47 +344,47 @@ async fn handle_migrate(state: &AppState, options: MigrateOptions) -> Result<()>
     info!("✅ Migrations completed in {:?}", duration);
 
     // Verify if requested
-    if verification == VerificationMode::Enable {
-        info!("🔍 Verifying database integrity...");
-        verify_database(state).await?;
-    }
+    verify_if_enabled(state, verification).await?;
 
     // Seed database if requested
-    if seeding == SeedingMode::Enable {
-        info!("🌱 Seeding database...");
-        seed_database(state, false).await?;
-    }
+    seed_if_enabled(state, seeding).await?;
 
     Ok(())
 }
 
-#[instrument(skip(state))]
-async fn handle_rollback(state: &AppState, steps: usize, force: bool, dry_run: bool) -> Result<()> {
+/// Validates rollback parameters
+fn validate_rollback_steps(steps: usize) -> Result<()> {
     if steps == 0 {
         return Err(AppError::BadRequest(
             "Steps must be greater than 0".to_string(),
         ));
     }
+    Ok(())
+}
 
-    warn!("⚠️  Rolling back {} migration(s)", steps);
+/// Prompts user for rollback confirmation
+fn confirm_rollback(force: bool, dry_run: bool) -> Result<bool> {
+    if force || dry_run {
+        return Ok(true);
+    }
+
     warn!("⚠️  This operation may result in data loss!");
+    println!("
+Type 'ROLLBACK' to confirm:");
+    
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
 
-    if !force && !dry_run {
-        println!("\nType 'ROLLBACK' to confirm:");
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
-
-        if input.trim() != "ROLLBACK" {
-            info!("❌ Rollback cancelled");
-            return Ok(());
-        }
+    if input.trim() != "ROLLBACK" {
+        info!("❌ Rollback cancelled");
+        return Ok(false);
     }
 
-    if dry_run {
-        info!("🔍 DRY-RUN: Would rollback {} migration(s)", steps);
-        return Ok(());
-    }
+    Ok(true)
+}
 
+/// Performs the actual rollback operation with backup
+async fn perform_rollback_with_backup(state: &AppState, steps: usize) -> Result<()> {
     // Create backup before rollback
     info!("💾 Creating pre-rollback backup...");
     create_backup(state, "./backups/pre-rollback")?;
