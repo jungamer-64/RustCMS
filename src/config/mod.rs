@@ -5,7 +5,7 @@
 //! 1) `config/default.toml`
 //! 2) `config/{profile}.toml`（例: production, staging。development 以外のときに適用）
 //! 3) `config/local.toml`（ローカル開発者向けの上書き）
-//! 4) 環境変数 `CMS__*`(例: `CMS__SERVER__PORT=3000`)` で統合し、`AppState` 構築時に使用します。
+//! 4) 環境変数 `CMS__*`(例: `CMS__SERVER__PORT=3000`) で統合し、`AppState` 構築時に使用します。
 
 use secrecy::ExposeSecret;
 use secrecy::SecretString;
