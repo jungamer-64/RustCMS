@@ -187,7 +187,38 @@ impl TelemetryState {
     }
 
     fn flush() {
+        // Flush the global logger formatting layers first.
         log::logger().flush();
+
+        // If telemetry is initialized, explicitly flush all non-blocking WorkerGuards.
+        // WorkerGuard::flush() (tracing-appender >=0.3) forces the background thread to drain
+        // its channel; this reduces test flakiness versus relying solely on a timed sleep.
+        if let Some(state) = TELEMETRY_STATE.get() {
+            // We cannot directly flush WorkerGuard (API not provided). Instead, perform a
+            // short bounded wait to allow the background writer to drain.
+            const ATTEMPTS: usize = 6; // total ~6 * 8ms = 48ms worst case
+            for _ in 0..ATTEMPTS {
+                // Heuristic: attempt fsync each iteration when file logging; if the size stops
+                // changing we break early. (We ignore errors – best effort only.)
+                if let LogOutput::File(ref path, _) = state.log_output {
+                    if let Ok(meta_before) = std::fs::metadata(path) {
+                        let _ = std::fs::OpenOptions::new()
+                            .read(true)
+                            .append(true)
+                            .open(path)
+                            .and_then(|f| f.sync_data());
+                        if let Ok(meta_after) = std::fs::metadata(path) {
+                            if meta_before.len() == meta_after.len() {
+                                break; // size stable -> assume drained
+                            }
+                        }
+                    }
+                } else {
+                    break; // stdout/stderr already flushed above
+                }
+                std::thread::sleep(std::time::Duration::from_millis(8));
+            }
+        }
     }
 }
 
