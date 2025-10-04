@@ -19,7 +19,7 @@ pub fn create_router() -> Router<AppState> {
         // Home page - integrates cms-simple functionality
         .route("/", get(handlers::home))
         // Root API info
-        .route("/api/v1", get(handlers::api_info))
+        .route("/api/v1", get(handlers::api_info_v1))
         // Metrics
         .route("/api/v1/metrics", get(handlers::metrics::metrics))
         // CSRF token endpoint (security hardening)
@@ -30,7 +30,7 @@ pub fn create_router() -> Router<AppState> {
         // Health check routes
         .nest("/api/v1/health", health_routes())
         // Build info endpoint
-        .route("/api/v1/info", get(handlers::api_info))
+        .route("/api/v1/info", get(handlers::api_info_info))
         // 404 handler (kept on the outer router below)
         ;
 
