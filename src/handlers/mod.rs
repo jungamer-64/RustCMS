@@ -11,7 +11,6 @@ use serde_json::Value as JsonValue;
 use serde_json::json;
 use std::collections::HashSet;
 use utoipa::OpenApi;
-use utoipa::path;
 
 pub mod admin;
 pub mod api_keys;
