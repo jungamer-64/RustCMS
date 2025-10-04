@@ -11,6 +11,7 @@ use serde_json::Value as JsonValue;
 use serde_json::json;
 use std::collections::HashSet;
 use utoipa::OpenApi;
+use utoipa::path;
 
 pub mod admin;
 pub mod api_keys;
@@ -118,8 +119,8 @@ pub async fn home() -> impl IntoResponse {
     "#.to_string())
 }
 
-/// API information endpoint
-pub async fn api_info() -> impl IntoResponse {
+/// Returns the core API information response.
+fn get_api_info_response() -> impl IntoResponse {
     Json(json!({
         "api_version": "v1",
         "endpoints": {
@@ -129,10 +130,34 @@ pub async fn api_info() -> impl IntoResponse {
             "search": "/api/v1/search",
             "health": "/api/v1/health"
         },
-    "documentation": "/api/docs",
+        "documentation": "/api/docs",
         "status": "operational",
         "integration": "unified-cms (cms-lightweight + cms-simple + cms-unified)"
     }))
+}
+
+/// API information endpoint (v1 root).
+#[utoipa::path(
+    get,
+    path = "/api/v1",
+    responses(
+        (status = 200, description = "Get API Information", body = inline(serde_json::Value))
+    )
+)]
+pub async fn api_info_v1() -> impl IntoResponse {
+    get_api_info_response()
+}
+
+/// API information endpoint (info).
+#[utoipa::path(
+    get,
+    path = "/api/v1/info",
+    responses(
+        (status = 200, description = "Get API Information", body = inline(serde_json::Value))
+    )
+)]
+pub async fn api_info_info() -> impl IntoResponse {
+    get_api_info_response()
 }
 
 /// 404 handler
