@@ -383,6 +383,44 @@ fn handle_outputs(args: &Args, priv_b64: &str, pub_b64: &str) -> cms_backend::Re
     Ok(())
 }
 
+/// Determines key file paths based on versioning settings
+fn determine_key_paths(dir: &Path, versioned: bool) -> (PathBuf, PathBuf) {
+    if versioned {
+        let version = next_version(dir);
+        (
+            dir.join(format!("biscuit_private_v{}.b64", version)),
+            dir.join(format!("biscuit_public_v{}.b64", version)),
+        )
+    } else {
+        (
+            dir.join("biscuit_private.b64"),
+            dir.join("biscuit_public.b64"),
+        )
+    }
+}
+
+/// Handles backup operations for both key files
+fn handle_key_backups(args: &Args, priv_path: &Path, pub_path: &Path) -> cms_backend::Result<()> {
+    if args.backup {
+        backup_if_exists(priv_path, args)?;
+        backup_if_exists(pub_path, args)?;
+    }
+    Ok(())
+}
+
+/// Writes both private and public key files atomically
+fn write_both_key_files(
+    priv_path: &Path,
+    pub_path: &Path,
+    priv_b64: &str,
+    pub_b64: &str,
+    force: bool,
+) -> cms_backend::Result<()> {
+    write_file_secure(priv_path, priv_b64, force)?;
+    write_file_secure(pub_path, pub_b64, force)?;
+    Ok(())
+}
+
 /// Writes key files with secure permissions
 fn write_key_files(
     args: &Args,
@@ -399,28 +437,13 @@ fn write_key_files(
         ))
     })?;
 
-    let (priv_path, pub_path) = if args.versioned {
-        let version = next_version(dir);
-        (
-            dir.join(format!("biscuit_private_v{}.b64", version)),
-            dir.join(format!("biscuit_public_v{}.b64", version)),
-        )
-    } else {
-        (
-            dir.join("biscuit_private.b64"),
-            dir.join("biscuit_public.b64"),
-        )
-    };
+    let (priv_path, pub_path) = determine_key_paths(dir, args.versioned);
 
     // Handle backups
-    if args.backup {
-        backup_if_exists(&priv_path, args)?;
-        backup_if_exists(&pub_path, args)?;
-    }
+    handle_key_backups(args, &priv_path, &pub_path)?;
 
     // Write files atomically with secure permissions
-    write_file_secure(&priv_path, priv_b64, args.force)?;
-    write_file_secure(&pub_path, pub_b64, args.force)?;
+    write_both_key_files(&priv_path, &pub_path, priv_b64, pub_b64, args.force)?;
 
     info!("✓ Keys written to {}", dir.display());
 
@@ -432,87 +455,118 @@ fn write_key_files(
     Ok(())
 }
 
-/// Writes a file with secure permissions atomically
-fn write_file_secure(path: &Path, content: &str, force: bool) -> cms_backend::Result<()> {
+/// Validates that the file path is safe to write to
+fn validate_file_overwrite(path: &Path, force: bool) -> cms_backend::Result<()> {
     if path.exists() && !force {
         return Err(cms_backend::AppError::BadRequest(format!(
             "{} already exists. Use --force to overwrite.",
             path.display()
         )));
     }
+    Ok(())
+}
 
-    // Write to temporary file first
-    let temp_path = path.with_extension("tmp");
+/// Creates and writes content to a temporary file with secure permissions
+fn create_temp_file_secure(temp_path: &Path, content: &str) -> cms_backend::Result<()> {
+    let file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(temp_path)
+        .map_err(|e| {
+            cms_backend::AppError::Internal(format!("Failed to create temp file: {}", e))
+        })?;
 
+    // Set secure permissions immediately (Unix only)
+    #[cfg(unix)]
     {
-        let file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&temp_path)
-            .map_err(|e| {
-                cms_backend::AppError::Internal(format!("Failed to create temp file: {}", e))
-            })?;
-
-        // Set secure permissions immediately (Unix only)
-        #[cfg(unix)]
-        {
-            let mut perms = file.metadata()?.permissions();
-            perms.set_mode(SECURE_FILE_MODE);
-            fs::set_permissions(&temp_path, perms)?;
-        }
-
-        let mut writer = BufWriter::new(file);
-        writer.write_all(content.as_bytes())?;
-        writer.flush()?;
+        let mut perms = file.metadata()?.permissions();
+        perms.set_mode(SECURE_FILE_MODE);
+        fs::set_permissions(temp_path, perms)?;
     }
 
-    // Atomic rename with fallback to copy for cross-filesystem safety
+    let mut writer = BufWriter::new(file);
+    writer.write_all(content.as_bytes())?;
+    writer.flush()?;
+    
+    Ok(())
+}
+
+/// Atomically moves temp file to final destination with fallback to copy
+fn move_temp_to_final(temp_path: &Path, final_path: &Path) -> cms_backend::Result<()> {
     info!(
         "Moving temporary file to final destination: {}",
-        path.display()
+        final_path.display()
     );
-    let rename_result = fs::rename(&temp_path, path);
+    
+    let rename_result = fs::rename(temp_path, final_path);
 
     if let Err(e) = rename_result {
         error!("Failed to rename temporary file: {}", e);
+        handle_rename_failure(temp_path, final_path, e)?;
+    }
 
-        // Check if temp file still exists before attempting recovery
-        if temp_path.exists() {
-            info!("Temporary file still exists, attempting copy fallback");
+    Ok(())
+}
 
-            // Try copy instead of rename (works across filesystems)
-            match fs::copy(&temp_path, path) {
-                Ok(bytes) => {
-                    info!("Recovered by copying {} bytes", bytes);
-                    // Clean up temp file after successful copy
-                    if let Err(cleanup_err) = fs::remove_file(&temp_path) {
-                        warn!(
-                            "Failed to clean up temporary file after copy: {}",
-                            cleanup_err
-                        );
-                    }
-                }
-                Err(copy_err) => {
-                    error!("Copy fallback also failed: {}", copy_err);
-                    // Clean up temp file on error
-                    let _ = fs::remove_file(&temp_path);
-                    return Err(cms_backend::AppError::Internal(format!(
-                        "Failed to write {} (rename and copy both failed): {} / {}",
-                        path.display(),
-                        e,
-                        copy_err
-                    )));
-                }
-            }
-        } else {
-            return Err(cms_backend::AppError::Internal(format!(
-                "Failed to write {} (temp file lost): {}",
-                path.display(),
-                e
-            )));
+/// Handles failure of rename operation with copy fallback
+fn handle_rename_failure(
+    temp_path: &Path,
+    final_path: &Path,
+    rename_error: std::io::Error,
+) -> cms_backend::Result<()> {
+    // Check if temp file still exists before attempting recovery
+    if !temp_path.exists() {
+        return Err(cms_backend::AppError::Internal(format!(
+            "Failed to write {} (temp file lost): {}",
+            final_path.display(),
+            rename_error
+        )));
+    }
+
+    info!("Temporary file still exists, attempting copy fallback");
+
+    // Try copy instead of rename (works across filesystems)
+    match fs::copy(temp_path, final_path) {
+        Ok(bytes) => {
+            info!("Recovered by copying {} bytes", bytes);
+            cleanup_temp_file_after_success(temp_path);
+            Ok(())
+        }
+        Err(copy_err) => {
+            error!("Copy fallback also failed: {}", copy_err);
+            // Clean up temp file on error
+            let _ = fs::remove_file(temp_path);
+            Err(cms_backend::AppError::Internal(format!(
+                "Failed to write {} (rename and copy both failed): {} / {}",
+                final_path.display(),
+                rename_error,
+                copy_err
+            )))
         }
     }
+}
+
+/// Cleans up temporary file after successful copy
+fn cleanup_temp_file_after_success(temp_path: &Path) {
+    if let Err(cleanup_err) = fs::remove_file(temp_path) {
+        warn!(
+            "Failed to clean up temporary file after copy: {}",
+            cleanup_err
+        );
+    }
+}
+
+/// Writes a file with secure permissions atomically
+fn write_file_secure(path: &Path, content: &str, force: bool) -> cms_backend::Result<()> {
+    validate_file_overwrite(path, force)?;
+
+    // Write to temporary file first
+    let temp_path = path.with_extension("tmp");
+    create_temp_file_secure(&temp_path, content)?;
+
+    // Atomic rename with fallback to copy for cross-filesystem safety
+    move_temp_to_final(&temp_path, path)?;
 
     debug!("✓ Written: {}", path.display());
     Ok(())
