@@ -206,65 +206,66 @@ fn validate_path_length(path: &Path) -> cms_backend::Result<()> {
     Ok(())
 }
 
+/// Validates basic key properties (non-empty check)
+fn validate_key_not_empty(key: &str, key_name: &str) -> cms_backend::Result<()> {
+    if key.is_empty() {
+        return Err(cms_backend::AppError::Internal(format!(
+            "{} is empty",
+            key_name
+        )));
+    }
+    Ok(())
+}
+
+/// Decodes and validates key length
+fn decode_and_validate_key_length(
+    key_b64: &str,
+    key_name: &str,
+    expected_length: usize,
+) -> cms_backend::Result<Vec<u8>> {
+    // Decode base64
+    let key_bytes = STANDARD.decode(key_b64).map_err(|e| {
+        cms_backend::AppError::Internal(format!(
+            "{} verification failed (invalid base64): {e}",
+            key_name
+        ))
+    })?;
+
+    // Verify length
+    if key_bytes.len() != expected_length {
+        return Err(cms_backend::AppError::Internal(format!(
+            "{} has invalid length: expected {} bytes, got {}",
+            key_name,
+            expected_length,
+            key_bytes.len()
+        )));
+    }
+
+    // Security check: key should not be all zeros
+    if key_bytes.iter().all(|&b| b == 0) {
+        return Err(cms_backend::AppError::Internal(format!(
+            "{} contains all zeros (invalid)",
+            key_name
+        )));
+    }
+
+    Ok(key_bytes)
+}
+
 /// Verifies that generated keys are valid
 fn verify_generated_keys(priv_b64: &str, pub_b64: &str) -> cms_backend::Result<()> {
     info!("Verifying generated keys...");
 
-    // Verify base64 encoding validity
-    if priv_b64.is_empty() {
-        return Err(cms_backend::AppError::Internal(
-            "Private key is empty".to_string(),
-        ));
-    }
-    if pub_b64.is_empty() {
-        return Err(cms_backend::AppError::Internal(
-            "Public key is empty".to_string(),
-        ));
-    }
+    // Validate basic properties
+    validate_key_not_empty(priv_b64, "Private key")?;
+    validate_key_not_empty(pub_b64, "Public key")?;
 
-    // Verify key lengths (Ed25519 keys are 32 bytes each)
+    // Ed25519 keys are 32 bytes each
     const EXPECTED_KEY_LENGTH: usize = 32;
 
-    // Decode and verify base64 format
-    let priv_bytes = STANDARD.decode(priv_b64).map_err(|e| {
-        cms_backend::AppError::Internal(format!(
-            "Private key verification failed (invalid base64): {e}"
-        ))
-    })?;
-
-    let pub_bytes = STANDARD.decode(pub_b64).map_err(|e| {
-        cms_backend::AppError::Internal(format!(
-            "Public key verification failed (invalid base64): {e}"
-        ))
-    })?;
-
-    if priv_bytes.len() != EXPECTED_KEY_LENGTH {
-        let priv_len = priv_bytes.len();
-        return Err(cms_backend::AppError::Internal(format!(
-            "Private key has invalid length: expected {EXPECTED_KEY_LENGTH} bytes, got {priv_len}"
-        )));
-    }
-    if pub_bytes.len() != EXPECTED_KEY_LENGTH {
-        let pub_len = pub_bytes.len();
-        return Err(cms_backend::AppError::Internal(format!(
-            "Public key has invalid length: expected {EXPECTED_KEY_LENGTH} bytes, got {pub_len}"
-        )));
-    }
-
-    // Additional security check: keys should not be all zeros
-    let priv_all_zeros = priv_bytes.iter().all(|&b| b == 0);
-    let pub_all_zeros = pub_bytes.iter().all(|&b| b == 0);
-
-    if priv_all_zeros {
-        return Err(cms_backend::AppError::Internal(
-            "Private key contains all zeros (invalid)".to_string(),
-        ));
-    }
-    if pub_all_zeros {
-        return Err(cms_backend::AppError::Internal(
-            "Public key contains all zeros (invalid)".to_string(),
-        ));
-    }
+    // Decode and validate both keys
+    decode_and_validate_key_length(priv_b64, "Private key", EXPECTED_KEY_LENGTH)?;
+    decode_and_validate_key_length(pub_b64, "Public key", EXPECTED_KEY_LENGTH)?;
 
     info!(
         "✓ Key verification passed (length: {} bytes each)",
