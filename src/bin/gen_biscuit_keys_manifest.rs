@@ -36,7 +36,57 @@ pub fn update_manifest(
     Ok(())
 }
 
-/// 古いバージョンのキーファイルを指定された数だけ残して削除（プルーニング）します。
+/// Checks if a file is a versioned biscuit key file
+fn is_versioned_key_file(path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+    
+    path.file_name()
+        .and_then(|s| s.to_str())
+        .is_some_and(|name| {
+            name.starts_with("biscuit_private_v")
+                && path
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("b64"))
+        })
+}
+
+/// Collects all version numbers from versioned key files in a directory
+fn collect_versions(dir: &Path) -> std::io::Result<Vec<u32>> {
+    let mut versions = Vec::new();
+    
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if is_versioned_key_file(&path) {
+            if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+                if let Some(v) = super::parse_version(name) {
+                    versions.push(v);
+                }
+            }
+        }
+    }
+    
+    Ok(versions)
+}
+
+/// Removes key files for specified versions
+fn remove_version_files(dir: &Path, versions: &[u32]) -> std::io::Result<()> {
+    for &v in versions {
+        for prefix in ["biscuit_private_v", "biscuit_public_v"] {
+            let path = dir.join(format!("{prefix}{v}.b64"));
+            if path.exists() {
+                fs::remove_file(&path)?;
+                println!("Pruned old version file {}", path.display());
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 古いバージョンのキーファイルを指定された数だけ残して削除(プルーニング)します。
 /// 失敗した場合は I/O エラーを返します。
 pub fn prune_versions(dir: &Path, keep: usize) -> std::io::Result<()> {
     if keep == 0 {
@@ -44,27 +94,7 @@ pub fn prune_versions(dir: &Path, keep: usize) -> std::io::Result<()> {
     }
 
     // ディレクトリ内のバージョンファイルを収集する
-    let mut versions: Vec<u32> = Vec::new();
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-
-        // ファイルであり、かつ特定の命名規則に一致するかをチェック
-        if path.is_file() {
-            if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                let is_versioned_key = name.starts_with("biscuit_private_v")
-                    && path
-                        .extension()
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("b64"));
-
-                if is_versioned_key {
-                    if let Some(v) = super::parse_version(name) {
-                        versions.push(v);
-                    }
-                }
-            }
-        }
-    }
+    let mut versions = collect_versions(dir)?;
 
     if versions.len() <= keep {
         return Ok(());
@@ -74,20 +104,63 @@ pub fn prune_versions(dir: &Path, keep: usize) -> std::io::Result<()> {
 
     // 保持する数を超えた古いバージョンを削除対象とする
     let to_remove_count = versions.len() - keep;
-    for &v in versions.iter().take(to_remove_count) {
-        for prefix in ["biscuit_private_v", "biscuit_public_v"] {
-            let path = dir.join(format!("{prefix}{v}.b64"));
-            if path.exists() {
-                fs::remove_file(&path)?;
-                println!("Pruned old version file {}", path.display());
-            }
-        }
+    let versions_to_remove = &versions[..to_remove_count];
+    
+    remove_version_files(dir, versions_to_remove)?;
+
+    Ok(())
+}
+
+/// Parses version number from file path
+fn extract_version_from_path(priv_path: &Path) -> Result<u32> {
+    priv_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .and_then(super::parse_version)
+        .ok_or_else(|| {
+            AppError::Internal(format!(
+                "Could not determine version from path: {}",
+                priv_path.display()
+            ))
+        })
+}
+
+/// Calculates and displays fingerprints for both keys
+fn display_key_fingerprints(priv_b64: &str, pub_b64: &str) -> (String, String) {
+    let priv_fp = hash::sha256_hex(priv_b64.as_bytes());
+    let pub_fp = hash::sha256_hex(pub_b64.as_bytes());
+    println!("private_fingerprint_sha256={priv_fp} public_fingerprint_sha256={pub_fp}");
+    (priv_fp, pub_fp)
+}
+
+/// Performs post-versioning operations (alias, manifest, pruning)
+fn perform_versioned_operations(
+    path: &Path,
+    v: u32,
+    priv_b64: &str,
+    pub_b64: &str,
+    priv_fp: &str,
+    pub_fp: &str,
+    latest_alias: bool,
+    no_manifest: bool,
+    prune: Option<usize>,
+) -> std::io::Result<()> {
+    if latest_alias {
+        write_latest_alias(path, priv_b64, pub_b64)?;
+    }
+
+    if !no_manifest {
+        update_manifest(path, v, priv_fp, pub_fp)?;
+    }
+    
+    if let Some(keep) = prune {
+        prune_versions(path, keep)?;
     }
 
     Ok(())
 }
 
-/// バージョン管理されたファイルの最終処理（フィンガープリント計算、マニフェスト更新、プルーニング）を行います。
+/// バージョン管理されたファイルの最終処理(フィンガープリント計算、マニフェスト更新、プルーニング)を行います。
 pub fn finalize_versioned(
     path: &Path,
     priv_path: &Path,
@@ -98,34 +171,25 @@ pub fn finalize_versioned(
     prune: Option<usize>,
 ) -> Result<()> {
     // ファイルパスからバージョン番号をパースする。失敗した場合はエラーを返す。
-    let v = priv_path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .and_then(super::parse_version)
-        .ok_or_else(|| {
-            AppError::Internal(format!(
-                "Could not determine version from path: {}",
-                priv_path.display()
-            ))
-        })?;
+    let v = extract_version_from_path(priv_path)?;
 
-    let priv_fp = hash::sha256_hex(priv_b64.as_bytes());
-    let pub_fp = hash::sha256_hex(pub_b64.as_bytes());
-    println!("private_fingerprint_sha256={priv_fp} public_fingerprint_sha256={pub_fp}");
+    let (priv_fp, pub_fp) = display_key_fingerprints(priv_b64, pub_b64);
 
     // エラーを map_err でアプリケーション固有のエラー型に変換
     let to_app_err = |e: std::io::Error| AppError::Internal(e.to_string());
 
-    if latest_alias {
-        write_latest_alias(path, priv_b64, pub_b64).map_err(to_app_err)?;
-    }
-
-    if !no_manifest {
-        update_manifest(path, v, &priv_fp, &pub_fp).map_err(to_app_err)?;
-    }
-    if let Some(keep) = prune {
-        prune_versions(path, keep).map_err(to_app_err)?;
-    }
+    perform_versioned_operations(
+        path,
+        v,
+        priv_b64,
+        pub_b64,
+        &priv_fp,
+        &pub_fp,
+        latest_alias,
+        no_manifest,
+        prune,
+    )
+    .map_err(to_app_err)?;
 
     Ok(())
 }
