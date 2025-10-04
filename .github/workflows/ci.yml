@@ -49,8 +49,8 @@ jobs:
       contents: read
     steps:
       # TODO: pin this action to a full commit SHA for immutability (e.g. actions/checkout@<full-sha>)
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
@@ -108,15 +108,12 @@ jobs:
             # Preview removal of deprecated flattened auth fields (disable auth-flat-fields only)
             cargo-features: "--no-default-features --features auth,cache,compression,database,search"
     steps:
-      # TODO: pin this action to a full commit SHA for immutability
-
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
       - name: Setup toolchain ${{ matrix.toolchain }}
-        # TODO: pin this action to a full commit SHA for immutability
         uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
         with:
           toolchain: ${{ matrix.toolchain }}
@@ -126,7 +123,6 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Cache (Swatinem/rust-cache)
-        # TODO: pin this action to a full commit SHA for immutability
         uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0
         with:
           workspaces: . -> target
@@ -138,7 +134,7 @@ jobs:
         run: cargo build --workspace --all-targets --locked ${{ matrix.cargo-features }}
 
       - name: Run migrations (default & no-flat feature-sets)
-        if: matrix.feature-set == 'default' || matrix.feature-set == 'no-flat'
+        if: "matrix.feature-set == 'default' || matrix.feature-set == 'no-flat'"
         env:
           # Use repository secrets when available. When falling back for local/debug runs,
           # avoid committing an actual password value in the workflow. Use a clearly
@@ -183,7 +179,7 @@ jobs:
           # Non-zero recorded but allow artifact upload & later jobs; fail at end for visibility
           echo "TEST_EXIT=${TEST_EXIT}" >> $GITHUB_ENV
       - name: Contract snapshot check (insta)
-        if: matrix.feature-set == 'default' || matrix.feature-set == 'no-flat'
+        if: "matrix.feature-set == 'default' || matrix.feature-set == 'no-flat'"
         env:
           FAST_KEY_TESTS: 1
         run: |
@@ -192,7 +188,6 @@ jobs:
           cargo insta test
       - name: Upload test log
         if: always()
-
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: test-log-${{ matrix.toolchain }}-${{ matrix.feature-set }}
@@ -207,10 +202,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      # TODO: pin this action to a full commit SHA for immutability
-
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
       - name: Run deprecation scan (src-only, human)
@@ -234,7 +227,6 @@ jobs:
           bash scripts/deprecation-auto-guidance.sh | tee guidance.txt
       - name: Upload guidance
         if: always()
-
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: deprecation-guidance-${{ github.sha }}
@@ -323,7 +315,6 @@ jobs:
         with:
           fetch-depth: 1
       - name: Cache cargo registry & index
-        # TODO: pin this action to a full commit SHA for immutability
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
         with:
           path: |
@@ -385,8 +376,6 @@ jobs:
         with:
           fetch-depth: 1
       - name: Cache cargo registry & index
-        # TODO: pin this action to a full commit SHA for immutability
-
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
         with:
           path: |
@@ -416,7 +405,6 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Cache cargo & target
-
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
         with:
           path: |
@@ -440,14 +428,12 @@ jobs:
         run: cargo tarpaulin --verbose --workspace --out Lcov --timeout 240
       - name: Upload coverage to Codacy
         if: env.CODACY_PROJECT_TOKEN != ''
-
         uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699
         with:
           project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
           coverage-reports: lcov.info
       - name: Upload LCOV artifact
         if: always()
-
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: lcov-report
