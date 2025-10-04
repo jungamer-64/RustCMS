@@ -10,8 +10,9 @@ pub fn timestamp() -> String {
     since.as_secs().to_string()
 }
 
-pub fn should_backup(path: &Path, backup: bool) -> bool {
-    backup && path.exists()
+/// Determines if a backup should be performed
+fn should_backup(path: &Path, backup_enabled: bool) -> bool {
+    backup_enabled && path.exists()
 }
 
 pub fn make_backup_destination(

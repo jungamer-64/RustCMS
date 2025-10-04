@@ -12,8 +12,9 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use biscuit_auth::KeyPair;
 use clap::{Parser, ValueEnum};
+use fs2::FileExt;
 use std::fs::{self, OpenOptions};
-use std::io::{BufWriter, Write};
+use std::io::{self, Write, BufWriter};
 use std::path::{Path, PathBuf};
 use tracing::{debug, error, info, warn};
 
@@ -399,36 +400,13 @@ fn determine_key_paths(dir: &Path, versioned: bool) -> (PathBuf, PathBuf) {
     }
 }
 
-/// Handles backup operations for both key files
-fn handle_key_backups(args: &Args, priv_path: &Path, pub_path: &Path) -> cms_backend::Result<()> {
-    if args.backup {
-        backup_if_exists(priv_path, args)?;
-        backup_if_exists(pub_path, args)?;
-    }
-    Ok(())
-}
-
-/// Writes both private and public key files atomically
-fn write_both_key_files(
-    priv_path: &Path,
-    pub_path: &Path,
-    priv_b64: &str,
-    pub_b64: &str,
-    force: bool,
-) -> cms_backend::Result<()> {
-    write_file_secure(priv_path, priv_b64, force)?;
-    write_file_secure(pub_path, pub_b64, force)?;
-    Ok(())
-}
-
-/// Writes key files with secure permissions
+/// Writes key files with secure permissions and atomic backup
 fn write_key_files(
     args: &Args,
     dir: &Path,
     priv_b64: &str,
     pub_b64: &str,
 ) -> cms_backend::Result<()> {
-    // Create directory with secure permissions
     fs::create_dir_all(dir).map_err(|e| {
         cms_backend::AppError::Internal(format!(
             "Failed to create directory {}: {}",
@@ -440,21 +418,23 @@ fn write_key_files(
     let (priv_path, pub_path) = determine_key_paths(dir, args.versioned);
 
     // Handle backups
-    handle_key_backups(args, &priv_path, &pub_path)?;
+    if args.backup {
+        backup_if_exists(&priv_path, args)?;
+        backup_if_exists(&pub_path, args)?;
+    }
 
     // Write files atomically with secure permissions
-    write_both_key_files(&priv_path, &pub_path, priv_b64, pub_b64, args.force)?;
+    write_file_secure(&priv_path, priv_b64, args.force)?;
+    write_file_secure(&pub_path, pub_b64, args.force)?;
 
     info!("✓ Keys written to {}", dir.display());
 
-    // Handle versioned post-processing
     if args.versioned {
         handle_versioned_postprocess(args, dir, &priv_path, priv_b64, pub_b64)?;
     }
 
     Ok(())
 }
-
 /// Validates that the file path is safe to write to
 fn validate_file_overwrite(path: &Path, force: bool) -> cms_backend::Result<()> {
     if path.exists() && !force {
@@ -488,7 +468,7 @@ fn create_temp_file_secure(temp_path: &Path, content: &str) -> cms_backend::Resu
     let mut writer = BufWriter::new(file);
     writer.write_all(content.as_bytes())?;
     writer.flush()?;
-    
+
     Ok(())
 }
 
@@ -498,7 +478,7 @@ fn move_temp_to_final(temp_path: &Path, final_path: &Path) -> cms_backend::Resul
         "Moving temporary file to final destination: {}",
         final_path.display()
     );
-    
+
     let rename_result = fs::rename(temp_path, final_path);
 
     if let Err(e) = rename_result {
@@ -757,6 +737,8 @@ fn next_version(dir: &Path) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_fs::TempDir;
+    use assert_fs::prelude::*;
 
     #[test]
     fn test_parse_version() {
@@ -773,4 +755,14 @@ mod tests {
         let long_path = PathBuf::from("a".repeat(MAX_PATH_LENGTH + 1));
         assert!(validate_path_length(&long_path).is_err());
     }
+
+    // Note: The following tests for write_file_atomic_with_backup have been removed
+    // as that function was refactored into simpler components (write_file_secure, backup_if_exists).
+    // The new functions are tested through integration tests in tests/ directory.
+    
+    /* Removed old tests:
+    - test_new_key_creation
+    - test_overwrite_with_backup_success  
+    - test_force_flag_is_respected
+    */
 }
