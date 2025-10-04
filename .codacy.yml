@@ -1,0 +1,54 @@
+---
+# Codacy configuration file
+# Exclude paths that are not part of the project source code
+
+exclude_paths:
+  # Rust toolchain and standard library
+  - "**/.rustup/**"
+  - "**/.cargo/**"
+  - "**/target/**"
+
+  # Build artifacts and dependencies
+  - "**/node_modules/**"
+  - "**/vendor/**"
+
+  # Configuration and tool-specific files
+  - "**/.serena/**"
+
+  # Test fixtures and generated files
+  - "**/uploads/**"
+  - "**/tmp/**"
+
+  # Documentation builds
+  - "**/docs/build/**"
+
+# Engine-specific configurations
+engines:
+  # Rust
+  clippy:
+    enabled: true
+
+  # Python
+  pylint:
+    enabled: true
+    python_version: 3
+
+  # SQL
+  tsqllint:
+    enabled: true
+
+  # Docker
+  hadolint:
+    enabled: true
+
+  # YAML
+  yamllint:
+    enabled: true
+
+# File size limits
+file_size_limit: 250000
+
+# Coverage settings
+coverage:
+  precision: 2
+  round: nearest
