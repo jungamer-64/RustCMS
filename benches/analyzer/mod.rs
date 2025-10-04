@@ -469,16 +469,12 @@ impl ReportGenerator {
 pub struct BenchmarkCli;
 
 impl BenchmarkCli {
-    pub fn run(args: &[String]) -> Result<(), String> {
-        if args.len() < 2 {
-            return Err("Usage: benchmark-analyzer <results.json> [baseline.json]".to_string());
-        }
-
+    pub fn run(results_path: &Path, baseline_path: Option<&Path>) -> Result<(), String> {
         let mut analyzer = BenchmarkAnalyzer::new();
-        analyzer.load_results(&args[1])?;
+        analyzer.load_results(results_path)?;
 
-        if args.len() >= 3 {
-            analyzer.load_baseline(&args[2])?;
+        if let Some(baseline) = baseline_path {
+            analyzer.load_baseline(baseline)?;
         }
 
         let summary = analyzer.generate_summary();
