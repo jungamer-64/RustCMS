@@ -32,7 +32,7 @@ use crate::handlers::{
 };
 
 /// Application metadata for logging and diagnostics
-const APP_NAME: &str = env!("CARGO_PKG_NAME");
+const APP_NAME: &str = "cms-admin"; // Override package name for binary identity
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 const APP_AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
 
