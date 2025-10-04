@@ -14,7 +14,7 @@ use biscuit_auth::KeyPair;
 use clap::{Parser, ValueEnum};
 use fs2::FileExt;
 use std::fs::{self, OpenOptions};
-use std::io::{self, Write, BufWriter};
+use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use tracing::{debug, error, info, warn};
 
@@ -298,6 +298,7 @@ fn list_versions(dir: &Path) {
                 println!("No versioned keys found in {}", dir.display());
             } else {
                 versions.sort_by_key(|x| x.0);
+                println!("Found versions (count = {})", versions.len());
                 println!("Found {} version(s) in {}:", versions.len(), dir.display());
                 for (v, name) in versions {
                     println!("  v{:03} => {}", v, name);
@@ -759,10 +760,10 @@ mod tests {
     // Note: The following tests for write_file_atomic_with_backup have been removed
     // as that function was refactored into simpler components (write_file_secure, backup_if_exists).
     // The new functions are tested through integration tests in tests/ directory.
-    
+
     /* Removed old tests:
     - test_new_key_creation
-    - test_overwrite_with_backup_success  
+    - test_overwrite_with_backup_success
     - test_force_flag_is_respected
     */
 }
