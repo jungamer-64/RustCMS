@@ -315,14 +315,10 @@ async fn handle_migrate(state: &AppState, options: MigrateOptions) -> Result<()>
     info!("📊 Checking migration status...");
     let pending = state.db_list_pending_migrations(MIGRATIONS).await?;
 
-    if pending.is_empty() {
-        info!("✅ No pending migrations");
-        return Ok(());
-    }
+    display_pending_migrations(&pending)?;
 
-    info!("Found {} pending migration(s):", pending.len());
-    for (idx, name) in pending.iter().enumerate() {
-        info!("  {}. {}", idx + 1, name);
+    if pending.is_empty() {
+        return Ok(());
     }
 
     if execution == ExecutionMode::DryRun {
@@ -331,10 +327,7 @@ async fn handle_migrate(state: &AppState, options: MigrateOptions) -> Result<()>
     }
 
     // Create backup if requested
-    if backup == BackupMode::Enable {
-        info!("💾 Creating pre-migration backup...");
-        create_backup(state, "./backups/pre-migration")?;
-    }
+    perform_backup_if_enabled(state, backup)?;
 
     // Apply migrations
     info!("📊 Applying migrations...");
@@ -393,6 +386,27 @@ async fn perform_rollback_with_backup(state: &AppState, steps: usize) -> Result<
     rollback_migrations(state, steps).await?;
 
     info!("✅ Rollback completed");
+    Ok(())
+}
+
+#[instrument(skip(state))]
+async fn handle_rollback(state: &AppState, steps: usize, force: bool, dry_run: bool) -> Result<()> {
+    validate_rollback_steps(steps)?;
+
+    warn!("⚠️  Rolling back {} migration(s)", steps);
+
+    let confirmed = confirm_rollback(force, dry_run)?;
+    if !confirmed {
+        return Ok(());
+    }
+
+    if dry_run {
+        info!("🔍 DRY-RUN: Would rollback {} migration(s)", steps);
+        return Ok(());
+    }
+
+    perform_rollback_with_backup(state, steps).await?;
+
     Ok(())
 }
 
