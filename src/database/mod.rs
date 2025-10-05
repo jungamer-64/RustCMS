@@ -216,10 +216,22 @@ fn compute_post_update_data(existing: &Post, req: &UpdatePostRequest) -> PostUpd
 fn extract_basic_fields(
     existing: &Post,
     req: &UpdatePostRequest,
-) -> (String, String, String, Option<String>, Vec<String>, Vec<String>, Option<String>, Option<String>) {
+) -> (
+    String,
+    String,
+    String,
+    Option<String>,
+    Vec<String>,
+    Vec<String>,
+    Option<String>,
+    Option<String>,
+) {
     let title = req.title.clone().unwrap_or_else(|| existing.title.clone());
     let slug = req.slug.clone().unwrap_or_else(|| existing.slug.clone());
-    let content = req.content.clone().unwrap_or_else(|| existing.content.clone());
+    let content = req
+        .content
+        .clone()
+        .unwrap_or_else(|| existing.content.clone());
     let excerpt = merge_opt_option(req.excerpt.as_ref(), existing.excerpt.as_ref());
     let tags = merge_opt(req.tags.as_ref(), &existing.tags);
     let categories = req.category.as_ref().map_or_else(
@@ -232,7 +244,16 @@ fn extract_basic_fields(
         existing.meta_description.as_ref(),
     );
 
-    (title, slug, content, excerpt, tags, categories, meta_title, meta_description)
+    (
+        title,
+        slug,
+        content,
+        excerpt,
+        tags,
+        categories,
+        meta_title,
+        meta_description,
+    )
 }
 
 /// Compute status and `published_at` based on request and existing values
