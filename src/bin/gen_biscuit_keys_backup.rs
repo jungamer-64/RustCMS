@@ -1,7 +1,8 @@
+// src/bin/gen_biscuit_keys_backup.rs
+use flate2::{Compression, write::GzEncoder};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
-use flate2::{write::GzEncoder, Compression};
 
 pub fn timestamp() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -42,9 +43,34 @@ pub fn ensure_parent_dir(parent: Option<&Path>) {
 }
 
 pub fn perform_backup(path: &Path, bak: &Path) -> std::io::Result<()> {
-    if path.exists() {
-        fs::copy(path, bak)?;
-        println!("Backed up (copied) {} -> {}", path.display(), bak.display());
+    use std::io::ErrorKind;
+    // Attempt copy directly; handle NotFound gracefully; for robustness use temp + rename.
+    if !path.is_file() {
+        return Ok(());
+    }
+    let parent = bak.parent();
+    if let Some(p) = parent {
+        let _ = fs::create_dir_all(p);
+    }
+    let tmp = bak.with_extension("tmp");
+    match fs::copy(path, &tmp) {
+        Ok(_) => {
+            // Attempt atomic-ish rename (same directory) to final name.
+            if let Err(e) = fs::rename(&tmp, bak) {
+                // Fallback: remove tmp and bubble error.
+                let _ = fs::remove_file(&tmp);
+                return Err(e);
+            }
+            println!("Backed up (copied) {} -> {}", path.display(), bak.display());
+        }
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            // Source disappeared; nothing to do.
+            let _ = fs::remove_file(&tmp);
+        }
+        Err(e) => {
+            let _ = fs::remove_file(&tmp);
+            return Err(e);
+        }
     }
     Ok(())
 }
@@ -182,6 +208,77 @@ pub fn maybe_backup_file(
     do_backup(path, &bak)?;
     post_backup_actions(&bak, &file_name, max_backups, compress_opt);
     Ok(())
+}
+
+#[cfg(test)]
+mod non_destructive_tests {
+    use super::*;
+    use std::{fs, io::Write};
+    use tempfile::tempdir;
+
+    #[test]
+    fn backup_does_not_remove_original() {
+        let dir = tempdir().unwrap();
+        let original = dir.path().join("keys.txt");
+        {
+            let mut f = fs::File::create(&original).unwrap();
+            writeln!(f, "secret-key").unwrap();
+        }
+        maybe_backup_file(&original, true, None, None, None).unwrap();
+        assert!(original.exists(), "original file must remain after backup");
+        // Find at least one .bak file
+        let mut found = false;
+        for entry in fs::read_dir(dir.path()).unwrap() {
+            let p = entry.unwrap().path();
+            if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
+                if name.starts_with("keys.txt.bak.") {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        assert!(found, "expected a backup copy to be created");
+    }
+
+    #[test]
+    fn backup_is_noop_when_source_missing() {
+        let dir = tempdir().unwrap();
+        let missing = dir.path().join("absent.txt");
+        let count_before = fs::read_dir(dir.path()).unwrap().count();
+        maybe_backup_file(&missing, true, None, None, None).unwrap();
+        let count_after = fs::read_dir(dir.path()).unwrap().count();
+        assert_eq!(
+            count_before, count_after,
+            "no files should be created when source missing"
+        );
+    }
+
+    #[test]
+    fn backup_fails_on_readonly_target_directory() {
+        let dir = tempdir().unwrap();
+        let original = dir.path().join("keys.txt");
+        {
+            let mut f = fs::File::create(&original).unwrap();
+            writeln!(f, "secret-key").unwrap();
+        }
+        // Create a subdir and make it read-only (best-effort; may not work on all platforms)
+        let ro_dir = dir.path().join("ro");
+        fs::create_dir_all(&ro_dir).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&ro_dir).unwrap().permissions();
+            perms.set_mode(0o500); // r-x
+            let _ = fs::set_permissions(&ro_dir, perms);
+        }
+        let result = maybe_backup_file(&original, true, Some(&ro_dir), None, None);
+        if cfg!(unix) {
+            assert!(result.is_err(), "expected error on read-only directory");
+        } else {
+            // On non-unix platforms we accept either behavior
+            let _ = result;
+        }
+    }
 }
 
 fn prepare_backup_parent(bak: &Path) {
