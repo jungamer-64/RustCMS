@@ -17,8 +17,8 @@
 //! - **Resilience**: Listener failures are logged, not propagated
 //! - **Idempotency**: Listeners should handle duplicate events gracefully
 
-use crate::events::{AppEvent, EventBus};
 use crate::AppState;
+use crate::events::{AppEvent, EventBus};
 use tracing::{debug, error, info, warn};
 
 /// Spawns all event listener tasks.
@@ -41,10 +41,10 @@ pub fn spawn_event_listeners(state: AppState, event_bus: EventBus) {
     {
         let search_state = state.clone();
         let mut search_receiver = event_bus.subscribe();
-        
+
         tokio::spawn(async move {
             info!("🔍 Search indexing listener started");
-            
+
             loop {
                 match search_receiver.recv().await {
                     Ok(event) => {
@@ -69,10 +69,10 @@ pub fn spawn_event_listeners(state: AppState, event_bus: EventBus) {
     {
         let cache_state = state.clone();
         let mut cache_receiver = event_bus.subscribe();
-        
+
         tokio::spawn(async move {
             info!("🗑️  Cache invalidation listener started");
-            
+
             loop {
                 match cache_receiver.recv().await {
                     Ok(event) => {
@@ -102,41 +102,41 @@ async fn handle_search_event(state: &AppState, event: AppEvent) -> crate::Result
     match event {
         AppEvent::UserCreated(data) | AppEvent::UserUpdated(data) => {
             debug!(user_id = %data.id, "Indexing user");
-            
+
             // Fetch fresh data from database (single source of truth)
             let user = state.db_get_user_by_id(data.id).await?;
             state.search.index_user(&user).await?;
-            
+
             debug!(user_id = %data.id, "User indexed successfully");
         }
-        
+
         AppEvent::UserDeleted(user_id) => {
             debug!(user_id = %user_id, "Removing user from index");
             state.search.remove_document(&user_id.to_string()).await?;
             debug!(user_id = %user_id, "User removed from index");
         }
-        
-        AppEvent::PostCreated(data) 
-        | AppEvent::PostUpdated(data) 
+
+        AppEvent::PostCreated(data)
+        | AppEvent::PostUpdated(data)
         | AppEvent::PostPublished(data) => {
             debug!(post_id = %data.id, "Indexing post");
-            
+
             // Fetch fresh data from database
             let post = state.db_get_post_by_id(data.id).await?;
             state.search.index_post(&post).await?;
-            
+
             debug!(post_id = %data.id, "Post indexed successfully");
         }
-        
+
         AppEvent::PostDeleted(post_id) => {
             debug!(post_id = %post_id, "Removing post from index");
             state.search.remove_document(&post_id.to_string()).await?;
             debug!(post_id = %post_id, "Post removed from index");
         }
-        
+
         // Placeholder events - no action yet
-        AppEvent::CommentCreated(_) 
-        | AppEvent::CommentUpdated(_) 
+        AppEvent::CommentCreated(_)
+        | AppEvent::CommentUpdated(_)
         | AppEvent::CommentDeleted(_)
         | AppEvent::CategoryCreated(_)
         | AppEvent::CategoryUpdated(_)
@@ -148,7 +148,7 @@ async fn handle_search_event(state: &AppState, event: AppEvent) -> crate::Result
             debug!("Received event with no search action defined");
         }
     }
-    
+
     Ok(())
 }
 
@@ -159,37 +159,34 @@ async fn handle_search_event(state: &AppState, event: AppEvent) -> crate::Result
 #[cfg(feature = "cache")]
 async fn handle_cache_event(state: &AppState, event: AppEvent) {
     match event {
-        AppEvent::UserCreated(data) 
-        | AppEvent::UserUpdated(data) => {
+        AppEvent::UserCreated(data) | AppEvent::UserUpdated(data) => {
             debug!(user_id = %data.id, "Invalidating user caches");
             state.invalidate_user_caches(data.id).await;
         }
-        
+
         AppEvent::UserDeleted(user_id) => {
             debug!(user_id = %user_id, "Invalidating user caches (deleted)");
             state.invalidate_user_caches(user_id).await;
         }
-        
-        AppEvent::PostCreated(data) 
-        | AppEvent::PostUpdated(data) 
+
+        AppEvent::PostCreated(data)
+        | AppEvent::PostUpdated(data)
         | AppEvent::PostPublished(data) => {
             debug!(post_id = %data.id, "Invalidating post caches");
             state.invalidate_post_caches(data.id).await;
         }
-        
+
         AppEvent::PostDeleted(post_id) => {
             debug!(post_id = %post_id, "Invalidating post caches (deleted)");
             state.invalidate_post_caches(post_id).await;
         }
-        
+
         // Placeholder events - no specific cache invalidation yet
-        AppEvent::CommentCreated(_) 
-        | AppEvent::CommentUpdated(_) 
-        | AppEvent::CommentDeleted(_) => {
+        AppEvent::CommentCreated(_) | AppEvent::CommentUpdated(_) | AppEvent::CommentDeleted(_) => {
             // When comments are implemented, invalidate related post caches
             debug!("Comment event received, no cache action defined yet");
         }
-        
+
         AppEvent::CategoryCreated(_)
         | AppEvent::CategoryUpdated(_)
         | AppEvent::CategoryDeleted(_)
