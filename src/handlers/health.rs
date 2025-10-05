@@ -1,3 +1,4 @@
+// src/handlers/health.rs
 //! Health Check Handlers
 //!
 //! Provides system health monitoring and status endpoints

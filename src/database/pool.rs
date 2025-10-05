@@ -1,3 +1,4 @@
+// src/database/pool.rs
 use diesel::PgConnection;
 use diesel::r2d2::{self, ConnectionManager};
 use std::sync::Arc;

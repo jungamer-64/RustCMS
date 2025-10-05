@@ -1,3 +1,4 @@
+// src/handlers/posts.rs
 //! Post Handlers
 //!
 //! Handles CRUD operations for blog posts and content management

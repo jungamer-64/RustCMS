@@ -1,3 +1,4 @@
+// src/handlers/auth.rs
 //! Authentication Handlers
 //!
 //! ユーザーの登録/認証/トークン再発行など、認可前提のパブリック API を提供します。

@@ -1,3 +1,4 @@
+// src/handlers/search.rs
 //! Search Handlers
 //!
 //! Provides full-text search endpoints with Tantivy

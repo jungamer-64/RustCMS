@@ -1,3 +1,4 @@
+// src/cache/mod.rs
 //! Cache Service - Redis + In-memory caching
 //!
 //! Provides high-performance caching with:
