@@ -1,6 +1,6 @@
 //! Search Performance Benchmarks - TEMPORARILY DISABLED
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 
 fn stub_benchmark(c: &mut Criterion) {
     c.bench_function("search/stub_placeholder", |b| {

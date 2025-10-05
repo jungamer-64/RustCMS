@@ -8,10 +8,10 @@
 //! - Configuration management
 //! - Error handling utilities
 
-use uuid::Uuid;
-use std::time::{Duration, Instant};
 use std::env;
 use std::sync::OnceLock;
+use std::time::{Duration, Instant};
+use uuid::Uuid;
 
 // ============================================================================
 // Configuration Management
@@ -56,7 +56,7 @@ pub fn config() -> &'static BenchmarkConfig {
 pub fn concurrency_levels() -> Vec<usize> {
     let max = config().max_concurrency;
     let cpu_count = num_cpus::get();
-    
+
     vec![
         1,
         cpu_count / 2,
@@ -131,9 +131,7 @@ pub fn generate_test_content(size: usize) -> String {
 
 /// Generate test tags
 pub fn generate_test_tags(count: usize) -> Vec<String> {
-    (0..count)
-        .map(|i| format!("tag_{}", i))
-        .collect()
+    (0..count).map(|i| format!("tag_{}", i)).collect()
 }
 
 /// Benchmark result holder
@@ -225,21 +223,22 @@ impl BenchmarkStats {
             return 0.0;
         }
         let mean = self.mean();
-        let variance = self.values.iter()
-            .map(|v| (v - mean).powi(2))
-            .sum::<f64>() / (self.values.len() - 1) as f64;
+        let variance = self.values.iter().map(|v| (v - mean).powi(2)).sum::<f64>()
+            / (self.values.len() - 1) as f64;
         variance.sqrt()
     }
 
     pub fn min(&self) -> f64 {
-        self.values.iter()
+        self.values
+            .iter()
             .copied()
             .min_by(|a, b| a.partial_cmp(b).unwrap())
             .unwrap_or(0.0)
     }
 
     pub fn max(&self) -> f64 {
-        self.values.iter()
+        self.values
+            .iter()
             .copied()
             .max_by(|a, b| a.partial_cmp(b).unwrap())
             .unwrap_or(0.0)
@@ -291,11 +290,7 @@ mod tests {
 
     #[test]
     fn test_benchmark_result() {
-        let result = BenchmarkResult::new(
-            "test".to_string(),
-            Duration::from_secs(1),
-            1000,
-        );
+        let result = BenchmarkResult::new("test".to_string(), Duration::from_secs(1), 1000);
         assert_eq!(result.name, "test");
         assert_eq!(result.iterations, 1000);
         assert_eq!(result.ops_per_sec, 1000.0);

@@ -1,6 +1,6 @@
 //! Database Performance Benchmarks - TEMPORARILY DISABLED
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 
 fn database_benchmark(c: &mut Criterion) {
     c.bench_function("stub_database_benchmark", |b| {
