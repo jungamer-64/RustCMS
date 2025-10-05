@@ -8,7 +8,7 @@ import re
 import sys
 import json
 from urllib.request import Request, urlopen
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError, URLError
 
 TOKEN = os.environ.get('GITHUB_TOKEN')
 if not TOKEN:
@@ -32,12 +32,12 @@ def gh_api_get(url):
     except HTTPError as e:
         try:
             body = e.read().decode('utf-8')
-        except Exception as decode_err:
+        except (AttributeError, UnicodeDecodeError) as decode_err:
             print(f'Warning: Failed to decode HTTP error body: {decode_err}', file=sys.stderr)
             body = ''
         return body, e.code
-    except Exception as e:
-        print(f'Warning: Request failed: {e}', file=sys.stderr)
+    except URLError as e:
+        print(f'Warning: URL request failed: {e}', file=sys.stderr)
         return str(e), None
 
 
@@ -48,8 +48,8 @@ def resolve_sha(owner, repo, ref):
     if code == 200:
         try:
             return json.loads(body).get('sha')
-        except Exception:
-            pass
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f'Warning: Failed to parse commit response: {e}', file=sys.stderr)
     # try git ref tags (handles lightweight and annotated tags)
     body, code = gh_api_get(f'https://api.github.com/repos/{owner}/{repo}/git/ref/tags/{ref}')
     if code == 200:
@@ -63,11 +63,12 @@ def resolve_sha(owner, repo, ref):
                     try:
                         o = json.loads(body2).get('object', {})
                         return o.get('sha') or obj_sha
-                    except Exception:
+                    except (json.JSONDecodeError, KeyError) as e:
+                        print(f'Warning: Failed to parse annotated tag: {e}', file=sys.stderr)
                         return obj_sha
                 return obj_sha
-        except Exception:
-            pass
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f'Warning: Failed to parse git ref tags response: {e}', file=sys.stderr)
     # try releases by tag name
     body, code = gh_api_get(f'https://api.github.com/repos/{owner}/{repo}/releases/tags/{ref}')
     if code == 200:
@@ -79,10 +80,10 @@ def resolve_sha(owner, repo, ref):
                     try:
                         obj_sha = json.loads(body2).get('object', {}).get('sha')
                         return obj_sha
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+                    except (json.JSONDecodeError, KeyError) as e:
+                        print(f'Warning: Failed to parse tag reference: {e}', file=sys.stderr)
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f'Warning: Failed to parse release response: {e}', file=sys.stderr)
     return None
 
 
