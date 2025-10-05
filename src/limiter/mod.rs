@@ -124,6 +124,14 @@ pub mod adapters {
     }
 
     impl ApiKeyFailureLimiterAdapter {
+        /// Creates a new adapter with explicit window duration.
+        #[must_use]
+        pub fn new(window_secs: u64) -> Self {
+            Self {
+                window_secs: window_secs.max(1),
+            }
+        }
+
         #[must_use]
         pub fn from_env() -> Self {
             let window = std::env::var("API_KEY_FAIL_WINDOW_SECS")
