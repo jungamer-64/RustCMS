@@ -123,7 +123,6 @@ For applications upgrading from 2.x:
 
 - All JWT environment variables, config fields, and code paths.
 
-
 ### Internal
 
 - Consolidated token parsing/verification into `verify_biscuit_generic`.
