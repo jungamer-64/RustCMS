@@ -41,7 +41,7 @@ fn is_versioned_key_file(path: &Path) -> bool {
     if !path.is_file() {
         return false;
     }
-    
+
     path.file_name()
         .and_then(|s| s.to_str())
         .is_some_and(|name| {
@@ -55,7 +55,7 @@ fn is_versioned_key_file(path: &Path) -> bool {
 /// Collects all version numbers from versioned key files in a directory
 fn collect_versions(dir: &Path) -> std::io::Result<Vec<u32>> {
     let mut versions = Vec::new();
-    
+
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -68,7 +68,7 @@ fn collect_versions(dir: &Path) -> std::io::Result<Vec<u32>> {
             }
         }
     }
-    
+
     Ok(versions)
 }
 
@@ -105,7 +105,7 @@ pub fn prune_versions(dir: &Path, keep: usize) -> std::io::Result<()> {
     // 保持する数を超えた古いバージョンを削除対象とする
     let to_remove_count = versions.len() - keep;
     let versions_to_remove = &versions[..to_remove_count];
-    
+
     remove_version_files(dir, versions_to_remove)?;
 
     Ok(())
@@ -152,7 +152,7 @@ fn perform_versioned_operations(
     if !no_manifest {
         update_manifest(path, v, priv_fp, pub_fp)?;
     }
-    
+
     if let Some(keep) = prune {
         prune_versions(path, keep)?;
     }
