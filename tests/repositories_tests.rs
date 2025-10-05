@@ -8,7 +8,10 @@ fn repository_pattern_structure() {
     // Repositories should provide CRUD operations abstraction
     // This test verifies the existence of the repository pattern concept
     let expected_pattern = "Repository pattern structure is consistent";
-    assert_eq!(expected_pattern, "Repository pattern structure is consistent");
+    assert_eq!(
+        expected_pattern,
+        "Repository pattern structure is consistent"
+    );
 }
 
 #[test]
@@ -170,11 +173,7 @@ fn audit_fields_naming() {
 #[test]
 fn repository_caching_keys() {
     // Test repository caching key patterns
-    let cache_key_patterns = vec![
-        "user:id:{id}",
-        "post:slug:{slug}",
-        "user:email:{email}",
-    ];
+    let cache_key_patterns = vec!["user:id:{id}", "post:slug:{slug}", "user:email:{email}"];
 
     for pattern in cache_key_patterns {
         assert!(pattern.contains(':'));
@@ -187,21 +186,14 @@ fn repository_caching_keys() {
 fn optimistic_locking_support() {
     // Test optimistic locking version field
     let version_field = "version";
-    
+
     assert_eq!(version_field, "version");
 }
 
 #[test]
 fn repository_query_builders() {
     // Test query builder pattern components
-    let builder_methods = vec![
-        "filter",
-        "order_by",
-        "limit",
-        "offset",
-        "select",
-        "join",
-    ];
+    let builder_methods = vec!["filter", "order_by", "limit", "offset", "select", "join"];
 
     for method in builder_methods {
         assert!(!method.is_empty());

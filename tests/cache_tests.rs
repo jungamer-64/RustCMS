@@ -34,7 +34,7 @@ fn test_data_serialization() {
     // Test serialization
     let json = serde_json::to_string(&data).expect("serialize failed");
     assert!(json.contains("test"));
-    
+
     // Test deserialization
     let deserialized: TestData = serde_json::from_str(&json).expect("deserialize failed");
     assert_eq!(deserialized, data);
@@ -43,13 +43,19 @@ fn test_data_serialization() {
 #[test]
 fn cache_ttl_values() {
     // Verify cache TTL constants are reasonable and in ascending order
-    let short_ttl: u64 = 60;    // 1 minute
-    let medium_ttl: u64 = 300;  // 5 minutes
-    let long_ttl: u64 = 3600;   // 1 hour
+    let short_ttl: u64 = 60; // 1 minute
+    let medium_ttl: u64 = 300; // 5 minutes
+    let long_ttl: u64 = 3600; // 1 hour
 
     // Ensure TTL values are in ascending order
-    assert!(short_ttl < medium_ttl, "SHORT_TTL should be less than MEDIUM_TTL");
-    assert!(medium_ttl < long_ttl, "MEDIUM_TTL should be less than LONG_TTL");
+    assert!(
+        short_ttl < medium_ttl,
+        "SHORT_TTL should be less than MEDIUM_TTL"
+    );
+    assert!(
+        medium_ttl < long_ttl,
+        "MEDIUM_TTL should be less than LONG_TTL"
+    );
     assert!(long_ttl <= 86400, "LONG_TTL should not exceed 24 hours");
 }
 
@@ -82,8 +88,14 @@ fn cache_key_validation() {
     let valid_keys = vec!["user:123", "post:456", "session:abc"];
 
     for key in valid_keys {
-        assert!(key.contains(':'), "Cache key should contain separator: {key}");
-        assert!(!key.contains(' '), "Cache key should not contain spaces: {key}");
+        assert!(
+            key.contains(':'),
+            "Cache key should contain separator: {key}"
+        );
+        assert!(
+            !key.contains(' '),
+            "Cache key should not contain spaces: {key}"
+        );
         assert!(!key.is_empty(), "Cache key should not be empty");
     }
 }

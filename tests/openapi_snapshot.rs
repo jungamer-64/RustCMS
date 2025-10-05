@@ -17,14 +17,21 @@ fn openapi_snapshot_unified_biscuit() {
         .and_then(|v| v.as_array())
         .expect("required array");
     let required_fields: Vec<&str> = required.iter().filter_map(|v| v.as_str()).collect();
-    
+
     // Unified Biscuit authentication required fields
     for f in &["success", "tokens", "user"] {
         assert!(required_fields.contains(f), "missing required field {f}");
     }
-    
+
     // Ensure legacy flat fields are not present
-    for f in &["access_token", "refresh_token", "biscuit_token", "expires_in", "session_id", "token"] {
+    for f in &[
+        "access_token",
+        "refresh_token",
+        "biscuit_token",
+        "expires_in",
+        "session_id",
+        "token",
+    ] {
         assert!(
             !required_fields.contains(f),
             "legacy flat field {f} should not be present in unified Biscuit authentication"

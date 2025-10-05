@@ -39,27 +39,32 @@ mod api_key_adapter_tests {
     use super::*;
     use cms_backend::limiter::adapters::ApiKeyFailureLimiterAdapter;
 
+    const TEST_API_KEY: &str = "test_key_1";
+
     #[tokio::test]
+    #[serial_test::serial]
     async fn adapter_blocks_after_threshold() {
-        // Ensure env threshold determinism; backend reads on construction.
-        // SAFETY: This unsafe block is used in a test environment to set environment variables.
-        // The test runs in isolation, and these variables are only used for configuring
-        // the rate limiter test. There is no data race risk as tests run sequentially
-        // or in separate processes with tokio::test.
-        unsafe {
-            std::env::set_var("API_KEY_FAIL_WINDOW_SECS", "60");
-            std::env::set_var("API_KEY_FAIL_THRESHOLD", "2"); // block after >2 failures
+        // Configure adapter with explicit window time for testing.
+        // Note: The actual threshold is controlled by the global rate limiter backend,
+        // which reads API_KEY_FAIL_THRESHOLD from environment at initialization.
+        // This test relies on the default threshold of 10 (blocks when count > 10).
+        let adapter = ApiKeyFailureLimiterAdapter::new(60);
+
+        // Record failures repeatedly to reach threshold (default is 10)
+        // The implementation blocks when failure_count > threshold, so we need 10 checks
+        // to reach count=10, and the 11th will be blocked.
+        for _ in 0..10 {
+            assert_eq!(adapter.check(TEST_API_KEY), RateLimitDecision::Allowed);
         }
-        let adapter = ApiKeyFailureLimiterAdapter::from_env();
-        // First 3 checks correspond to 3 failures (record_failure increments internally)
-        assert_eq!(adapter.check("k1"), RateLimitDecision::Allowed);
-        assert_eq!(adapter.check("k1"), RateLimitDecision::Allowed);
-        match adapter.check("k1") {
+
+        // 11th check should trigger the block (count becomes 11, which is > 10)
+        match adapter.check(TEST_API_KEY) {
             RateLimitDecision::Blocked { .. } => {}
-            RateLimitDecision::Allowed => panic!("expected blocked"),
+            RateLimitDecision::Allowed => panic!("expected blocked after threshold"),
         }
+
         // Clear and ensure it allows again
-        adapter.clear("k1");
-        assert_eq!(adapter.check("k1"), RateLimitDecision::Allowed);
+        adapter.clear(TEST_API_KEY);
+        assert_eq!(adapter.check(TEST_API_KEY), RateLimitDecision::Allowed);
     }
 }

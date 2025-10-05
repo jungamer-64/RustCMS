@@ -7,20 +7,29 @@
 
 #[test]
 fn csrf_protected_endpoint_detection() {
-    use cms_backend::middleware::security::is_csrf_protected_endpoint;
     use axum::http::Method;
+    use cms_backend::middleware::security::is_csrf_protected_endpoint;
 
     // API endpoints with proper token auth are not CSRF protected (token auth is CSRF-resistant)
     assert!(!is_csrf_protected_endpoint(&Method::POST, "/api/v1/posts"));
     assert!(!is_csrf_protected_endpoint(&Method::PUT, "/api/v1/posts/1"));
-    assert!(!is_csrf_protected_endpoint(&Method::DELETE, "/api/v1/posts/1"));
-    
+    assert!(!is_csrf_protected_endpoint(
+        &Method::DELETE,
+        "/api/v1/posts/1"
+    ));
+
     // GET should not be protected
     assert!(!is_csrf_protected_endpoint(&Method::GET, "/api/v1/posts"));
-    
+
     // Auth endpoints should be protected (form-based)
-    assert!(is_csrf_protected_endpoint(&Method::POST, "/api/v1/auth/register"));
-    assert!(is_csrf_protected_endpoint(&Method::POST, "/api/v1/auth/login"));
+    assert!(is_csrf_protected_endpoint(
+        &Method::POST,
+        "/api/v1/auth/register"
+    ));
+    assert!(is_csrf_protected_endpoint(
+        &Method::POST,
+        "/api/v1/auth/login"
+    ));
 
     // Non-API endpoints should be protected
     assert!(is_csrf_protected_endpoint(&Method::POST, "/admin/settings"));
@@ -57,7 +66,10 @@ fn parse_authorization_header_with_whitespace() {
     use cms_backend::middleware::auth::parse_authorization_header;
 
     let header = "Bearer   token_with_spaces   ";
-    assert_eq!(parse_authorization_header(header), Some("token_with_spaces"));
+    assert_eq!(
+        parse_authorization_header(header),
+        Some("token_with_spaces")
+    );
 }
 
 #[cfg(feature = "auth")]
@@ -152,13 +164,13 @@ fn logging_middleware_configuration() {
 
 #[tokio::test]
 async fn middleware_layers_can_be_instantiated() {
-    use cms_backend::middleware::security::SecurityHeadersLayer;
     use cms_backend::middleware::rate_limiting::RateLimitLayer;
-    
+    use cms_backend::middleware::security::SecurityHeadersLayer;
+
     // Verify that middleware layers can be created
     let security = SecurityHeadersLayer::new();
     let rate_limit = RateLimitLayer::new();
-    
+
     // This test verifies the middleware exists and can be instantiated
     assert!(std::any::type_name_of_val(&security).contains("SecurityHeadersLayer"));
     assert!(std::any::type_name_of_val(&rate_limit).contains("RateLimitLayer"));

@@ -2,9 +2,9 @@
 //!
 //! Tests for all error types, error conversions, and HTTP response mapping.
 
-use cms_backend::error::AppError;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
+use cms_backend::error::AppError;
 
 #[test]
 fn test_authentication_error_display() {
@@ -234,7 +234,7 @@ fn test_error_source_chain() {
         path: "/test".to_string(),
         source: io_err,
     };
-    
+
     // Check that we can access the source
     assert!(std::error::Error::source(&app_err).is_some());
 }
@@ -254,7 +254,7 @@ fn test_multiple_error_types_display() {
         AppError::Conflict("conflict".to_string()),
         AppError::RateLimit("rate limit".to_string()),
     ];
-    
+
     for err in errors {
         let display = format!("{err}");
         assert!(!display.is_empty());

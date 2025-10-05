@@ -23,7 +23,7 @@ fn health_response_structure() {
     }"#;
 
     let parsed: Value = serde_json::from_str(health_json).expect("should parse");
-    
+
     assert!(parsed["status"].is_string());
     assert!(parsed["timestamp"].is_string());
     assert!(parsed["services"].is_object());
@@ -38,7 +38,7 @@ fn health_response_structure() {
 fn service_status_values() {
     // Test valid service status values
     let valid_statuses = vec!["healthy", "unhealthy", "degraded", "not_configured"];
-    
+
     for status in valid_statuses {
         assert!(!status.is_empty());
         assert!(status.chars().all(|c| c.is_ascii_lowercase() || c == '_'));
@@ -55,7 +55,7 @@ fn metrics_endpoint_format() {
     }"#;
 
     let parsed: Value = serde_json::from_str(metrics_json).expect("should parse");
-    
+
     assert!(parsed["total_requests"].is_number());
     assert!(parsed["active_connections"].is_number());
     assert!(parsed["uptime_seconds"].is_number());
@@ -71,7 +71,7 @@ fn api_info_response_structure() {
     }"#;
 
     let parsed: Value = serde_json::from_str(api_info).expect("should parse");
-    
+
     assert!(parsed["name"].is_string());
     assert!(parsed["version"].is_string());
 }
@@ -87,7 +87,7 @@ fn error_response_format() {
     }"#;
 
     let parsed: Value = serde_json::from_str(error_json).expect("should parse");
-    
+
     assert!(parsed["error"].is_object());
     assert!(parsed["error"]["message"].is_string());
 }
@@ -106,7 +106,7 @@ fn pagination_response_structure() {
     }"#;
 
     let parsed: Value = serde_json::from_str(paginated).expect("should parse");
-    
+
     assert!(parsed["data"].is_array());
     assert!(parsed["pagination"].is_object());
     assert!(parsed["pagination"]["page"].is_number());
@@ -140,7 +140,7 @@ fn json_serialization_safety() {
     });
 
     let serialized = serde_json::to_string(&data).expect("should serialize");
-    
+
     // Verify escaping - JSON preserves HTML but escapes quotes
     assert!(serialized.contains(r#"\"World\""#));
     // Note: JSON doesn't HTML-escape by default, application layer should sanitize
@@ -154,9 +154,18 @@ fn handler_timeout_values() {
     let db_query_timeout: u64 = 10; // seconds
     let cache_timeout: u64 = 5; // seconds
 
-    assert!(db_query_timeout < request_timeout, "DB timeout should be less than request timeout");
-    assert!(cache_timeout < db_query_timeout, "Cache timeout should be less than DB timeout");
-    assert!(request_timeout <= 60, "Request timeout should not exceed 1 minute");
+    assert!(
+        db_query_timeout < request_timeout,
+        "DB timeout should be less than request timeout"
+    );
+    assert!(
+        cache_timeout < db_query_timeout,
+        "Cache timeout should be less than DB timeout"
+    );
+    assert!(
+        request_timeout <= 60,
+        "Request timeout should not exceed 1 minute"
+    );
 }
 
 #[test]
