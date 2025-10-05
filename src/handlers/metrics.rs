@@ -1,5 +1,5 @@
 //! Metrics handler (Prometheus exposition format)
-use crate::{app::AppMetrics, AppState, Result};
+use crate::{AppState, Result, app::AppMetrics};
 use axum::{extract::State, http::StatusCode, response::IntoResponse};
 use std::fmt::Write;
 
@@ -67,11 +67,7 @@ fn write_search_metrics(out: &mut String, m: &AppMetrics) {
 
 /// Write authentication metrics
 fn write_auth_metrics(out: &mut String, m: &AppMetrics) {
-    writeln!(
-        out,
-        "# HELP cms_auth_attempts Authentication attempts."
-    )
-    .unwrap();
+    writeln!(out, "# HELP cms_auth_attempts Authentication attempts.").unwrap();
     writeln!(out, "# TYPE cms_auth_attempts counter").unwrap();
     writeln!(out, "cms_auth_attempts {}", m.auth_attempts).unwrap();
 
@@ -122,11 +118,7 @@ fn write_db_metrics(out: &mut String, m: &AppMetrics) {
 
 /// Write error metrics
 fn write_error_metrics(out: &mut String, m: &AppMetrics) {
-    writeln!(
-        out,
-        "# HELP cms_errors_total Total errors encountered."
-    )
-    .unwrap();
+    writeln!(out, "# HELP cms_errors_total Total errors encountered.").unwrap();
     writeln!(out, "# TYPE cms_errors_total counter").unwrap();
     writeln!(out, "cms_errors_total {}", m.errors_total).unwrap();
 
@@ -164,7 +156,7 @@ pub async fn metrics(State(state): State<AppState>) -> Result<impl IntoResponse>
     let m = state.get_metrics().await; // snapshot
     // Basic text format (Prometheus 0.0.4)
     let mut out = String::with_capacity(512);
-    
+
     write_request_metrics(&mut out, &m);
     write_cache_metrics(&mut out, &m);
     write_search_metrics(&mut out, &m);

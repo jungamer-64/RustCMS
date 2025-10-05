@@ -3,12 +3,12 @@
 //!
 //! Simplified handlers for compilation testing
 
-use crate::{openapi::ApiDoc, AppError};
+use crate::{AppError, openapi::ApiDoc};
 use axum::{
     http::StatusCode,
     response::{Html, IntoResponse, Json},
 };
-use serde_json::{json, Value as JsonValue};
+use serde_json::{Value as JsonValue, json};
 use utoipa::OpenApi;
 
 pub mod admin;
@@ -210,7 +210,10 @@ mod tests {
     fn test_public_endpoints_unique() {
         let mut seen = HashSet::new();
         for endpoint in PUBLIC_ENDPOINTS {
-            assert!(seen.insert(endpoint), "duplicate endpoint entry: {endpoint:?}");
+            assert!(
+                seen.insert(endpoint),
+                "duplicate endpoint entry: {endpoint:?}"
+            );
         }
     }
 
