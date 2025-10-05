@@ -118,7 +118,7 @@ pub struct AppState {
     pub start_time: Instant,
     /// Broadcast sender used to notify background tasks to exit during shutdown
     pub shutdown_tx: broadcast::Sender<()>,
-    
+
     /// Event bus for event-driven architecture
     /// Enables decoupling of cross-cutting concerns (search indexing, cache invalidation)
     pub event_bus: crate::events::EventBus,
@@ -318,7 +318,7 @@ async fn initialize_auth(
     #[cfg(feature = "database")] database: Option<&Database>,
 ) -> Result<AuthService> {
     info!("🔐 Setting up authentication service...");
-    
+
     #[cfg(feature = "database")]
     {
         if let Some(db) = database {
@@ -326,10 +326,12 @@ async fn initialize_auth(
             info!("✅ Authentication service initialized");
             Ok(auth)
         } else {
-            Err(crate::AppError::Internal("Auth requires database but database not initialized".to_string()))
+            Err(crate::AppError::Internal(
+                "Auth requires database but database not initialized".to_string(),
+            ))
         }
     }
-    
+
     #[cfg(not(feature = "database"))]
     {
         // Auth feature requires database - this should not compile
@@ -361,7 +363,7 @@ fn spawn_auth_cleanup_task(state: &AppState) {
     let state_clone = state.clone();
     let mut shutdown_rx = state_clone.shutdown_tx.subscribe();
     let interval_secs = get_interval_from_env("AUTH_SESSION_CLEAN_INTERVAL_SECS", 300);
-    
+
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
         loop {
@@ -369,7 +371,7 @@ fn spawn_auth_cleanup_task(state: &AppState) {
                 _ = ticker.tick() => {
                     // cleanup_expired_sessions doesn't return Result, just call it
                     state_clone.auth.cleanup_expired_sessions().await;
-                    
+
                     let active = state_clone.auth.get_active_session_count().await as u64;
                     if let Ok(mut m) = state_clone.metrics.try_write() {
                         m.active_sessions = active;
@@ -390,9 +392,10 @@ fn spawn_csrf_cleanup_task(state: &AppState) {
     let state_clone = state.clone();
     let mut shutdown_rx = state_clone.shutdown_tx.subscribe();
     let cleanup_interval_secs = get_interval_from_env("CSRF_CLEANUP_INTERVAL_SECS", 1800);
-    
+
     tokio::spawn(async move {
-        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(cleanup_interval_secs));
+        let mut ticker =
+            tokio::time::interval(std::time::Duration::from_secs(cleanup_interval_secs));
         loop {
             tokio::select! {
                 _ = ticker.tick() => {
@@ -413,9 +416,9 @@ fn spawn_csrf_cleanup_task(state: &AppState) {
 fn spawn_background_tasks(state: &AppState) {
     #[cfg(feature = "auth")]
     spawn_auth_cleanup_task(state);
-    
+
     spawn_csrf_cleanup_task(state);
-    
+
     // Spawn event listeners for search indexing and cache invalidation
     crate::listeners::spawn_event_listeners(state.clone(), state.event_bus.clone());
 }
@@ -522,11 +525,14 @@ impl AppState {
 
         #[cfg(feature = "auth")]
         {
-            app_state_builder.auth = Some(initialize_auth(
-                &config.auth,
-                #[cfg(feature = "database")]
-                app_state_builder.database.as_ref(),
-            ).await?);
+            app_state_builder.auth = Some(
+                initialize_auth(
+                    &config.auth,
+                    #[cfg(feature = "database")]
+                    app_state_builder.database.as_ref(),
+                )
+                .await?,
+            );
         }
 
         #[cfg(feature = "cache")]
@@ -540,7 +546,7 @@ impl AppState {
         }
 
         let mut app_state = app_state_builder.build();
-        
+
         // Configure rate limiter
         let max_reqs = u32::try_from(config.security.rate_limit_requests).unwrap_or_else(|_| {
             warn!("Invalid rate_limit_requests value, using u32::MAX");
@@ -1922,90 +1928,122 @@ impl AppState {
     #[cfg(feature = "database")]
     pub fn emit_user_created(&self, user: &crate::models::User) {
         let event_data = crate::events::UserEventData::from_user(user);
-        let _ = self.event_bus.send(crate::events::AppEvent::UserCreated(event_data));
+        let _ = self
+            .event_bus
+            .send(crate::events::AppEvent::UserCreated(event_data));
     }
 
     /// Emit a UserUpdated event
     #[cfg(feature = "database")]
     pub fn emit_user_updated(&self, user: &crate::models::User) {
         let event_data = crate::events::UserEventData::from_user(user);
-        let _ = self.event_bus.send(crate::events::AppEvent::UserUpdated(event_data));
+        let _ = self
+            .event_bus
+            .send(crate::events::AppEvent::UserUpdated(event_data));
     }
 
     /// Emit a UserDeleted event
     pub fn emit_user_deleted(&self, user_id: uuid::Uuid) {
-        let _ = self.event_bus.send(crate::events::AppEvent::UserDeleted(user_id));
+        let _ = self
+            .event_bus
+            .send(crate::events::AppEvent::UserDeleted(user_id));
     }
 
     /// Emit a PostCreated event
     #[cfg(feature = "database")]
     pub fn emit_post_created(&self, post: &crate::models::Post) {
         let event_data = crate::events::PostEventData::from_post(post);
-        let _ = self.event_bus.send(crate::events::AppEvent::PostCreated(event_data));
+        let _ = self
+            .event_bus
+            .send(crate::events::AppEvent::PostCreated(event_data));
     }
 
     /// Emit a PostUpdated event
     #[cfg(feature = "database")]
     pub fn emit_post_updated(&self, post: &crate::models::Post) {
         let event_data = crate::events::PostEventData::from_post(post);
-        let _ = self.event_bus.send(crate::events::AppEvent::PostUpdated(event_data));
+        let _ = self
+            .event_bus
+            .send(crate::events::AppEvent::PostUpdated(event_data));
     }
 
     /// Emit a PostDeleted event
     pub fn emit_post_deleted(&self, post_id: uuid::Uuid) {
-        let _ = self.event_bus.send(crate::events::AppEvent::PostDeleted(post_id));
+        let _ = self
+            .event_bus
+            .send(crate::events::AppEvent::PostDeleted(post_id));
     }
 
     /// Emit a PostPublished event
     #[cfg(feature = "database")]
     pub fn emit_post_published(&self, post: &crate::models::Post) {
         let event_data = crate::events::PostEventData::from_post(post);
-        let _ = self.event_bus.send(crate::events::AppEvent::PostPublished(event_data));
+        let _ = self
+            .event_bus
+            .send(crate::events::AppEvent::PostPublished(event_data));
     }
 
     /// Emit a CommentCreated event (placeholder)
     pub fn emit_comment_created(&self, comment_id: uuid::Uuid) {
-        let _ = self.event_bus.send(crate::events::AppEvent::CommentCreated(comment_id));
+        let _ = self
+            .event_bus
+            .send(crate::events::AppEvent::CommentCreated(comment_id));
     }
 
     /// Emit a CommentUpdated event (placeholder)
     pub fn emit_comment_updated(&self, comment_id: uuid::Uuid) {
-        let _ = self.event_bus.send(crate::events::AppEvent::CommentUpdated(comment_id));
+        let _ = self
+            .event_bus
+            .send(crate::events::AppEvent::CommentUpdated(comment_id));
     }
 
     /// Emit a CommentDeleted event (placeholder)
     pub fn emit_comment_deleted(&self, comment_id: uuid::Uuid) {
-        let _ = self.event_bus.send(crate::events::AppEvent::CommentDeleted(comment_id));
+        let _ = self
+            .event_bus
+            .send(crate::events::AppEvent::CommentDeleted(comment_id));
     }
 
     /// Emit a CategoryCreated event (placeholder)
     pub fn emit_category_created(&self, category_id: uuid::Uuid) {
-        let _ = self.event_bus.send(crate::events::AppEvent::CategoryCreated(category_id));
+        let _ = self
+            .event_bus
+            .send(crate::events::AppEvent::CategoryCreated(category_id));
     }
 
     /// Emit a CategoryUpdated event (placeholder)
     pub fn emit_category_updated(&self, category_id: uuid::Uuid) {
-        let _ = self.event_bus.send(crate::events::AppEvent::CategoryUpdated(category_id));
+        let _ = self
+            .event_bus
+            .send(crate::events::AppEvent::CategoryUpdated(category_id));
     }
 
     /// Emit a CategoryDeleted event (placeholder)
     pub fn emit_category_deleted(&self, category_id: uuid::Uuid) {
-        let _ = self.event_bus.send(crate::events::AppEvent::CategoryDeleted(category_id));
+        let _ = self
+            .event_bus
+            .send(crate::events::AppEvent::CategoryDeleted(category_id));
     }
 
     /// Emit a TagCreated event (placeholder)
     pub fn emit_tag_created(&self, tag_id: uuid::Uuid) {
-        let _ = self.event_bus.send(crate::events::AppEvent::TagCreated(tag_id));
+        let _ = self
+            .event_bus
+            .send(crate::events::AppEvent::TagCreated(tag_id));
     }
 
     /// Emit a TagUpdated event (placeholder)
     pub fn emit_tag_updated(&self, tag_id: uuid::Uuid) {
-        let _ = self.event_bus.send(crate::events::AppEvent::TagUpdated(tag_id));
+        let _ = self
+            .event_bus
+            .send(crate::events::AppEvent::TagUpdated(tag_id));
     }
 
     /// Emit a TagDeleted event (placeholder)
     pub fn emit_tag_deleted(&self, tag_id: uuid::Uuid) {
-        let _ = self.event_bus.send(crate::events::AppEvent::TagDeleted(tag_id));
+        let _ = self
+            .event_bus
+            .send(crate::events::AppEvent::TagDeleted(tag_id));
     }
 }
 
