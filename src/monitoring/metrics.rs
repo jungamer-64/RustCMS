@@ -1,6 +1,6 @@
 use metrics::{counter, gauge, histogram};
-use std::time::{Duration, Instant};
 use serde::Serialize;
+use std::time::{Duration, Instant};
 
 #[derive(Clone)]
 pub struct PerformanceMonitor;
@@ -19,7 +19,7 @@ impl PerformanceMonitor {
 
         counter!("http_requests_total").increment(1);
         histogram!("http_request_duration_seconds", &labels).record(duration.as_secs_f64());
-        
+
         // Record status code specific metrics
         match status {
             200..=299 => counter!("http_requests_success_total").increment(1),
@@ -80,11 +80,12 @@ impl Timer {
 
     pub fn stop(self) -> Duration {
         let duration = self.start.elapsed();
-        let label_refs: Vec<(&str, &str)> = self.labels
+        let label_refs: Vec<(&str, &str)> = self
+            .labels
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
-        
+
         histogram!(&self.name, &label_refs).record(duration.as_secs_f64());
         duration
     }
@@ -124,15 +125,16 @@ impl SystemMetrics {
 fn sanitize_path(path: &str) -> String {
     // Replace dynamic path segments with placeholders for better metric grouping
     let path = path.to_string();
-    
+
     // Replace UUIDs
-    let uuid_regex = regex::Regex::new(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}").unwrap();
+    let uuid_regex =
+        regex::Regex::new(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}").unwrap();
     let path = uuid_regex.replace_all(&path, ":id");
-    
+
     // Replace numeric IDs
     let id_regex = regex::Regex::new(r"/\d+").unwrap();
     let path = id_regex.replace_all(&path, "/:id");
-    
+
     path.to_string()
 }
 
