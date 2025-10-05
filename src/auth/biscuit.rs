@@ -156,7 +156,9 @@ fn query_triple(
     let v: Vec<(String, String, String)> = authz
         .query_all(dsl)
         .map_err(|e| crate::AppError::Biscuit(format!("Failed to query {ctx}: {e}")))?;
-    v.into_iter().next().ok_or_else(|| AuthError::InvalidToken.into())
+    v.into_iter()
+        .next()
+        .ok_or_else(|| AuthError::InvalidToken.into())
 }
 
 fn query_vec(

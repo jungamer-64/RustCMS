@@ -131,25 +131,22 @@ impl AuthService {
     /// - 資格情報が不正 / ユーザが存在しない / パスワードハッシュ検証失敗時。
     pub async fn authenticate_user(&self, request: LoginRequest) -> Result<User> {
         info!(target: "auth", "login_attempt");
-        
+
         let user = self.fetch_user_by_email(&request.email).await?;
         Self::ensure_active(&user)?;
         Self::verify_user_password(&user, &request.password)?;
         self.update_login_timestamp(&user).await?;
-        
+
         info!(target: "auth", user_id=%user.id, "login_success");
         Ok(user)
     }
 
     /// Fetch user by email address
     async fn fetch_user_by_email(&self, email: &str) -> Result<User> {
-        self.user_repo
-            .get_user_by_email(email)
-            .await
-            .map_err(|_| {
-                warn!(target: "auth", "login_failed: user_not_found");
-                AuthError::UserNotFound.into()
-            })
+        self.user_repo.get_user_by_email(email).await.map_err(|_| {
+            warn!(target: "auth", "login_failed: user_not_found");
+            AuthError::UserNotFound.into()
+        })
     }
 
     /// Verify user's password against stored hash
@@ -485,14 +482,14 @@ impl AuthService {
     }
 
     /// API Key に基づいて短時間有効な Biscuit トークンを生成する。
-    /// 
+    ///
     /// API Key 認証を経由してリクエストが来た場合、API Key に関連付けられたユーザ情報を元に
     /// Biscuit トークンを生成して、システム内では統一的に Biscuit ベースの認証コンテキストを使用します。
-    /// 
+    ///
     /// # Arguments
     /// * `user_id` - API Key に関連付けられたユーザID
     /// * `permissions` - API Key に付与された権限のリスト
-    /// 
+    ///
     /// # Errors
     /// - ユーザが見つからない場合
     /// - Biscuit トークンの生成に失敗した場合
@@ -507,13 +504,13 @@ impl AuthService {
             .await
             .map_err(|_| AuthError::UserNotFound)?;
         Self::ensure_active(&user)?;
-        
+
         // API Key用の一時的なセッションIDを生成
         let session_id = SessionId::new();
-        
+
         // API Key 認証の場合、パーミッションは API Key 自身に付与されたものを使用
         let role = UserRole::parse_str(&user.role).unwrap_or(UserRole::Subscriber);
-        
+
         debug!(
             target: "auth",
             user_id=%user.id,
@@ -522,7 +519,7 @@ impl AuthService {
             permissions=?permissions,
             "biscuit_token_created_from_api_key"
         );
-        
+
         Ok(AuthContext {
             user_id: user.id,
             username: user.username,
