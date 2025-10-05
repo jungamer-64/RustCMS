@@ -42,11 +42,21 @@ pub enum AppError {
     #[cfg(feature = "search")]
     Tantivy(tantivy::TantivyError),
     /// Generic parsing error with context
-    ParseError { message: String, context: String },
+    ParseError {
+        message: String,
+        context: String,
+    },
     /// File operation error with path context
-    FileError { operation: String, path: String, source: std::io::Error },
+    FileError {
+        operation: String,
+        path: String,
+        source: std::io::Error,
+    },
     /// Network error with endpoint context
-    NetworkError { endpoint: String, source: String },
+    NetworkError {
+        endpoint: String,
+        source: String,
+    },
 }
 
 //--- Trait Implementations ---//
@@ -91,7 +101,11 @@ impl AppError {
             Self::ParseError { message, context } => {
                 format!("Parse error: {message} (context: {context})")
             }
-            Self::FileError { operation, path, source } => {
+            Self::FileError {
+                operation,
+                path,
+                source,
+            } => {
                 format!("File error during {operation} on {path}: {source}")
             }
             Self::NetworkError { endpoint, source } => {
@@ -149,17 +163,19 @@ impl AppError {
         if let Self::Validation(ve) = self {
             return Self::handle_validation_error(ve);
         }
-        
+
         // Classify other errors by category
         if let Some(result) = Self::classify_internal_errors(self) {
             return result;
         }
-        
+
         Self::classify_client_errors(self)
     }
 
     /// Handle validation errors with detailed field information
-    fn handle_validation_error(ve: &ValidationErrors) -> (StatusCode, String, Option<Vec<ValidationError>>) {
+    fn handle_validation_error(
+        ve: &ValidationErrors,
+    ) -> (StatusCode, String, Option<Vec<ValidationError>>) {
         let details: Vec<ValidationError> = ve
             .field_errors()
             .into_iter()
@@ -181,46 +197,88 @@ impl AppError {
     }
 
     /// Classify internal server errors (5xx status codes)
-    fn classify_internal_errors(error: &Self) -> Option<(StatusCode, String, Option<Vec<ValidationError>>)> {
+    fn classify_internal_errors(
+        error: &Self,
+    ) -> Option<(StatusCode, String, Option<Vec<ValidationError>>)> {
         let result = match error {
             #[cfg(feature = "database")]
-            Self::Database(_) => ("A database error occurred", StatusCode::INTERNAL_SERVER_ERROR),
+            Self::Database(_) => (
+                "A database error occurred",
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
             #[cfg(feature = "cache")]
             Self::Redis(_) => ("A cache error occurred", StatusCode::INTERNAL_SERVER_ERROR),
-            Self::Internal(_) => ("An internal server error occurred", StatusCode::INTERNAL_SERVER_ERROR),
+            Self::Internal(_) => (
+                "An internal server error occurred",
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
             #[cfg(feature = "auth")]
-            Self::Argon2(_) => ("A password hashing error occurred", StatusCode::INTERNAL_SERVER_ERROR),
+            Self::Argon2(_) => (
+                "A password hashing error occurred",
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
             Self::Search(s) => return Some((StatusCode::INTERNAL_SERVER_ERROR, s.clone(), None)),
-            Self::Config(_) | Self::ConfigLoad(_) | Self::ConfigValueMissing(_) | Self::ConfigValidationError(_) => 
-                ("A server configuration error occurred", StatusCode::INTERNAL_SERVER_ERROR),
-            Self::Telemetry(_) => ("A telemetry subsystem error occurred", StatusCode::INTERNAL_SERVER_ERROR),
+            Self::Config(_)
+            | Self::ConfigLoad(_)
+            | Self::ConfigValueMissing(_)
+            | Self::ConfigValidationError(_) => (
+                "A server configuration error occurred",
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+            Self::Telemetry(_) => (
+                "A telemetry subsystem error occurred",
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
             Self::IO(_) => ("An I/O error occurred", StatusCode::INTERNAL_SERVER_ERROR),
             #[cfg(feature = "search")]
-            Self::Tantivy(_) => ("A search service error occurred", StatusCode::INTERNAL_SERVER_ERROR),
-            Self::FileError { operation, path, .. } => 
-                return Some((StatusCode::INTERNAL_SERVER_ERROR, format!("File operation failed: {operation} on {path}"), None)),
+            Self::Tantivy(_) => (
+                "A search service error occurred",
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+            Self::FileError {
+                operation, path, ..
+            } => {
+                return Some((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("File operation failed: {operation} on {path}"),
+                    None,
+                ));
+            }
             _ => return None,
         };
-        
+
         Some((result.1, result.0.to_string(), None))
     }
 
     /// Classify client errors (4xx status codes)
     fn classify_client_errors(error: &Self) -> (StatusCode, String, Option<Vec<ValidationError>>) {
         match error {
-            Self::Authentication(s) | Self::Biscuit(s) => (StatusCode::UNAUTHORIZED, s.clone(), None),
+            Self::Authentication(s) | Self::Biscuit(s) => {
+                (StatusCode::UNAUTHORIZED, s.clone(), None)
+            }
             Self::Authorization(s) => (StatusCode::FORBIDDEN, s.clone(), None),
             Self::NotFound(s) => (StatusCode::NOT_FOUND, s.clone(), None),
             Self::Conflict(s) => (StatusCode::CONFLICT, s.clone(), None),
             Self::RateLimit(s) => (StatusCode::TOO_MANY_REQUESTS, s.clone(), None),
             Self::BadRequest(s) | Self::Media(s) => (StatusCode::BAD_REQUEST, s.clone(), None),
-            Self::Serde(_) => (StatusCode::BAD_REQUEST, "Failed to process request body".to_string(), None),
+            Self::Serde(_) => (
+                StatusCode::BAD_REQUEST,
+                "Failed to process request body".to_string(),
+                None,
+            ),
             Self::ParseError { message, .. } => (StatusCode::BAD_REQUEST, message.clone(), None),
             Self::NotImplemented(s) => (StatusCode::NOT_IMPLEMENTED, s.clone(), None),
-            Self::NetworkError { endpoint, .. } => 
-                (StatusCode::BAD_GATEWAY, format!("Network error communicating with: {endpoint}"), None),
+            Self::NetworkError { endpoint, .. } => (
+                StatusCode::BAD_GATEWAY,
+                format!("Network error communicating with: {endpoint}"),
+                None,
+            ),
             // Fallback for any unhandled cases
-            _ => (StatusCode::INTERNAL_SERVER_ERROR, "An unexpected error occurred".to_string(), None),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "An unexpected error occurred".to_string(),
+                None,
+            ),
         }
     }
 }
