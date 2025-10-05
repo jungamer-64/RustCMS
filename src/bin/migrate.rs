@@ -127,10 +127,10 @@ enum Commands {
 /// This function uses `tracing_subscriber` to configure logging directly
 /// without modifying environment variables, which is safer in multi-threaded contexts.
 fn initialize_logging(debug: bool) -> Result<()> {
-    use tracing_subscriber::{fmt, EnvFilter};
+    use tracing_subscriber::{EnvFilter, fmt};
 
     let log_level = if debug { "debug" } else { "info" };
-    
+
     // Create a filter that respects RUST_LOG if set, otherwise uses the provided level
     let filter = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new(log_level))
@@ -198,10 +198,26 @@ async fn execute_command(cli: &Cli, state: &AppState) -> Result<()> {
             verify,
         } => {
             let options = MigrateOptions {
-                seeding: if *no_seed { SeedingMode::Disable } else { SeedingMode::Enable },
-                backup: if *backup { BackupMode::Enable } else { BackupMode::Disable },
-                verification: if *verify { VerificationMode::Enable } else { VerificationMode::Disable },
-                execution: if cli.dry_run { ExecutionMode::DryRun } else { ExecutionMode::Execute },
+                seeding: if *no_seed {
+                    SeedingMode::Disable
+                } else {
+                    SeedingMode::Enable
+                },
+                backup: if *backup {
+                    BackupMode::Enable
+                } else {
+                    BackupMode::Disable
+                },
+                verification: if *verify {
+                    VerificationMode::Enable
+                } else {
+                    VerificationMode::Disable
+                },
+                execution: if cli.dry_run {
+                    ExecutionMode::DryRun
+                } else {
+                    ExecutionMode::Execute
+                },
             };
             handle_migrate(state, options).await
         }
@@ -362,9 +378,11 @@ fn confirm_rollback(force: bool, dry_run: bool) -> Result<bool> {
     }
 
     warn!("⚠️  This operation may result in data loss!");
-    println!("
-Type 'ROLLBACK' to confirm:");
-    
+    println!(
+        "
+Type 'ROLLBACK' to confirm:"
+    );
+
     let mut input = String::new();
     std::io::stdin().read_line(&mut input)?;
 
@@ -694,9 +712,7 @@ async fn check_existing_data(state: &AppState, force: bool) -> Result<()> {
     let existing_users: i64 = state.db_admin_users_count().await?;
 
     if existing_users > 0 && !force {
-        info!(
-            "📊 Database already contains {existing_users} user(s), skipping seeding"
-        );
+        info!("📊 Database already contains {existing_users} user(s), skipping seeding");
         info!("💡 Use --force to reseed anyway");
         return Err(AppError::BadRequest("Database already seeded".to_string()));
     }
@@ -711,7 +727,7 @@ async fn check_existing_data(state: &AppState, force: bool) -> Result<()> {
 /// Create the default admin user
 async fn create_admin_user(state: &AppState) -> Result<()> {
     info!("👤 Creating admin user...");
-    
+
     let admin_user = cms_backend::models::CreateUserRequest {
         username: "admin".to_string(),
         email: "admin@example.com".to_string(),
@@ -730,7 +746,7 @@ async fn create_admin_user(state: &AppState) -> Result<()> {
 /// Create sample content for demonstration
 async fn create_sample_content(state: &AppState) -> Result<()> {
     info!("📝 Creating sample content...");
-    
+
     let sample_post = cms_backend::models::CreatePostRequest {
         title: "Welcome to Enterprise CMS".to_string(),
         content: "High-performance, scalable CMS built with Rust and PostgreSQL.".to_string(),
@@ -840,7 +856,7 @@ async fn verify_migration_history(state: &AppState) -> Result<()> {
 /// Verify applied migrations details
 async fn verify_applied_migrations(state: &AppState) -> Result<()> {
     let applied = state.db_fetch_applied_migrations().await?;
-    
+
     if applied.is_empty() {
         warn!("⚠️  No migrations applied yet - database may be empty");
     } else {
@@ -892,10 +908,7 @@ fn get_integrity_check_queries() -> Vec<(&'static str, &'static str)> {
 }
 
 /// Run integrity checks on database
-async fn run_integrity_checks(
-    state: &AppState,
-    integrity_checks: &[(&str, &str)],
-) -> bool {
+async fn run_integrity_checks(state: &AppState, integrity_checks: &[(&str, &str)]) -> bool {
     let has_orphans = false;
 
     for (relationship, query) in integrity_checks {
