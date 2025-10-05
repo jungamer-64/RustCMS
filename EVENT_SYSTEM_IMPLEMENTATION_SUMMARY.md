@@ -12,6 +12,7 @@ RustCMSにイベント駆動アーキテクチャを実装し、ハンドラー�
 ### 1. イベントシステム基盤
 
 **ファイル:** `src/events.rs` (240行)
+
 - `AppEvent` enum: すべてのドメインイベントを定義
   - UserCreated, UserUpdated, UserDeleted
   - PostCreated, PostUpdated, PostDeleted, PostPublished
@@ -20,6 +21,7 @@ RustCMSにイベント駆動アーキテクチャを実装し、ハンドラー�
 - 軽量なイベントデータ構造（ID + 必須メタデータのみ）
 
 **ファイル:** `src/listeners.rs` (210行)
+
 - `spawn_event_listeners()`: アプリケーション起動時に呼ばれる
 - 検索インデックス化リスナー（feature-gated: `search`）
   - データベースから最新データを取得
@@ -30,6 +32,7 @@ RustCMSにイベント駆動アーキテクチャを実装し、ハンドラー�
   - パターンマッチで関連キャッシュを一括無効化
 
 **ファイル:** `src/app.rs` (+100行)
+
 - `event_bus` フィールドを `AppState` に追加
 - 15個の `emit_*` ヘルパーメソッド（Pattern B採用）
   - `emit_user_created(&self, user: &User)`
@@ -45,6 +48,7 @@ RustCMSにイベント駆動アーキテクチャを実装し、ハンドラー�
 ### 2. ハンドラー移行
 
 **移行済み (4個):**
+
 1. `src/handlers/auth.rs::register`
    - 変更前: 直接 `state.search.index_user(&user).await`
    - 変更後: `state.emit_user_created(&user)`
@@ -55,11 +59,12 @@ RustCMSにイベント駆動アーキテクチャを実装し、ハンドラー�
 
 3. `src/handlers/admin.rs::create_post`
    - `crud::create_entity` のhookで `state.emit_post_created(p)`
-   
+
 4. `src/handlers/admin.rs::delete_post`
    - DB削除後に `state.emit_post_deleted(id)`
 
 **結果:**
+
 - コード量: 約70%削減（重複コードの削除）
 - 可読性: ハンドラーがビジネスロジックに集中
 - 保守性: 副作用をリスナーに集約
@@ -67,17 +72,20 @@ RustCMSにイベント駆動アーキテクチャを実装し、ハンドラー�
 ### 3. テスト実装
 
 **ユニットテスト:** `tests/event_system_tests.rs` (260行)
+
 - 13個のテストケース
 - イベントバスの基本機能を検証
 - エッジケース（サブスクライバーなし、容量不足）のテスト
 
 **モックサービス:** `tests/mock_services.rs` (420行)
+
 - `MockDatabase`: ユーザーとポストのin-memoryストア
 - `MockSearchService`: インデックス化操作の追跡
 - `MockCacheService`: キャッシュ削除操作の追跡
 - 各モックサービスに検証メソッド実装
 
 **統合テスト:** `tests/event_integration_tests.rs` (450行)
+
 - 8個の統合テストケース
 - TestContext構造でモックリスナーをスポーン
 - 重要なテスト:
@@ -93,6 +101,7 @@ RustCMSにイベント駆動アーキテクチャを実装し、ハンドラー�
 ### 4. ドキュメント
 
 **ファイル:** `ARCHITECTURE.md` (460行)
+
 - イベント駆動アーキテクチャの動機と利点
 - コンポーネント詳細説明
 - 使用ガイドとコード例
@@ -100,35 +109,41 @@ RustCMSにイベント駆動アーキテクチャを実装し、ハンドラー�
 - トラブルシューティングガイド
 
 **ファイル:** `CHANGELOG.md` (+60行)
+
 - Unreleasedセクションに詳細な変更履歴
 - Added, Changed, Tests, Documentation, Removed の各セクション
 
 ## 検証された設計原則
 
 ### 1. Fire-and-Forget Pattern ✅
+
 - イベント発行は `let _ = event_bus.send(...)` で失敗を無視
 - 主操作（DB書き込み）の成功/失敗とイベント処理を完全分離
 - テスト: `test_fire_and_forget_no_subscribers`
 
 ### 2. Database as Source of Truth ✅
+
 - イベントペイロードは最小限（ID + 必須メタデータ）
 - リスナーは常にデータベースから最新データを取得
 - 古いイベントデータに依存しない
 - テスト: `test_listener_fetches_fresh_database_data`
 
 ### 3. Resilient Error Handling ✅
+
 - リスナーでのエラーはログのみ
 - 一つのリスナーの失敗が他に影響しない
 - システム全体がクラッシュしない
 - テスト: `test_listener_error_doesnt_crash_system`
 
 ### 4. Lag Tolerance ✅
+
 - `RecvError::Lagged` を適切にハンドル
 - チャネルオーバーフロー時もリスナーは継続
 - 警告ログを出力して処理を続行
 - テスト: `test_listener_lag_handling`
 
 ### 5. Broadcast Pattern ✅
+
 - 複数の独立したリスナーが同じイベントを受信
 - 検索リスナーとキャッシュリスナーが並列動作
 - テスト: `test_multiple_listeners_receive_same_event`
@@ -136,6 +151,7 @@ RustCMSにイベント駆動アーキテクチャを実装し、ハンドラー�
 ## 実装統計
 
 ### コード量
+
 - **イベントシステム実装:** 550行
   - events.rs: 240行
   - listeners.rs: 210行
@@ -149,12 +165,14 @@ RustCMSにイベント駆動アーキテクチャを実装し、ハンドラー�
   - CHANGELOG.md追加: 60行
 
 ### テストカバレッジ
+
 - **ユニットテスト:** 13個
 - **統合テスト:** 8個
 - **合計テストケース:** 21個
 - **主要原則検証:** 5個すべて
 
 ### 移行済みハンドラー
+
 - **合計:** 4個のハンドラー関数
 - **削除されたコード:** 推定300行以上（重複削除）
 - **コード削減率:** 約70%
@@ -162,6 +180,7 @@ RustCMSにイベント駆動アーキテクチャを実装し、ハンドラー�
 ## 技術的負債の返済
 
 ### 削除されたファイル
+
 - `src/handlers/handlers_new` (1,841行)
   - 未使用のレガシーモノリシックファイル
   - すべての機能は既にモジュール化済み
@@ -169,12 +188,14 @@ RustCMSにイベント駆動アーキテクチャを実装し、ハンドラー�
 ## 今後の推奨改善
 
 ### 優先度: 高
+
 1. **キャッシュ無効化戦略の統一**
    - 現状: Repositoryレイヤーとイベントリスナーで重複
    - 推奨: イベントリスナーに一本化を検討
    - 即時整合性が必要な箇所の調査が必要
 
 ### 優先度: 中
+
 2. **残りのハンドラー移行**
    - `posts.rs`: 投稿CRUD操作
    - `search.rs`: 検索関連操作
@@ -182,6 +203,7 @@ RustCMSにイベント駆動アーキテクチャを実装し、ハンドラー�
    - 段階的に移行（1-2個ずつ）
 
 ### 優先度: 低
+
 3. **イベントバス監視**
    - メトリクス追加（スループット、エラー率、遅延）
    - Prometheus統合の検討
@@ -193,6 +215,7 @@ RustCMSにイベント駆動アーキテクチャを実装し、ハンドラー�
 ## 学んだ教訓
 
 ### 成功要因
+
 1. **段階的なアプローチ**
    - Phase 1-2: 基盤実装
    - Phase 3: テストで堅牢性証明
@@ -210,6 +233,7 @@ RustCMSにイベント駆動アーキテクチャを実装し、ハンドラー�
    - ベストプラクティスの適用
 
 ### 技術的決定
+
 1. **単一のAppEvent enum** (Option A)
    - 複数のドメイン別enumより管理が容易
    - 型安全性を保ちつつシンプル
@@ -229,16 +253,19 @@ RustCMSにイベント駆動アーキテクチャを実装し、ハンドラー�
 イベント駆動アーキテクチャの実装により、以下を達成しました：
 
 ✅ **コードの品質向上**
+
 - 関心の分離（ハンドラー vs 副作用）
 - テスタビリティの向上
 - 保守性の改善
 
 ✅ **システムの堅牢性**
+
 - エラー耐性（リスナー失敗でクラッシュしない）
 - 高負荷耐性（ラグ検出と継続処理）
 - データ整合性（DB権威性の原則）
 
 ✅ **拡張性の確保**
+
 - 新しいリスナーの追加が容易
 - 既存コードへの影響最小化
 - イベント駆動ワークフローの基盤
