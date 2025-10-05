@@ -1,3 +1,4 @@
+// src/bin/admin/handlers/mod.rs
 pub mod analytics;
 pub mod content;
 pub mod security;

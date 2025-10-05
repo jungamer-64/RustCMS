@@ -1,3 +1,4 @@
+// src/bin/admin/handlers/content.rs
 use crate::cli::ContentAction;
 use cms_backend::{AppState, Result};
 use tracing::warn;

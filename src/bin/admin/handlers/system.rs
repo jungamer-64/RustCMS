@@ -1,3 +1,4 @@
+// src/bin/admin/handlers/system.rs
 use crate::cli::{CacheAction, DatabaseAction, SystemAction};
 use cms_backend::{AppState, Result};
 use tracing::info;

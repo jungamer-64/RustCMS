@@ -1,3 +1,4 @@
+// src/bin/admin/handlers/analytics.rs
 use crate::cli::AnalyticsAction;
 use cms_backend::{AppState, Result};
 use tracing::info;

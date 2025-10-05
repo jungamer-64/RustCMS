@@ -1,3 +1,4 @@
+// src/bin/admin/util.rs
 use cms_backend::{Result, models::User};
 use ring::rand::{SecureRandom, SystemRandom};
 use secrecy::SecretString;

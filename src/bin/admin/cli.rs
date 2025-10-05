@@ -1,3 +1,4 @@
+// src/bin/admin/cli.rs
 use clap::{Parser, Subcommand, ValueEnum};
 use cms_backend::models::UserRole;
 use std::fmt;

@@ -1,3 +1,4 @@
+// src/bin/admin/handlers/security.rs
 use crate::cli::SecurityAction;
 use cms_backend::{AppState, Result};
 use tracing::info;
