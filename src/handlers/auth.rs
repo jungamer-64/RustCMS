@@ -78,12 +78,8 @@ pub async fn register(
     // AppState の auth ラッパを利用してユーザー作成（認証/DB メトリクスを一元的に記録）
     let user = state.auth_create_user(create_request).await?;
 
-    // 検索統合が有効な場合、ユーザーを検索インデックスに登録（失敗しても本処理は継続）
-    #[cfg(feature = "search")]
-    if let Err(e) = state.search.index_user(&user).await {
-        // Log error but don't fail the registration
-        eprintln!("Failed to index user for search: {e}");
-    }
+    // Emit user created event (event listeners handle search indexing and cache)
+    state.emit_user_created(&user);
 
     // 新しい統一レスポンスの生成（旧フラット形式は feature ベースで互換提供）
     let unified = state.auth_build_success_response(user, false).await?;

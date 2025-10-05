@@ -56,6 +56,10 @@ pub mod repositories;
 pub mod routes;
 pub mod utils; // unified rate limiting
 
+// Event-driven architecture
+pub mod events;
+pub mod listeners;
+
 // OpenAPI documentation system
 pub mod openapi;
 

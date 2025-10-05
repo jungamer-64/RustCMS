@@ -1,5 +1,60 @@
 # CHANGELOG
 
+## Unreleased
+
+### Added
+
+- **Event-Driven Architecture**: Implemented comprehensive event system for decoupling handlers from search indexing and cache invalidation
+  - Created `events.rs` with `AppEvent` enum supporting User, Post, Comment, Category, and Tag events
+  - Implemented `listeners.rs` with dedicated search indexing and cache invalidation listeners
+  - Added 15 `emit_*` helper methods to `AppState` for fire-and-forget event emission
+  - Integrated event bus into application lifecycle with automatic listener spawning
+
+### Changed
+
+- **Handler Migration to Events**: Migrated handlers to use event system instead of direct service calls
+  - `auth.rs`: `register` handler now emits `UserCreated` event
+  - `users.rs`: `change_user_role` handler now emits `UserUpdated` event
+  - `admin.rs`: `create_post` and `delete_post` now emit `PostCreated` and `PostDeleted` events
+  - Handlers no longer directly call `search.index_*` or `invalidate_*_caches` methods
+
+### Removed
+
+- **Technical Debt Cleanup**: Removed unused `handlers_new` file (1841 lines)
+  - Legacy monolithic handler file no longer in use
+  - All functionality already migrated to modular handler files
+
+- **Architecture Principles**: Event system follows key design principles
+  - **Fire-and-Forget**: Event emission never fails primary operations
+  - **Database as Source of Truth**: Listeners always fetch fresh data from database
+  - **Resilient Error Handling**: Listener failures are logged but don't crash the system
+  - **Lag Tolerance**: Listeners detect and handle channel overflow gracefully
+
+### Tests
+
+- **Unit Tests**: Added 13 unit tests for event bus functionality (`event_system_tests.rs`)
+- **Integration Tests**: Implemented comprehensive integration test suite (`event_integration_tests.rs`)
+  - Created mock services (`MockDatabase`, `MockSearchService`, `MockCacheService`)
+  - Test for listener error resilience (search fails but cache continues)
+  - Test for channel overflow handling with lag detection
+  - Test for database-as-source-of-truth principle verification
+  - Test for multiple independent listeners receiving same events
+
+### Documentation
+
+- **Architecture Documentation**: Created comprehensive `ARCHITECTURE.md` (460 lines)
+  - Motivation and design principles
+  - Component descriptions and usage guide
+  - Testing strategy and performance considerations
+  - Troubleshooting and best practices
+
+### Technical Details
+
+- Event bus uses `tokio::sync::broadcast` channel with configurable capacity
+- Listeners run as background tasks spawned during application startup
+- Event payloads are lightweight (IDs and essential metadata only)
+- Search indexing and cache invalidation now fully decoupled from business logic
+
 ## 3.0.0 (Complete Biscuit Migration)
 
 ### Breaking Changes (v3.0.0)

@@ -419,9 +419,8 @@ pub async fn change_user_role(
 
     let user = state.db_update_user(id, update_request).await?;
 
-    // Clear cache
-    #[cfg(feature = "cache")]
-    state.invalidate_user_caches(id).await;
+    // Emit user updated event (event listeners handle cache invalidation)
+    state.emit_user_updated(&user);
 
     Ok(ApiOk(UserInfo::from(user)))
 }
