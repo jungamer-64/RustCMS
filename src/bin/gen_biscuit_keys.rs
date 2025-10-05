@@ -1,3 +1,4 @@
+// src/bin/gen_biscuit_keys.rs
 //! Biscuit Key Generation Tool - Improved Version
 //!
 //! Improvements:
@@ -12,9 +13,8 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use biscuit_auth::KeyPair;
 use clap::{Parser, ValueEnum};
-use fs2::FileExt;
 use std::fs::{self, OpenOptions};
-use std::io::{self, BufWriter, Write};
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use tracing::{debug, error, info, warn};
 
@@ -738,8 +738,6 @@ fn next_version(dir: &Path) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use assert_fs::TempDir;
-    use assert_fs::prelude::*;
 
     #[test]
     fn test_parse_version() {
