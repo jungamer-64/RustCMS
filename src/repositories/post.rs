@@ -1,13 +1,13 @@
-use sqlx::{PgPool, Row};
-use chrono::{DateTime, Utc};
-use uuid::Uuid;
-use serde::de::DeserializeOwned;
 use crate::{
-    error::{AppError, Result},
     cache::manager::{CacheManager, cache_keys},
+    error::{AppError, Result},
+    models::post::{CreatePostRequest, Post, PostFilter, PostResponse, UpdatePostRequest},
     monitoring::metrics::PerformanceMonitor,
-    models::post::{Post, CreatePostRequest, UpdatePostRequest, PostFilter, PostResponse},
 };
+use chrono::{DateTime, Utc};
+use serde::de::DeserializeOwned;
+use sqlx::{PgPool, Row};
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct PostRepository {
@@ -39,10 +39,12 @@ impl PostRepository {
         T: DeserializeOwned + Clone + Send + Sync + 'static,
     {
         if let Some(cached) = self.cache.get::<T>(cache_key).await? {
-            self.metrics.record_cache_operation("get", true, std::time::Duration::from_millis(1));
+            self.metrics
+                .record_cache_operation("get", true, std::time::Duration::from_millis(1));
             return Ok(Some(cached));
         }
-        self.metrics.record_cache_operation("get", false, std::time::Duration::from_millis(1));
+        self.metrics
+            .record_cache_operation("get", false, std::time::Duration::from_millis(1));
         Ok(None)
     }
 
@@ -58,7 +60,12 @@ impl PostRepository {
     }
 
     // Helper: set cache if value present and record set metric
-    async fn set_cache_if_some<T>(&self, cache_key: &str, value: &Option<T>, ttl: Option<u64>) -> Result<()>
+    async fn set_cache_if_some<T>(
+        &self,
+        cache_key: &str,
+        value: &Option<T>,
+        ttl: Option<u64>,
+    ) -> Result<()>
     where
         T: serde::Serialize + Clone + Send + Sync + 'static,
     {
@@ -75,7 +82,8 @@ impl PostRepository {
     {
         self.cache.set(cache_key, value, ttl).await?;
         // record a quick metric indicating a cache set
-        self.metrics.record_cache_operation("set", true, std::time::Duration::from_millis(1));
+        self.metrics
+            .record_cache_operation("set", true, std::time::Duration::from_millis(1));
         Ok(())
     }
 
@@ -129,7 +137,7 @@ impl PostRepository {
 
     pub async fn get_by_id(&self, id: Uuid) -> Result<Option<Post>> {
         let cache_key = cache_keys::post(&id.to_string());
-        
+
         // Try cache first
         if let Some(cached_post) = self.try_get_cache::<Post>(&cache_key).await? {
             return Ok(Some(cached_post));
@@ -163,34 +171,38 @@ impl PostRepository {
 
     pub async fn list(&self, filter: PostFilter) -> Result<PostResponse> {
         let cache_key = cache_keys::posts_list(filter.page, filter.limit, filter.published);
-        
+
         // Try cache first
         if let Some(cached_response) = self.try_get_cache::<PostResponse>(&cache_key).await? {
             return Ok(cached_response);
         }
 
         let offset = (filter.page - 1) * filter.limit;
-        
+
         let mut query_builder = sqlx::QueryBuilder::new(
-            "SELECT id, title, content, slug, author_id, published, created_at, updated_at FROM posts"
+            "SELECT id, title, content, slug, author_id, published, created_at, updated_at FROM posts",
         );
-        
+
         let mut count_builder = sqlx::QueryBuilder::new("SELECT COUNT(*) FROM posts");
-        
+
         if let Some(published) = filter.published {
             query_builder.push(" WHERE published = ");
             query_builder.push_bind(published);
-            
+
             count_builder.push(" WHERE published = ");
             count_builder.push_bind(published);
         }
 
         if let Some(author_id) = filter.author_id {
-            let clause = if filter.published.is_some() { " AND " } else { " WHERE " };
+            let clause = if filter.published.is_some() {
+                " AND "
+            } else {
+                " WHERE "
+            };
             query_builder.push(clause);
             query_builder.push("author_id = ");
             query_builder.push_bind(author_id);
-            
+
             count_builder.push(clause);
             count_builder.push("author_id = ");
             count_builder.push_bind(author_id);
@@ -220,42 +232,45 @@ impl PostRepository {
                 page: filter.page,
                 limit: filter.limit,
                 total: total_count as usize,
-                total_pages: crate::models::pagination::calc_total_pages(total_count as usize, filter.limit as u32) as usize,
+                total_pages: crate::models::pagination::calc_total_pages(
+                    total_count as usize,
+                    filter.limit as u32,
+                ) as usize,
             },
         };
 
-    // Cache the result
-    self.set_cache(&cache_key, &response, Some(60)).await?; // 1 minute cache
+        // Cache the result
+        self.set_cache(&cache_key, &response, Some(60)).await?; // 1 minute cache
 
         Ok(response)
     }
 
     pub async fn update(&self, id: Uuid, req: UpdatePostRequest) -> Result<Post> {
         let now = Utc::now();
-        
+
         let mut query_builder = sqlx::QueryBuilder::new("UPDATE posts SET updated_at = ");
         query_builder.push_bind(now);
-        
+
         if let Some(title) = &req.title {
             query_builder.push(", title = ");
             query_builder.push_bind(title);
         }
-        
+
         if let Some(content) = &req.content {
             query_builder.push(", content = ");
             query_builder.push_bind(content);
         }
-        
+
         if let Some(slug) = &req.slug {
             query_builder.push(", slug = ");
             query_builder.push_bind(slug);
         }
-        
+
         if let Some(published) = req.published {
             query_builder.push(", published = ");
             query_builder.push_bind(published);
         }
-        
+
         query_builder.push(" WHERE id = ");
         query_builder.push_bind(id);
         query_builder.push(" RETURNING *");
@@ -268,8 +283,8 @@ impl PostRepository {
             })
             .await?;
 
-    // Invalidate caches for this post & post lists
-    self.invalidate_post_caches(&id).await?;
+        // Invalidate caches for this post & post lists
+        self.invalidate_post_caches(&id).await?;
 
         Ok(post)
     }
@@ -288,20 +303,19 @@ impl PostRepository {
             return Err(AppError::NotFound("Post not found".to_string()));
         }
 
-    // Invalidate caches for this post & post lists
-    self.invalidate_post_caches(&id).await?;
+        // Invalidate caches for this post & post lists
+        self.invalidate_post_caches(&id).await?;
 
         Ok(())
     }
 
     pub async fn search(&self, query: &str, filter: PostFilter) -> Result<PostResponse> {
-
         let offset = (filter.page - 1) * filter.limit;
-        
-    // Use inlined format args with to_lowercase result built first
-    let lowered = query.to_lowercase();
-    let search_query = format!("%{lowered}%");
-        
+
+        // Use inlined format args with to_lowercase result built first
+        let lowered = query.to_lowercase();
+        let search_query = format!("%{lowered}%");
+
         let (posts, total_count) = self
             .timed("search", || async {
                 let posts = sqlx::query_as!(
@@ -350,4 +364,6 @@ impl PostRepository {
     }
 }
 
-fn generate_slug(title: &str) -> String { crate::utils::url_encoding::generate_safe_slug(title) }
+fn generate_slug(title: &str) -> String {
+    crate::utils::url_encoding::generate_safe_slug(title)
+}
