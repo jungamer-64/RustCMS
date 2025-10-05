@@ -487,7 +487,7 @@ fn build_builder(profile: &str) -> config::ConfigBuilder<config::builder::Defaul
         .add_source(
             config::Environment::with_prefix("CMS")
                 .separator("__")
-                .try_parsing(true)
+                .try_parsing(true),
         )
 }
 
@@ -675,7 +675,10 @@ timeout = 60000
                 fs::write(config_path.join(name), content).unwrap();
             }
             env::set_current_dir(dir.path()).unwrap();
-            Self { _dir: dir, original_cwd }
+            Self {
+                _dir: dir,
+                original_cwd,
+            }
         }
     }
 
@@ -713,33 +716,45 @@ timeout = 60000
 
     #[test]
     fn test_config_loading_priority() {
-        temp_env::with_vars([("DATABASE_URL", Some("postgres://user:pass@host/db"))], || {
-            let _tdir = TempConfigDir::new(&[
-                ("default.toml", FULL_DEFAULT_TOML),
-                ("production.toml", "[server]\nport = 2\n[security]\nrate_limit_window = 2"),
-                ("local.toml", "[server]\nport = 3"),
-            ]);
+        temp_env::with_vars(
+            [("DATABASE_URL", Some("postgres://user:pass@host/db"))],
+            || {
+                let _tdir = TempConfigDir::new(&[
+                    ("default.toml", FULL_DEFAULT_TOML),
+                    (
+                        "production.toml",
+                        "[server]\nport = 2\n[security]\nrate_limit_window = 2",
+                    ),
+                    ("local.toml", "[server]\nport = 3"),
+                ]);
 
-            // 1. Test default only
-            temp_env::with_var("CMS__PROFILE", Some("development"), || {
-                let config = Config::from_env().unwrap();
-                assert_eq!(config.server.port, 3); // local.toml overrides default
-                assert_eq!(config.security.rate_limit_window, 60); // from default.toml
-            });
+                // 1. Test default only
+                temp_env::with_var("CMS__PROFILE", Some("development"), || {
+                    let config = Config::from_env().unwrap();
+                    assert_eq!(config.server.port, 3); // local.toml overrides default
+                    assert_eq!(config.security.rate_limit_window, 60); // from default.toml
+                });
 
-            // 2. Test profile override
-            temp_env::with_var("CMS__PROFILE", Some("production"), || {
-                let config = Config::from_env().unwrap();
-                assert_eq!(config.server.port, 3); // local.toml overrides production
-                assert_eq!(config.security.rate_limit_window, 2);
-            });
+                // 2. Test profile override
+                temp_env::with_var("CMS__PROFILE", Some("production"), || {
+                    let config = Config::from_env().unwrap();
+                    assert_eq!(config.server.port, 3); // local.toml overrides production
+                    assert_eq!(config.security.rate_limit_window, 2);
+                });
 
-            // 3. Test env var override
-            temp_env::with_vars([("CMS__SERVER__PORT", Some("4")), ("CMS__PROFILE", Some("production"))], || {
-                let config = Config::from_env().unwrap();
-                assert_eq!(config.server.port, 4); // env var overrides everything
-            });
-        });
+                // 3. Test env var override
+                temp_env::with_vars(
+                    [
+                        ("CMS__SERVER__PORT", Some("4")),
+                        ("CMS__PROFILE", Some("production")),
+                    ],
+                    || {
+                        let config = Config::from_env().unwrap();
+                        assert_eq!(config.server.port, 4); // env var overrides everything
+                    },
+                );
+            },
+        );
     }
 
     #[test]
@@ -766,18 +781,19 @@ timeout = 60000
         // Replace the cors_origins line with CSV format
         toml_with_csv = toml_with_csv.replace(
             "cors_origins = [\"http://localhost:3000\"]",
-            "cors_origins = [\"http://a.com, http://b.com\"]"
+            "cors_origins = [\"http://a.com, http://b.com\"]",
         );
-        
+
         temp_env::with_vars(
-            [
-                ("DATABASE_URL", Some("postgres://user:pass@host/db")),
-            ],
+            [("DATABASE_URL", Some("postgres://user:pass@host/db"))],
             || {
                 let _tdir = TempConfigDir::new(&[("default.toml", &toml_with_csv)]);
                 let config = Config::from_env().unwrap();
                 // sanitize_cors should split the CSV string
-                assert_eq!(config.security.cors_origins, vec!["http://a.com", "http://b.com"]);
+                assert_eq!(
+                    config.security.cors_origins,
+                    vec!["http://a.com", "http://b.com"]
+                );
             },
         );
     }
