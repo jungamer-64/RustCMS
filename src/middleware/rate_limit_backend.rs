@@ -44,6 +44,28 @@ pub struct InMemoryRateLimiter {
 }
 
 impl InMemoryRateLimiter {
+    /// Creates a new rate limiter with explicit configuration.
+    #[must_use]
+    pub fn new(window_secs: u64, threshold: u32, max_tracked: usize) -> Self {
+        let window = Duration::from_secs(window_secs);
+        let inst = Self {
+            window,
+            threshold,
+            max_tracked,
+            disabled: false,
+            map: Mutex::new(HashMap::new()),
+            cleaner_started: Once::new(),
+        };
+        #[cfg(feature = "monitoring")]
+        {
+            gauge!("api_key_rate_limit_window_seconds").set(u64_to_f64(window_secs));
+            gauge!("api_key_rate_limit_threshold").set(f64::from(threshold));
+            gauge!("api_key_rate_limit_max_tracked").set(usize_to_f64(max_tracked));
+            gauge!("api_key_rate_limit_enabled").set(1.0);
+        }
+        inst
+    }
+
     #[must_use]
     pub fn from_env() -> Self {
         let window = std::env::var("API_KEY_FAIL_WINDOW_SECS")

@@ -1,11 +1,6 @@
 use crate::app::AppState;
 use crate::error::AppError;
-use axum::{
-    extract::Request,
-    http::header::AUTHORIZATION,
-    middleware::Next,
-    response::Response,
-};
+use axum::{extract::Request, http::header::AUTHORIZATION, middleware::Next, response::Response};
 use tracing::{error, warn};
 
 /// Authorization ヘッダの簡易パーサ
@@ -23,10 +18,7 @@ pub fn parse_authorization_header(value: &str) -> Option<&str> {
 ///
 /// 認証情報が欠落・不正・検証失敗の場合は `AppError::Authentication` を返します。
 /// アプリケーション状態が取得できないなど内部要因の場合は `AppError::Internal` を返します。
-pub async fn auth_middleware(
-    mut req: Request,
-    next: Next,
-) -> Result<Response, AppError> {
+pub async fn auth_middleware(mut req: Request, next: Next) -> Result<Response, AppError> {
     let token = req
         .headers()
         .get(AUTHORIZATION)
@@ -51,7 +43,9 @@ pub async fn auth_middleware(
             // セキュリティベストプラクティス: エラーメッセージを統一してタイミング攻撃を防ぐ
             // 内部エラー情報はログに記録し、クライアントには一般的なメッセージのみ返す
             warn!("Token validation failed: {:?}", e);
-            Err(AppError::Authentication("Invalid or expired token.".to_string()))
+            Err(AppError::Authentication(
+                "Invalid or expired token.".to_string(),
+            ))
         }
     }
 }
@@ -75,17 +69,17 @@ mod tests {
             parse_authorization_header("  Bearer   mytoken  "),
             Some("mytoken")
         );
-        
+
         // エッジケース
         assert_eq!(parse_authorization_header("Basic someauth"), None);
         assert_eq!(parse_authorization_header("Bearer "), Some(""));
         assert_eq!(parse_authorization_header(""), None);
         assert_eq!(parse_authorization_header("   "), None);
-        
+
         // 大文字小文字の区別
         assert_eq!(parse_authorization_header("bearer mytoken"), None);
         assert_eq!(parse_authorization_header("BEARER mytoken"), None);
-        
+
         // 複数のスペース
         assert_eq!(
             parse_authorization_header("Bearer    mytoken"),
