@@ -47,10 +47,10 @@ pub enum AppEvent {
     // ============================================================================
     /// A new user was created
     UserCreated(UserEventData),
-    
+
     /// An existing user was updated
     UserUpdated(UserEventData),
-    
+
     /// A user was deleted (soft or hard delete)
     UserDeleted(Uuid),
 
@@ -59,13 +59,13 @@ pub enum AppEvent {
     // ============================================================================
     /// A new post was created
     PostCreated(PostEventData),
-    
+
     /// An existing post was updated
     PostUpdated(PostEventData),
-    
+
     /// A post was deleted
     PostDeleted(Uuid),
-    
+
     /// A post was published (status changed to published)
     PostPublished(PostEventData),
 
@@ -74,10 +74,10 @@ pub enum AppEvent {
     // ============================================================================
     /// A new comment was created
     CommentCreated(Uuid),
-    
+
     /// An existing comment was updated
     CommentUpdated(Uuid),
-    
+
     /// A comment was deleted
     CommentDeleted(Uuid),
 
@@ -86,10 +86,10 @@ pub enum AppEvent {
     // ============================================================================
     /// A new category was created
     CategoryCreated(Uuid),
-    
+
     /// An existing category was updated
     CategoryUpdated(Uuid),
-    
+
     /// A category was deleted
     CategoryDeleted(Uuid),
 
@@ -98,10 +98,10 @@ pub enum AppEvent {
     // ============================================================================
     /// A new tag was created
     TagCreated(Uuid),
-    
+
     /// An existing tag was updated
     TagUpdated(Uuid),
-    
+
     /// A tag was deleted
     TagDeleted(Uuid),
 }
@@ -184,11 +184,11 @@ mod tests {
     #[test]
     fn test_event_bus_creation() {
         let (tx, mut rx) = create_event_bus(10);
-        
+
         // Test sending and receiving
         let test_event = AppEvent::UserDeleted(Uuid::new_v4());
         tx.send(test_event.clone()).unwrap();
-        
+
         let received = rx.try_recv().unwrap();
         matches!(received, AppEvent::UserDeleted(_));
     }
@@ -196,13 +196,13 @@ mod tests {
     #[test]
     fn test_multiple_subscribers() {
         let (tx, _) = create_event_bus(10);
-        
+
         let mut rx1 = tx.subscribe();
         let mut rx2 = tx.subscribe();
-        
+
         let user_id = Uuid::new_v4();
         tx.send(AppEvent::UserDeleted(user_id)).unwrap();
-        
+
         // Both receivers should get the event
         assert!(rx1.try_recv().is_ok());
         assert!(rx2.try_recv().is_ok());
