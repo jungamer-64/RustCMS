@@ -4,7 +4,10 @@ use cms_backend::handlers; // lib ターゲット (crate 名は Cargo.toml の p
 use hyper::StatusCode;
 
 async fn fetch_openapi_json() -> serde_json::Value {
-    let resp = handlers::openapi_json().await.into_response();
+    let resp = handlers::openapi_json()
+        .await
+        .expect("OpenAPI generation should succeed")
+        .into_response();
     // Body を bytes へ取り出し
     let (parts, body) = resp.into_parts();
     // body は axum 0.8 の Body (hyper::Body 互換)
