@@ -122,6 +122,12 @@ pub struct AppState {
     /// Event bus for event-driven architecture
     /// Enables decoupling of cross-cutting concerns (search indexing, cache invalidation)
     pub event_bus: crate::events::EventBus,
+
+    /// Application container with constructed adapters and use-cases.
+    /// Present when the `database` feature is enabled and initialized in
+    /// `AppState::from_config`.
+    #[cfg(feature = "database")]
+    pub container: Option<Arc<crate::application::AppContainer>>,
 }
 
 /// Application metrics for monitoring
@@ -248,6 +254,11 @@ pub struct AppStateBuilder {
 
     #[cfg(feature = "database")]
     pub database: Option<Database>,
+    #[cfg(feature = "database")]
+    pub container: Option<Arc<crate::application::AppContainer>>,
+    /// Optional pre-constructed event bus to allow early wiring of components
+    /// (e.g. constructing AppContainer before full AppState is built).
+    pub event_bus: Option<crate::events::EventBus>,
     #[cfg(feature = "auth")]
     pub auth: Option<AuthService>,
     #[cfg(feature = "cache")]
@@ -287,7 +298,11 @@ impl AppStateBuilder {
             rate_limiter: Arc::new(FixedWindowLimiter::new(100, 60)), // default; real values set in from_config
             start_time: self.start_time,
             shutdown_tx: broadcast::channel(1).0,
-            event_bus: crate::events::create_event_bus(1024).0,
+            event_bus: self
+                .event_bus
+                .unwrap_or_else(|| crate::events::create_event_bus(1024).0),
+            #[cfg(feature = "database")]
+            container: self.container,
         }
     }
 }
@@ -571,6 +586,9 @@ impl AppState {
             start_time: Instant::now(),
             #[cfg(feature = "database")]
             database: None,
+            #[cfg(feature = "database")]
+            container: None,
+            event_bus: None,
             #[cfg(feature = "auth")]
             auth: None,
             #[cfg(feature = "cache")]
