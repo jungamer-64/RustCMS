@@ -113,3 +113,6 @@ gha-creds-*.json
 
 scripts/__pycache__/*
 scripts/*.pyc
+
+#Ignore cursor AI rules
+.cursor/rules/codacy.mdc
