@@ -15,6 +15,12 @@ pub mod admin;
 pub mod api_keys;
 #[cfg(feature = "auth")]
 pub mod auth;
+#[cfg(not(feature = "auth"))]
+/// Placeholder `handlers::auth` module so OpenAPI derive and other
+/// compile-time references can resolve when `auth` feature is disabled.
+pub mod auth {
+    // intentionally empty - real handlers are compiled only with `auth`
+}
 pub mod health;
 pub mod metrics;
 pub mod posts;
