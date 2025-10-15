@@ -2045,6 +2045,17 @@ impl AppState {
             .send(crate::events::AppEvent::PostPublished(event_data));
     }
 
+    // Compatibility no-ops when DB feature is disabled
+    #[cfg(not(feature = "database"))]
+    pub fn emit_user_created(&self, _user: &crate::models::User) {
+        // no-op
+    }
+
+    #[cfg(not(feature = "database"))]
+    pub fn emit_user_updated(&self, _user: &crate::models::User) {
+        // no-op
+    }
+
     /// Emit a CommentCreated event (placeholder)
     pub fn emit_comment_created(&self, comment_id: uuid::Uuid) {
         let _ = self
@@ -2106,6 +2117,239 @@ impl AppState {
         let _ = self
             .event_bus
             .send(crate::events::AppEvent::TagDeleted(tag_id));
+    }
+}
+
+// When the `database` feature is disabled provide no-op stubs for the
+// AppState database wrapper methods so the rest of the crate can compile and
+// present a clear runtime error if invoked.
+#[cfg(not(feature = "database"))]
+impl AppState {
+    async fn db_not_enabled<T>(&self) -> crate::Result<T> {
+        Err(crate::AppError::NotImplemented(
+            "database feature not enabled".into(),
+        ))
+    }
+
+    // The following methods mirror the signatures present when `database`
+    // feature is enabled and forward to a uniform NotImplemented error.
+    pub async fn db_create_user(
+        &self,
+        _req: crate::models::CreateUserRequest,
+    ) -> crate::Result<crate::models::User> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_get_user_by_id(&self, _id: uuid::Uuid) -> crate::Result<crate::models::User> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_get_user_by_email(&self, _email: &str) -> crate::Result<crate::models::User> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_get_users(
+        &self,
+        _page: u32,
+        _limit: u32,
+        _role: Option<String>,
+        _active: Option<bool>,
+        _sort: Option<String>,
+    ) -> crate::Result<Vec<crate::models::User>> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_update_last_login(&self, _id: uuid::Uuid) -> crate::Result<()> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_get_user_by_username(
+        &self,
+        _username: &str,
+    ) -> crate::Result<crate::models::User> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_update_user(
+        &self,
+        _id: uuid::Uuid,
+        _request: crate::models::UpdateUserRequest,
+    ) -> crate::Result<crate::models::User> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_delete_user(&self, _id: uuid::Uuid) -> crate::Result<()> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_reset_user_password(
+        &self,
+        _id: uuid::Uuid,
+        _new_password: &str,
+    ) -> crate::Result<()> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_count_users(&self) -> crate::Result<usize> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_count_users_filtered(
+        &self,
+        _role: Option<String>,
+        _active: Option<bool>,
+    ) -> crate::Result<usize> {
+        self.db_not_enabled().await
+    }
+
+    pub async fn db_create_post(
+        &self,
+        _req: crate::models::CreatePostRequest,
+    ) -> crate::Result<crate::models::Post> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_get_post_by_id(&self, _id: uuid::Uuid) -> crate::Result<crate::models::Post> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_get_posts(
+        &self,
+        _page: u32,
+        _limit: u32,
+        _status: Option<String>,
+        _author: Option<uuid::Uuid>,
+        _tag: Option<String>,
+        _sort: Option<String>,
+    ) -> crate::Result<Vec<crate::models::Post>> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_update_post(
+        &self,
+        _id: uuid::Uuid,
+        _req: crate::models::UpdatePostRequest,
+    ) -> crate::Result<crate::models::Post> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_delete_post(&self, _id: uuid::Uuid) -> crate::Result<()> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_count_posts(&self, _tag: Option<&str>) -> crate::Result<usize> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_count_posts_by_author(&self, _author_id: uuid::Uuid) -> crate::Result<usize> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_count_posts_filtered(
+        &self,
+        _status: Option<String>,
+        _author: Option<uuid::Uuid>,
+        _tag: Option<String>,
+    ) -> crate::Result<usize> {
+        self.db_not_enabled().await
+    }
+
+    pub async fn db_create_api_key(
+        &self,
+        _name: String,
+        _user_id: uuid::Uuid,
+        _permissions: Vec<String>,
+    ) -> crate::Result<(crate::models::ApiKeyResponse, String)> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_get_api_key(
+        &self,
+        _id: uuid::Uuid,
+    ) -> crate::Result<crate::models::ApiKeyResponse> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_delete_api_key(&self, _key_id: uuid::Uuid) -> crate::Result<()> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_rotate_api_key(
+        &self,
+        _id: uuid::Uuid,
+        _new_name: Option<String>,
+        _new_permissions: Option<Vec<String>>,
+    ) -> crate::Result<(crate::models::ApiKeyResponse, String)> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_revoke_api_key(&self, _id: uuid::Uuid) -> crate::Result<()> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_revoke_api_key_owned(
+        &self,
+        _key_id: uuid::Uuid,
+        _user: uuid::Uuid,
+    ) -> crate::Result<()> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_touch_api_key(&self, _id: uuid::Uuid) -> crate::Result<()> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_list_api_keys(
+        &self,
+        _user_id: uuid::Uuid,
+        _include_expired: bool,
+    ) -> crate::Result<Vec<crate::models::ApiKeyResponse>> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_get_api_key_by_lookup_hash(
+        &self,
+        _lookup: &str,
+    ) -> crate::Result<crate::models::ApiKey> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_get_api_key_model(
+        &self,
+        _id: uuid::Uuid,
+    ) -> crate::Result<crate::models::ApiKey> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_backfill_api_key_lookup_for_raw(
+        &self,
+        _raw: &str,
+    ) -> crate::Result<Option<crate::models::ApiKey>> {
+        self.db_not_enabled().await
+    }
+
+    pub async fn db_admin_list_recent_posts(
+        &self,
+        _limit: i64,
+    ) -> crate::Result<Vec<crate::utils::common_types::PostSummary>> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_list_api_keys_missing_lookup(
+        &self,
+    ) -> crate::Result<Vec<crate::models::ApiKey>> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_expire_api_keys_missing_lookup(
+        &self,
+        _now: chrono::DateTime<chrono::Utc>,
+    ) -> crate::Result<usize> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_admin_delete_post(&self, _post_id: uuid::Uuid) -> crate::Result<()> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_admin_users_count(&self) -> crate::Result<i64> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_admin_posts_count(&self) -> crate::Result<i64> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_admin_find_admin_user(&self) -> crate::Result<Option<crate::models::User>> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_execute_sql(&self, _sql: &str) -> crate::Result<usize> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_fetch_applied_migrations(&self) -> crate::Result<Vec<String>> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_ensure_schema_migrations_compat(&self) -> crate::Result<()> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_run_pending_migrations<T>(&self, _migrations: T) -> crate::Result<()> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_revert_last_migration<T>(&self, _migrations: T) -> crate::Result<()> {
+        self.db_not_enabled().await
+    }
+    pub async fn db_list_pending_migrations<T>(
+        &self,
+        _migrations: T,
+    ) -> crate::Result<Vec<String>> {
+        self.db_not_enabled().await
     }
 }
 
