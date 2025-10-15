@@ -167,15 +167,16 @@ pub async fn create_post(
 ) -> Result<impl IntoResponse> {
     // Perform create then (if feature enabled) index.
     #[cfg(feature = "search")]
-    let hook = Some(|model: &Post, st: AppState| {
-        let m = model.clone();
-        async move {
-            st.search_index_entity_safe(crate::utils::search_index::SearchEntity::Post(&m))
-                .await;
-        }
-    });
+    let hook: Option<fn(&Post, AppState) -> futures::future::BoxFuture<'static, ()>> =
+        Some(|model: &Post, st: AppState| {
+            let m = model.clone();
+            Box::pin(async move {
+                st.search_index_entity_safe(crate::utils::search_index::SearchEntity::Post(&m))
+                    .await;
+            })
+        });
     #[cfg(not(feature = "search"))]
-    let hook: Option<fn(&Post, AppState) -> _> = None;
+    let hook: Option<fn(&Post, AppState) -> futures::future::BoxFuture<'static, ()>> = None;
 
     let (status, api_ok) = crud::create_entity(
         state.clone(),

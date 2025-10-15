@@ -34,23 +34,23 @@ mod _search_shim {
         pub sort_order: Option<SortOrder>,
     }
 
-    #[derive(Debug, Serialize)]
-    pub struct SearchResults<T: Serialize> {
-        pub results: Vec<T>,
+    #[derive(Debug, Serialize, serde::Deserialize, utoipa::ToSchema)]
+    pub struct SearchResults {
+        pub results: Vec<serde_json::Value>,
         pub total: usize,
     }
 
-    #[derive(Debug, Default, Serialize)]
+    #[derive(Debug, Default, Serialize, serde::Deserialize)]
     pub struct SearchStats {}
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
     pub struct SearchFilter {
         pub field: String,
         pub value: String,
         pub operator: FilterOperator,
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
     pub enum FilterOperator {
         Equals,
     }
