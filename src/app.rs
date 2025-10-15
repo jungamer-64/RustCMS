@@ -904,6 +904,111 @@ impl AppState {
         self.database.get_connection()
     }
 
+    /// Access the application-level container (if present).
+    #[cfg(feature = "database")]
+    #[must_use]
+    pub fn get_container(&self) -> Option<Arc<crate::application::AppContainer>> {
+        self.container.clone()
+    }
+
+    /// Helper: obtain a CreateUser use-case instance.
+    /// Prefers the centrally-constructed AppContainer; if absent constructs
+    /// a short-lived adapter/use-case for backward compatibility.
+    #[cfg(feature = "database")]
+    #[must_use]
+    pub fn get_create_user_uc(
+        &self,
+    ) -> std::sync::Arc<
+        crate::application::use_cases::CreateUserUseCase<
+            crate::infrastructure::repositories::DieselUserRepository,
+        >,
+    > {
+        if let Some(container) = self.container.as_ref() {
+            return container.create_user.clone();
+        }
+        let repo =
+            crate::infrastructure::repositories::DieselUserRepository::new(self.database.clone());
+        std::sync::Arc::new(crate::application::use_cases::CreateUserUseCase::new(
+            std::sync::Arc::new(repo),
+        ))
+    }
+
+    #[cfg(feature = "database")]
+    #[must_use]
+    pub fn get_user_by_id_uc(
+        &self,
+    ) -> std::sync::Arc<
+        crate::application::use_cases::GetUserByIdUseCase<
+            crate::infrastructure::repositories::DieselUserRepository,
+        >,
+    > {
+        if let Some(container) = self.container.as_ref() {
+            return container.get_user_by_id.clone();
+        }
+        let repo =
+            crate::infrastructure::repositories::DieselUserRepository::new(self.database.clone());
+        std::sync::Arc::new(crate::application::use_cases::GetUserByIdUseCase::new(
+            std::sync::Arc::new(repo),
+        ))
+    }
+
+    #[cfg(feature = "database")]
+    #[must_use]
+    pub fn get_update_user_uc(
+        &self,
+    ) -> std::sync::Arc<
+        crate::application::use_cases::UpdateUserUseCase<
+            crate::infrastructure::repositories::DieselUserRepository,
+        >,
+    > {
+        if let Some(container) = self.container.as_ref() {
+            return container.update_user.clone();
+        }
+        let repo =
+            crate::infrastructure::repositories::DieselUserRepository::new(self.database.clone());
+        std::sync::Arc::new(crate::application::use_cases::UpdateUserUseCase::new(
+            std::sync::Arc::new(repo),
+        ))
+    }
+
+    #[cfg(feature = "database")]
+    #[must_use]
+    pub fn get_create_post_uc(
+        &self,
+    ) -> std::sync::Arc<
+        crate::application::use_cases::CreatePostUseCase<
+            crate::infrastructure::repositories::DieselPostRepository,
+        >,
+    > {
+        if let Some(container) = self.container.as_ref() {
+            return container.create_post.clone();
+        }
+        let repo =
+            crate::infrastructure::repositories::DieselPostRepository::new(self.database.clone());
+        std::sync::Arc::new(crate::application::use_cases::CreatePostUseCase::new(
+            std::sync::Arc::new(repo),
+        ))
+    }
+
+    #[cfg(feature = "database")]
+    #[must_use]
+    pub fn get_update_post_uc(
+        &self,
+    ) -> std::sync::Arc<
+        crate::application::use_cases::UpdatePostUseCase<
+            crate::infrastructure::repositories::DieselPostRepository,
+        >,
+    > {
+        if let Some(container) = self.container.as_ref() {
+            return container.update_post.clone();
+        }
+        let repo =
+            crate::infrastructure::repositories::DieselPostRepository::new(self.database.clone());
+        std::sync::Arc::new(crate::application::use_cases::UpdatePostUseCase::new(
+            std::sync::Arc::new(repo),
+        ))
+    }
+
     // ---------------- Cache helper (get or compute & store) ----------------
     #[cfg(feature = "cache")]
     /// キャッシュから値を取得し、存在しない場合は計算して保存します。
