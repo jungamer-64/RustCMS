@@ -41,6 +41,7 @@ required-features = ["database"]
 [[bin]]
 name = "cms-admin"
 path = "src/bin/admin.rs"
+required-features = ["database"]
 
 [[bin]]
 name = "benchmark-analyzer"
@@ -363,6 +364,7 @@ required-features = ["dev-tools"]
 [[bin]]
 name = "gen_biscuit_keys"
 path = "src/bin/gen_biscuit_keys.rs"
+required-features = ["auth"]
 
 [[bin]]
 name = "dump_docs"
