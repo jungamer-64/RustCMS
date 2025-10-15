@@ -34,12 +34,89 @@ pub mod config;
 pub mod error;
 pub mod telemetry;
 
+// Re-structured layer entry points (incremental, re-exports existing modules)
+pub mod application;
+pub mod domain;
+pub mod infrastructure;
+
 // Conditional feature modules for scalability
 #[cfg(feature = "database")]
 pub mod database;
 
 #[cfg(feature = "auth")]
 pub mod auth;
+
+// When the `auth` feature is disabled we still provide a tiny placeholder
+// `auth` module so other parts of the crate (handlers, utils) that reference
+// `crate::auth::AuthContext` or `AuthResponse` can compile. Full behaviour is
+// only available when the `auth` feature is enabled.
+#[cfg(not(feature = "auth"))]
+pub mod auth {
+    use crate::utils::common_types::SessionId;
+    use uuid::Uuid;
+
+    /// Minimal AuthContext used by code paths that only need to compile when
+    /// the `auth` feature is disabled. Fields mirror the real type closely
+    /// enough for compile-time compatibility.
+    #[derive(Clone, Debug)]
+    pub struct AuthContext {
+        pub user_id: Uuid,
+        pub username: String,
+        pub role: crate::models::UserRole,
+        pub session_id: SessionId,
+        pub permissions: Vec<String>,
+    }
+
+    /// Minimal AuthResponse used by conversions in `utils::auth_response`.
+    #[derive(Clone, Debug)]
+    pub struct AuthResponse {
+        pub user: crate::utils::common_types::UserInfo,
+        pub tokens: crate::utils::auth_response::AuthTokens,
+    }
+
+    /// Placeholder service type. Real functionality requires enabling `auth`.
+    pub struct AuthService;
+
+    /// Placeholder login request type.
+    pub struct LoginRequest;
+
+    /// Small helper to preserve API compatibility. Returns a NotImplemented
+    /// AppError when called without the `auth` feature enabled.
+    pub fn require_admin_permission(_: &AuthContext) -> crate::Result<()> {
+        Err(crate::AppError::NotImplemented(
+            "auth feature not enabled".into(),
+        ))
+    }
+
+    /// Minimal AuthError for builds with auth disabled.
+    #[derive(Debug, Clone)]
+    pub enum AuthError {
+        InvalidCredentials,
+        UserNotFound,
+        TokenExpired,
+        InvalidToken,
+        InsufficientPermissions,
+        PasswordHash(String),
+        Biscuit(String),
+        Database(String),
+        WebAuthn(String),
+    }
+
+    impl std::fmt::Display for AuthError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{:?}", self)
+        }
+    }
+
+    impl From<AuthError> for crate::AppError {
+        fn from(err: AuthError) -> Self {
+            match err {
+                AuthError::InsufficientPermissions => Self::Authorization(err.to_string()),
+                _ => Self::Authentication(err.to_string()),
+            }
+        }
+    }
+}
 
 #[cfg(feature = "cache")]
 pub mod cache;
