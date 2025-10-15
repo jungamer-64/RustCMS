@@ -1,3 +1,5 @@
+#![cfg(feature = "auth")]
+
 use cms_backend::auth::{AuthContext, require_admin_permission};
 use cms_backend::models::UserRole;
 use cms_backend::utils::common_types::SessionId;

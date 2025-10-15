@@ -15,6 +15,7 @@
 
 mod mock_services;
 
+use cms_backend::AppState;
 use cms_backend::events::{AppEvent, PostEventData, UserEventData};
 use mock_services::*;
 use tokio::time::{Duration, timeout};
@@ -120,6 +121,7 @@ async fn test_user_created_event_flow() {
         id: user.id,
         username: user.username.clone(),
         email: user.email.clone(),
+        role: user.role.clone(),
     };
 
     // Emit event (simulating state.emit_user_created())
@@ -367,25 +369,20 @@ async fn test_listener_lag_handling() {
     // "Listeners warn but continue when lagging"
 
     // Create event bus with VERY small buffer to trigger overflow quickly
-    let (event_bus, mut receiver) = broadcast::channel::<AppEvent>(2);
+    let (event_bus, mut receiver) = tokio::sync::broadcast::channel::<AppEvent>(2);
 
     let database = MockDatabase::new();
     let search = MockSearchService::new();
     let cache = MockCacheService::new();
 
-    // Create users in database first
-    let user_ids: Vec<Uuid> = (0..10)
-        .map(|i| {
-            let user = create_test_user(&format!("user{}", i));
-            let id = user.id;
-            tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(async {
-                    database.insert_user(user).await;
-                })
-            });
-            id
-        })
-        .collect();
+    // Create users in database first (async, no blocking)
+    let mut user_ids: Vec<Uuid> = Vec::with_capacity(10);
+    for i in 0..10 {
+        let user = create_test_user(&format!("user{}", i));
+        let id = user.id;
+        database.insert_user(user).await;
+        user_ids.push(id);
+    }
 
     // Spawn a SLOW listener that takes time to process
     let search_clone = search.clone();
@@ -401,13 +398,13 @@ async fn test_listener_lag_handling() {
                         let _ = search_clone.index_user(&user).await;
                     }
                 }
-                Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
                     // Lag detected! This is expected behavior
                     eprintln!("Listener lagged and skipped {} events", skipped);
                     // Listener continues processing (doesn't crash)
                     continue;
                 }
-                Err(broadcast::error::RecvError::Closed) => break,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 _ => {}
             }
         }
@@ -555,68 +552,7 @@ async fn verify_cache_invalidated(_state: &AppState, _key: &str) {
     // assert!(state.cache.get::<String>(key).await.unwrap().is_none());
 }
 
-// ============================================================================
-// Test Fixtures and Mocks (for future implementation)
-// ============================================================================
-
-/// Mock search service that tracks index_* calls
-#[cfg(feature = "search")]
-#[derive(Clone)]
-struct MockSearchService {
-    indexed_users: std::sync::Arc<tokio::sync::Mutex<Vec<Uuid>>>,
-    indexed_posts: std::sync::Arc<tokio::sync::Mutex<Vec<Uuid>>>,
-}
-
-#[cfg(feature = "search")]
-impl MockSearchService {
-    fn new() -> Self {
-        Self {
-            indexed_users: std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new())),
-            indexed_posts: std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new())),
-        }
-    }
-
-    async fn verify_user_indexed(&self, id: Uuid) -> bool {
-        self.indexed_users.lock().await.contains(&id)
-    }
-
-    async fn verify_post_indexed(&self, id: Uuid) -> bool {
-        self.indexed_posts.lock().await.contains(&id)
-    }
-
-    async fn index_user_call_count(&self) -> usize {
-        self.indexed_users.lock().await.len()
-    }
-
-    async fn get_indexed_user(&self, id: Uuid) -> Option<Uuid> {
-        let users = self.indexed_users.lock().await;
-        users.iter().find(|&&uid| uid == id).copied()
-    }
-}
-
-/// Mock cache service that tracks delete calls
-#[cfg(feature = "cache")]
-struct MockCacheService {
-    deleted_keys: std::sync::Arc<tokio::sync::Mutex<Vec<String>>>,
-}
-
-#[cfg(feature = "cache")]
-impl MockCacheService {
-    fn new() -> Self {
-        Self {
-            deleted_keys: std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new())),
-        }
-    }
-
-    async fn verify_key_deleted(&self, key: &str) -> bool {
-        self.deleted_keys.lock().await.contains(&key.to_string())
-    }
-
-    async fn verify_pattern_deleted(&self, pattern: &str) -> bool {
-        let keys = self.deleted_keys.lock().await;
-        keys.iter().any(|k| k.starts_with(pattern))
-    }
-}
+// (Mocks live in `tests/mock_services.rs` and are imported via `mod mock_services;`)
 
 // ============================================================================
 // Example of Full Integration Test (requires setup)

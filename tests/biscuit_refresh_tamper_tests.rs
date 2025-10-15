@@ -1,4 +1,5 @@
 //! Tampering tests for refresh biscuit tokens
+#![cfg(all(feature = "auth", feature = "database"))]
 
 use base64::Engine; // for decode/encode methods on STANDARD
 

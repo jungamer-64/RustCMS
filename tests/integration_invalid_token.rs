@@ -1,4 +1,5 @@
 // Integration test: invalid/expired biscuit token handling
+#![cfg(feature = "auth")]
 
 #[cfg(test)]
 mod tests {

@@ -5,7 +5,7 @@
 //! - Multiple subscribers
 //! - All AppEvent variants
 
-use rust_cms::events::{AppEvent, PostEventData, UserEventData, create_event_bus};
+use cms_backend::events::{AppEvent, PostEventData, UserEventData, create_event_bus};
 use uuid::Uuid;
 
 #[tokio::test]
@@ -27,6 +27,7 @@ async fn test_user_created_event() {
         id: user_id,
         username: "testuser".to_string(),
         email: "test@example.com".to_string(),
+        role: "User".to_string(),
     };
 
     // Send event
@@ -54,6 +55,7 @@ async fn test_user_updated_event() {
         id: user_id,
         username: "updateduser".to_string(),
         email: "updated@example.com".to_string(),
+        role: "User".to_string(),
     };
 
     event_bus
@@ -156,6 +158,7 @@ async fn test_multiple_subscribers() {
         id: user_id,
         username: "multicast".to_string(),
         email: "multi@example.com".to_string(),
+        role: "User".to_string(),
     };
 
     // Send one event
@@ -191,6 +194,7 @@ async fn test_no_subscribers_does_not_panic() {
         id: user_id,
         username: "orphan".to_string(),
         email: "orphan@example.com".to_string(),
+        role: "User".to_string(),
     };
 
     // This should not panic even with no subscribers
@@ -205,19 +209,37 @@ async fn test_event_bus_capacity() {
     let (event_bus, mut receiver) = create_event_bus(4); // Small capacity
 
     // Send more events than capacity
+    let mut send_success = 0;
     for i in 0..10 {
         let event_data = UserEventData {
             id: Uuid::new_v4(),
             username: format!("user{}", i),
             email: format!("user{}@example.com", i),
+            role: "User".to_string(),
         };
-        event_bus.send(AppEvent::UserCreated(event_data)).ok();
+        if event_bus.send(AppEvent::UserCreated(event_data)).is_ok() {
+            send_success += 1;
+        }
     }
+
+    // At least one send should succeed when a receiver is present
+    assert!(
+        send_success > 0,
+        "Expected at least one successful send, got {}",
+        send_success
+    );
 
     // Should be able to receive at least the last few events
     let mut received_count = 0;
-    while receiver.try_recv().is_ok() {
-        received_count += 1;
+    loop {
+        match receiver.try_recv() {
+            Ok(_ev) => {
+                received_count += 1;
+            }
+            Err(tokio::sync::broadcast::error::TryRecvError::Empty) => break,
+            Err(tokio::sync::broadcast::error::TryRecvError::Lagged(_)) => continue,
+            Err(_) => break,
+        }
     }
 
     assert!(received_count > 0, "Should receive at least some events");

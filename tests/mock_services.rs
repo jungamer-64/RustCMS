@@ -108,11 +108,12 @@ impl MockSearchService {
 
     /// Index a user (stores in mock index)
     pub async fn index_user(&self, user: &MockUser) -> Result<(), String> {
+        *self.index_user_calls.lock().await += 1;
+
         if *self.should_fail.lock().await {
             return Err("Mock search service configured to fail".to_string());
         }
 
-        *self.index_user_calls.lock().await += 1;
         self.indexed_users
             .lock()
             .await
@@ -122,11 +123,12 @@ impl MockSearchService {
 
     /// Index a post (stores in mock index)
     pub async fn index_post(&self, post: &MockPost) -> Result<(), String> {
+        *self.index_post_calls.lock().await += 1;
+
         if *self.should_fail.lock().await {
             return Err("Mock search service configured to fail".to_string());
         }
 
-        *self.index_post_calls.lock().await += 1;
         self.indexed_posts
             .lock()
             .await
@@ -136,11 +138,12 @@ impl MockSearchService {
 
     /// Remove document from index
     pub async fn remove_document(&self, id: &str) -> Result<(), String> {
+        *self.remove_calls.lock().await += 1;
+
         if *self.should_fail.lock().await {
             return Err("Mock search service configured to fail".to_string());
         }
 
-        *self.remove_calls.lock().await += 1;
         self.removed_documents.lock().await.push(id.to_string());
         Ok(())
     }
@@ -375,12 +378,12 @@ mod tests {
         assert!(cache.delete("user:123").await.is_ok());
 
         // Verify deleted
-        assert!(cache.verify_key_deleted("user:123"));
+        assert!(cache.verify_key_deleted("user:123").await);
         assert_eq!(cache.delete_call_count().await, 1);
 
         // Delete pattern
         assert!(cache.delete_pattern("users:*").await.is_ok());
-        assert!(cache.verify_pattern_deleted("users:"));
+        assert!(cache.verify_pattern_deleted("users:").await);
         assert_eq!(cache.delete_call_count().await, 2);
     }
 
@@ -396,6 +399,6 @@ mod tests {
         assert!(result.is_err());
 
         // No key should be tracked
-        assert!(!cache.verify_key_deleted("user:123"));
+        assert!(!cache.verify_key_deleted("user:123").await);
     }
 }

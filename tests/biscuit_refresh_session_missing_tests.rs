@@ -1,4 +1,5 @@
 //! Session missing scenario: refresh should fail when session record is removed
+#![cfg(all(feature = "auth", feature = "database"))]
 
 mod common;
 

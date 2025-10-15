@@ -1,4 +1,5 @@
 // Integration test: verify Postgres connectivity and basic query.
+#![cfg(feature = "database")]
 
 #[cfg(test)]
 mod tests {

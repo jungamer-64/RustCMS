@@ -49,15 +49,24 @@ async fn public_endpoint_has_no_security() {
         .get("paths")
         .and_then(|p| p.as_object())
         .expect("paths missing");
-    let login = paths
-        .get("/api/v1/auth/login")
-        .and_then(|p| p.get("post"))
-        .and_then(|m| m.as_object())
-        .expect("/api/v1/auth/login post missing");
-    assert!(
-        login.get("security").is_none(),
-        "public login endpoint should have no security block"
-    );
+    // When `auth` feature is enabled the login endpoint should exist and be public.
+    // When `auth` is disabled the login path will not be present in the spec; accept that too.
+    if cfg!(feature = "auth") {
+        let login = paths
+            .get("/api/v1/auth/login")
+            .and_then(|p| p.get("post"))
+            .and_then(|m| m.as_object())
+            .expect("/api/v1/auth/login post missing");
+        assert!(
+            login.get("security").is_none(),
+            "public login endpoint should have no security block"
+        );
+    } else {
+        assert!(
+            paths.get("/api/v1/auth/login").is_none(),
+            "auth disabled -> login should be absent"
+        );
+    }
 }
 
 #[tokio::test]

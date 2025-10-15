@@ -1,4 +1,5 @@
 //! Negative tests for refresh token: expiry & version mismatch
+#![cfg(all(feature = "auth", feature = "database"))]
 
 mod common;
 

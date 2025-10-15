@@ -54,6 +54,7 @@ const DUMMY_HASH: &str = "$argon2id$v=19$m=65536,t=3,p=4$YWJj$YWJj";
 /// Like `build_db`, but returns a `Result` so callers can distinguish
 /// between "no `DATABASE_URL` set" (Ok(None)) and a connection error (Err).
 #[allow(dead_code)]
+#[cfg(feature = "database")]
 pub async fn build_db_result()
 -> Result<Option<cms_backend::database::Database>, cms_backend::AppError> {
     use cms_backend::config::DatabaseConfig;
@@ -84,6 +85,7 @@ pub async fn build_db_result()
 /// Convenience helper mirroring legacy behavior: returns `None` when the
 /// database is unavailable and logs any initialization errors.
 #[allow(dead_code)]
+#[cfg(feature = "database")]
 pub async fn build_db() -> Option<cms_backend::database::Database> {
     match build_db_result().await {
         Ok(db_opt) => db_opt,
