@@ -972,42 +972,12 @@ impl AppState {
     }
 
     #[cfg(feature = "database")]
-    #[must_use]
-    pub fn get_create_post_uc(
-        &self,
-    ) -> std::sync::Arc<
-        crate::application::use_cases::CreatePostUseCase<
-            crate::infrastructure::repositories::DieselPostRepository,
-        >,
-    > {
-        if let Some(container) = self.container.as_ref() {
-            return container.create_post.clone();
-        }
-        let repo =
-            crate::infrastructure::repositories::DieselPostRepository::new(self.database.clone());
-        std::sync::Arc::new(crate::application::use_cases::CreatePostUseCase::new(
-            std::sync::Arc::new(repo),
-        ))
-    }
+    // Note: Post-related use-cases (CreatePostUseCase, UpdatePostUseCase, etc.) are not currently
+    // implemented in the application layer. They remain available through direct database calls
+    // via handlers and event listeners until the refactoring is complete.
+    //
+    // TODO: Implement post-related use-cases as part of the next refactoring iteration.
 
-    #[cfg(feature = "database")]
-    #[must_use]
-    pub fn get_update_post_uc(
-        &self,
-    ) -> std::sync::Arc<
-        crate::application::use_cases::UpdatePostUseCase<
-            crate::infrastructure::repositories::DieselPostRepository,
-        >,
-    > {
-        if let Some(container) = self.container.as_ref() {
-            return container.update_post.clone();
-        }
-        let repo =
-            crate::infrastructure::repositories::DieselPostRepository::new(self.database.clone());
-        std::sync::Arc::new(crate::application::use_cases::UpdatePostUseCase::new(
-            std::sync::Arc::new(repo),
-        ))
-    }
 
     // ---------------- Cache helper (get or compute & store) ----------------
     #[cfg(feature = "cache")]

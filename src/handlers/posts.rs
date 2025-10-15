@@ -182,21 +182,8 @@ pub async fn create_post(
         state.clone(),
         request,
         |st, req| async move {
-            #[cfg(feature = "database")]
-            {
-                // Prefer container-provided create_post use-case when available
-                if let Some(container) = st.container.as_ref() {
-                    use crate::application::ports::user_repository::RepositoryError as RepoErr;
-                    return match container.create_post.execute(req).await {
-                        Ok(p) => Ok(p),
-                        Err(RepoErr::Unexpected(s)) => Err(crate::AppError::Internal(s)),
-                        Err(RepoErr::Conflict(s)) => Err(crate::AppError::Conflict(s)),
-                        Err(RepoErr::NotFound) => {
-                            Err(crate::AppError::NotFound("Post not found".to_string()))
-                        }
-                    };
-                }
-            }
+            // TODO: Implement CreatePostUseCase in the application layer
+            // For now, use direct database calls
             st.db_create_post(req).await
         },
         |m: &Post| PostDto::from(m),
@@ -386,24 +373,8 @@ pub async fn update_post(
         id,
         request,
         |st, pid, req| async move {
-            #[cfg(feature = "database")]
-            {
-                use crate::application::ports::user_repository::RepositoryError as RepoErr;
-                if let Some(container) = st.container.as_ref() {
-                    return match container
-                        .update_post
-                        .execute(crate::domain::value_objects::PostId::from_uuid(pid), req)
-                        .await
-                    {
-                        Ok(p) => Ok(p),
-                        Err(RepoErr::NotFound) => {
-                            Err(crate::AppError::NotFound("Post not found".to_string()))
-                        }
-                        Err(RepoErr::Conflict(s)) => Err(crate::AppError::Conflict(s)),
-                        Err(RepoErr::Unexpected(s)) => Err(crate::AppError::Internal(s)),
-                    };
-                }
-            }
+            // TODO: Implement UpdatePostUseCase in the application layer
+            // For now, use direct database calls
             st.db_update_post(pid, req).await
         },
         |p: &crate::models::post::Post| PostDto::from(p),
