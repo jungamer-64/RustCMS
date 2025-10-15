@@ -292,6 +292,68 @@ impl AppStateBuilder {
     }
 }
 
+// When auth feature is disabled provide minimal stubs on AppState so code that
+// calls auth wrappers (middleware/handlers) compiles. These should not be used
+// at runtime unless the auth feature is enabled.
+#[cfg(not(feature = "auth"))]
+impl AppState {
+    pub async fn auth_verify_biscuit(
+        &self,
+        _token: &str,
+    ) -> crate::Result<crate::auth::AuthContext> {
+        Err(crate::AppError::NotImplemented(
+            "auth feature not enabled".into(),
+        ))
+    }
+
+    pub async fn auth_create_user(
+        &self,
+        _req: crate::models::CreateUserRequest,
+    ) -> crate::Result<crate::models::User> {
+        Err(crate::AppError::NotImplemented(
+            "auth feature not enabled".into(),
+        ))
+    }
+
+    pub async fn auth_authenticate(
+        &self,
+        _req: crate::auth::LoginRequest,
+    ) -> crate::Result<crate::models::User> {
+        Err(crate::AppError::NotImplemented(
+            "auth feature not enabled".into(),
+        ))
+    }
+
+    pub async fn auth_build_success_response(
+        &self,
+        _user: crate::models::User,
+        _remember: bool,
+    ) -> crate::Result<crate::utils::auth_response::AuthSuccessResponse> {
+        Err(crate::AppError::NotImplemented(
+            "auth feature not enabled".into(),
+        ))
+    }
+
+    pub async fn auth_build_auth_response(
+        &self,
+        _user: crate::models::User,
+        _remember: bool,
+    ) -> crate::Result<crate::auth::AuthResponse> {
+        Err(crate::AppError::NotImplemented(
+            "auth feature not enabled".into(),
+        ))
+    }
+
+    pub async fn auth_refresh_access_token(
+        &self,
+        _refresh_token: &str,
+    ) -> crate::Result<(crate::utils::auth_response::AuthTokens, crate::models::User)> {
+        Err(crate::AppError::NotImplemented(
+            "auth feature not enabled".into(),
+        ))
+    }
+}
+
 // Helper functions for from_config
 
 /// Helper: Get environment variable interval or default
