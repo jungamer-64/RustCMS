@@ -184,8 +184,51 @@ pub async fn get_user(
         &cache_key,
         crate::utils::cache_ttl::CACHE_TTL_LONG,
         move || async move {
-            let user = state.db_get_user_by_id(id).await?;
-            Ok(UserInfo::from(user))
+            // Prefer the new application use-case when the database
+            // infrastructure is compiled. This constructs a short-lived
+            // use-case with a Diesel-backed repository adapter so we can
+            // incrementally move logic into the application layer without
+            // modifying global wiring yet.
+            #[cfg(feature = "database")]
+            {
+                use crate::domain::value_objects::UserId;
+
+                // Prefer using the centrally-constructed AppContainer when available.
+                if let Some(container) = state.container.as_ref() {
+                    let uc = container.get_user_by_id.clone();
+                    let user_opt = uc
+                        .execute(UserId::from_uuid(id))
+                        .await
+                        .map_err(|e| crate::AppError::Internal(e.to_string()))?;
+                    let user = user_opt
+                        .ok_or_else(|| crate::AppError::NotFound("User not found".to_string()))?;
+                    return Ok(UserInfo::from(user));
+                }
+
+                // Backward-compatible fallback: construct a short-lived use-case.
+                use crate::application::use_cases::GetUserByIdUseCase;
+                use std::sync::Arc;
+
+                let repo = crate::infrastructure::repositories::DieselUserRepository::new(
+                    state.database.clone(),
+                );
+                let uc = GetUserByIdUseCase::new(Arc::new(repo));
+                let user_opt = uc
+                    .execute(UserId::from_uuid(id))
+                    .await
+                    .map_err(|e| crate::AppError::Internal(e.to_string()))?;
+                let user = user_opt
+                    .ok_or_else(|| crate::AppError::NotFound("User not found".to_string()))?;
+                return Ok(UserInfo::from(user));
+            }
+
+            // Fallback for builds without the database feature: continue
+            // using the existing AppState database helper.
+            #[cfg(not(feature = "database"))]
+            {
+                let user = state.db_get_user_by_id(id).await?;
+                Ok(UserInfo::from(user))
+            }
         },
     )
     .await?;
@@ -235,7 +278,49 @@ pub async fn update_user(
         state.clone(),
         id,
         request,
-        |st, uid, req| async move { st.db_update_user(uid, req).await },
+        |st, uid, req| async move {
+            // Prefer application-layer use-case when possible
+            #[cfg(feature = "database")]
+            {
+                use crate::application::ports::user_repository::RepositoryError as RepoErr;
+                use crate::domain::value_objects::UserId;
+
+                // Prefer central container-provided use-case when present
+                if let Some(container) = st.container.as_ref() {
+                    let uc = container.update_user.clone();
+                    return match uc.execute(UserId::from_uuid(uid), req).await {
+                        Ok(u) => Ok(u),
+                        Err(RepoErr::NotFound) => {
+                            Err(crate::AppError::NotFound("User not found".to_string()))
+                        }
+                        Err(RepoErr::Conflict(s)) => Err(crate::AppError::Conflict(s)),
+                        Err(RepoErr::Unexpected(s)) => Err(crate::AppError::Internal(s)),
+                    };
+                }
+
+                // Fallback: construct a short-lived use-case against a Diesel adapter
+                use crate::application::use_cases::UpdateUserUseCase;
+                use crate::infrastructure::repositories::DieselUserRepository;
+                use std::sync::Arc;
+
+                let repo = DieselUserRepository::new(st.database.clone());
+                let uc = UpdateUserUseCase::new(Arc::new(repo));
+                return match uc.execute(UserId::from_uuid(uid), req).await {
+                    Ok(u) => Ok(u),
+                    Err(RepoErr::NotFound) => {
+                        Err(crate::AppError::NotFound("User not found".to_string()))
+                    }
+                    Err(RepoErr::Conflict(s)) => Err(crate::AppError::Conflict(s)),
+                    Err(RepoErr::Unexpected(s)) => Err(crate::AppError::Internal(s)),
+                };
+            }
+
+            // Fallback to legacy DB helper when database feature is not present
+            #[cfg(not(feature = "database"))]
+            {
+                st.db_update_user(uid, req).await
+            }
+        },
         |u: &crate::models::user::User| UserInfo::from(u),
         Some(|u: crate::models::user::User, st: AppState| async move {
             #[cfg(feature = "search")]
