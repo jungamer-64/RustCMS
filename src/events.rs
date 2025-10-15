@@ -119,6 +119,7 @@ pub struct UserEventData {
     pub id: Uuid,
     pub username: String,
     pub email: String,
+    pub role: String,
 }
 
 impl UserEventData {
@@ -129,6 +130,7 @@ impl UserEventData {
             id: user.id,
             username: user.username.clone(),
             email: user.email.clone(),
+            role: user.role.clone(),
         }
     }
 }
@@ -216,6 +218,7 @@ mod tests {
             id: Uuid::new_v4(),
             username: "test".to_string(),
             email: "test@example.com".to_string(),
+            role: "User".to_string(),
         };
     }
 }
