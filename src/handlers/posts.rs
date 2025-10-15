@@ -181,7 +181,24 @@ pub async fn create_post(
     let (status, api_ok) = crud::create_entity(
         state.clone(),
         request,
-        |st, req| async move { st.db_create_post(req).await },
+        |st, req| async move {
+            #[cfg(feature = "database")]
+            {
+                // Prefer container-provided create_post use-case when available
+                if let Some(container) = st.container.as_ref() {
+                    use crate::application::ports::user_repository::RepositoryError as RepoErr;
+                    return match container.create_post.execute(req).await {
+                        Ok(p) => Ok(p),
+                        Err(RepoErr::Unexpected(s)) => Err(crate::AppError::Internal(s)),
+                        Err(RepoErr::Conflict(s)) => Err(crate::AppError::Conflict(s)),
+                        Err(RepoErr::NotFound) => {
+                            Err(crate::AppError::NotFound("Post not found".to_string()))
+                        }
+                    };
+                }
+            }
+            st.db_create_post(req).await
+        },
         |m: &Post| PostDto::from(m),
         hook,
     )
@@ -368,7 +385,27 @@ pub async fn update_post(
         state.clone(),
         id,
         request,
-        |st, pid, req| async move { st.db_update_post(pid, req).await },
+        |st, pid, req| async move {
+            #[cfg(feature = "database")]
+            {
+                use crate::application::ports::user_repository::RepositoryError as RepoErr;
+                if let Some(container) = st.container.as_ref() {
+                    return match container
+                        .update_post
+                        .execute(crate::domain::value_objects::PostId::from_uuid(pid), req)
+                        .await
+                    {
+                        Ok(p) => Ok(p),
+                        Err(RepoErr::NotFound) => {
+                            Err(crate::AppError::NotFound("Post not found".to_string()))
+                        }
+                        Err(RepoErr::Conflict(s)) => Err(crate::AppError::Conflict(s)),
+                        Err(RepoErr::Unexpected(s)) => Err(crate::AppError::Internal(s)),
+                    };
+                }
+            }
+            st.db_update_post(pid, req).await
+        },
         |p: &crate::models::post::Post| PostDto::from(p),
         Some(|p: crate::models::post::Post, st: AppState| async move {
             #[cfg(feature = "search")]
