@@ -1188,7 +1188,51 @@ impl AppState {
         &self,
         request: crate::models::CreateUserRequest,
     ) -> crate::Result<crate::models::User> {
-        timed_op!(self, "db", self.database.create_user(request))
+        // Prefer application-layer use-case that depends on the repository port
+        // when database feature is present. This allows incremental migration of
+        // business logic while preserving the existing timing/metrics wrapper.
+        #[cfg(feature = "database")]
+        {
+            use crate::application::ports::user_repository::RepositoryError as RepoErr;
+
+            // Prefer container-provided use-case when available
+            if let Some(container) = self.container.as_ref() {
+                let uc = container.create_user.clone();
+                return timed_op!(self, "db", async move {
+                    match uc.execute(request).await {
+                        Ok(u) => Ok(u),
+                        Err(RepoErr::Conflict(s)) => Err(crate::AppError::Conflict(s)),
+                        Err(RepoErr::NotFound) => {
+                            Err(crate::AppError::NotFound("User not found".to_string()))
+                        }
+                        Err(RepoErr::Unexpected(s)) => Err(crate::AppError::Internal(s)),
+                    }
+                });
+            }
+
+            use crate::application::use_cases::CreateUserUseCase;
+            use crate::infrastructure::repositories::DieselUserRepository;
+            use std::sync::Arc;
+
+            let repo = DieselUserRepository::new(self.database.clone());
+            let uc = CreateUserUseCase::new(Arc::new(repo));
+            return timed_op!(self, "db", async move {
+                match uc.execute(request).await {
+                    Ok(u) => Ok(u),
+                    Err(RepoErr::Conflict(s)) => Err(crate::AppError::Conflict(s)),
+                    Err(RepoErr::NotFound) => {
+                        Err(crate::AppError::NotFound("User not found".to_string()))
+                    }
+                    Err(RepoErr::Unexpected(s)) => Err(crate::AppError::Internal(s)),
+                }
+            });
+        }
+
+        // Fallback (or when database feature not present): keep existing direct DB helper
+        #[cfg(not(feature = "database"))]
+        {
+            timed_op!(self, "db", self.database.create_user(request))
+        }
     }
 
     #[cfg(feature = "auth")]
