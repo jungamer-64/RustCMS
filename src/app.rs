@@ -393,12 +393,28 @@ async fn initialize_database(config: &Config) -> Result<Database> {
 async fn initialize_auth(
     config: &crate::config::AuthConfig,
     #[cfg(feature = "database")] database: Option<&Database>,
+    #[cfg(feature = "database")] container: Option<&Arc<crate::application::AppContainer>>,
 ) -> Result<AuthService> {
     info!("🔐 Setting up authentication service...");
 
     #[cfg(feature = "database")]
     {
-        if let Some(db) = database {
+        if let Some(_) = database {
+            // Prefer container-provided repository wiring when available so
+            // global adapter construction is centralized in AppContainer.
+            if let Some(c) = container {
+                // Coerce the concrete Arc<DieselUserRepository> to an
+                // Arc<dyn UserRepository> for AuthService initialization.
+                let repo: Arc<dyn crate::repositories::user_repository::UserRepository> =
+                    c.user_repo.clone();
+                let auth = AuthService::new_with_repo(config, repo)?;
+                info!("✅ Authentication service initialized (container-backed)");
+                return Ok(auth);
+            }
+
+            // Fallback to legacy constructor which will construct a short-lived
+            // Diesel adapter internally.
+            let db = database.unwrap();
             let auth = AuthService::new(config, db)?;
             info!("✅ Authentication service initialized");
             Ok(auth)
@@ -600,7 +616,23 @@ impl AppState {
         // Initialize services conditionally based on features
         #[cfg(feature = "database")]
         {
+            // Create event bus early so we can construct an AppContainer
+            // before the full AppState is built. This allows services like
+            // `AuthService` to be initialized with container-provided
+            // repositories rather than constructing adapters ad-hoc.
+            let (early_event_bus, _early_rx) = crate::events::create_event_bus(1024);
+            app_state_builder.event_bus = Some(early_event_bus.clone());
+
             app_state_builder.database = Some(initialize_database(&config).await?);
+
+            // Construct the application-level container early so other
+            // initializers (auth service) can reuse the centrally
+            // constructed adapters.
+            let container = crate::application::AppContainer::new(
+                app_state_builder.database.as_ref().unwrap().clone(),
+                early_event_bus.clone(),
+            );
+            app_state_builder.container = Some(Arc::new(container));
         }
 
         #[cfg(feature = "auth")]
@@ -610,6 +642,8 @@ impl AppState {
                     &config.auth,
                     #[cfg(feature = "database")]
                     app_state_builder.database.as_ref(),
+                    #[cfg(feature = "database")]
+                    app_state_builder.container.as_ref(),
                 )
                 .await?,
             );
@@ -626,6 +660,20 @@ impl AppState {
         }
 
         let mut app_state = app_state_builder.build();
+
+        // Construct application-level container (DI) if database feature is enabled.
+        // If an early container was already created and stored in the builder,
+        // avoid replacing it here.
+        #[cfg(feature = "database")]
+        {
+            if app_state.container.is_none() {
+                let container = crate::application::AppContainer::new(
+                    app_state.database.clone(),
+                    app_state.event_bus.clone(),
+                );
+                app_state.container = Some(Arc::new(container));
+            }
+        }
 
         // Configure rate limiter
         let max_reqs = u32::try_from(config.security.rate_limit_requests).unwrap_or_else(|_| {
