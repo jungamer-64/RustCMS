@@ -739,6 +739,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_determine_log_format_dev_aliases_and_unknown() {
         assert_eq!(determine_log_format("dev").unwrap(), LogFormat::Text);
         assert_eq!(determine_log_format("LOCAL").unwrap(), LogFormat::Text);
