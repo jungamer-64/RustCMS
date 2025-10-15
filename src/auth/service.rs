@@ -121,8 +121,24 @@ impl AuthService {
     /// # Errors
     /// Returns error if key pair initialization or repository setup fails.
     pub fn new(config: &AuthConfig, database: &crate::database::Database) -> Result<Self> {
-        let repo: Arc<dyn UserRepository> = Arc::new(database.clone()) as Arc<dyn UserRepository>;
-        Self::new_with_repo(config, repo)
+        // Prefer the new Diesel-backed adapter when the infrastructure
+        // `database` feature is enabled. The adapter implements both the
+        // new application port and the legacy repository trait so it can be
+        // used where the older trait object is still expected.
+        #[cfg(feature = "database")]
+        {
+            use crate::infrastructure::repositories::DieselUserRepository;
+            let repo: Arc<dyn UserRepository> =
+                Arc::new(DieselUserRepository::new(database.clone())) as Arc<dyn UserRepository>;
+            return Self::new_with_repo(config, repo);
+        }
+
+        // If database feature is not enabled, this code path should never
+        // be reached because Auth depends on the database. Make this
+        // explicit for clarity.
+        #[cfg(not(feature = "database"))]
+        compile_error!("auth feature requires database feature to be enabled");
+        // unreachable!() is removed as we are now checking if database is Some
     }
 
     /// メールアドレスとパスワードでユーザを認証し `User` を返す。
