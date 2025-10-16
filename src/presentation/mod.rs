@@ -1,14 +1,19 @@
-//! プレゼンテーション層 (Presentation Layer)
-//!
-//! HTTP リクエスト/レスポンス処理を担うレイヤーです。
-//! - HTTP Handlers: 薄いリクエスト/レスポンス変換層
-//! - Middleware: クロスカッティングな関心事（認証、CORS等）
-//! - OpenAPI: API スキーマ定義
-//!
-//! # 設計原則
-//! - ハンドラーは薄く保つ（ビジネスロジックはアプリケーション層に）
-//! - HTTP 詳細（ステータスコード、ヘッダー）のみ扱う
-//! - DTOのシリアライズ/デシリアライズのみ責務
+// Presentation layer facade for HTTP handlers, CLI, and other adapters
+// Re-export existing handlers and router for compatibility during migration
+// When not using the new restructure_presentation feature, expose existing
+// handlers/routes through the presentation::http facade to preserve imports.
+#[cfg(not(feature = "restructure_presentation"))]
+pub mod http {
+    pub use crate::handlers::*;
+    pub use crate::routes::*;
+}
+
+pub mod cli {
+    // Placeholder for future CLI presentation adapters
+}
+
+// Keep file small: specific modules live in `src/handlers` and `src/routes`
+// Presentation layer (facade) for HTTP handlers, CLI, and other adapters
 
 #[cfg(feature = "restructure_presentation")]
 pub mod http;

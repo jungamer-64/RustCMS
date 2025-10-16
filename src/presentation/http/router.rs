@@ -43,12 +43,18 @@ where
     Router::new()
         // User routes
         .route("/users/register", post(register_user))
-        .route("/users/{user_id}", get(get_user).put(update_user).delete(delete_user))
+        .route(
+            "/users/{user_id}",
+            get(get_user).put(update_user).delete(delete_user),
+        )
         // Post routes
         .route("/posts", post(create_post))
         .route("/posts/{slug}", get(get_post).put(update_post))
         // Comment routes
-        .route("/posts/{post_id}/comments", post(create_comment).get(list_comments))
+        .route(
+            "/posts/{post_id}/comments",
+            post(create_comment).get(list_comments),
+        )
         // Tag routes
         .route("/tags", post(create_tag))
         .route("/tags/{slug}", get(get_tag))
