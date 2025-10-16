@@ -17,12 +17,12 @@
     feature = "restructure_application"
 ))]
 mod tests {
-    use cms_backend::application::user::{CreateUserRequest, UserDto};
+    use axum::http::StatusCode;
     use cms_backend::application::post::{CreatePostRequest, PostDto};
+    use cms_backend::application::user::{CreateUserRequest, UserDto};
     use cms_backend::common::types::ApplicationError;
     use cms_backend::presentation::http::handlers;
     use cms_backend::presentation::http::responses::HttpErrorResponse;
-    use axum::http::StatusCode;
     use serde_json::json;
     use uuid::Uuid;
 
