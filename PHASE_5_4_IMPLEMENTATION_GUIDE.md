@@ -1,7 +1,7 @@
 # Phase 5-4 実装ガイド: Deprecation ヘッダー設計
 
-**対象**: API v1 エンドポイント (約50個)  
-**RFC**: RFC 8594 - HTTP Sunset Header  
+**対象**: API v1 エンドポイント (約50個)
+**RFC**: RFC 8594 - HTTP Sunset Header
 **有効期間**: 2025-01-17 ～ 2025-03-17 (2ヶ月)
 
 ---
