@@ -41,6 +41,63 @@
 - **モダンな非同期処理**: Tokio ベースの async ランタイム
 - **Docker サポート**: 本番対応のコンテナ化
 
+### 🚩 Feature Flags（機能フラグ）
+
+RustCMS は柔軟な feature flags で機能を選択的に有効化できます。
+
+#### 基本 Features
+
+| Feature | 説明 | デフォルト |
+|---------|------|-----------|
+| `auth` | Biscuit 認証、Argon2 パスワードハッシュ | ✅ |
+| `database` | PostgreSQL + Diesel ORM | ✅ |
+| `cache` | Redis + Moka インメモリキャッシュ | ✅ |
+| `search` | Tantivy 全文検索エンジン | ✅ |
+| `email` | SMTP メール送信 (lettre) | ✅ |
+| `compression` | HTTP レスポンス圧縮 | ✅ |
+| `monitoring` | Prometheus メトリクス | ❌ |
+
+#### 構造再編 Features (Phase 1-5)
+
+**現在進行中**: RustCMS はドメイン駆動設計（DDD）へ段階的に移行中です。
+
+| Feature | 対応 Phase | 説明 | 状態 |
+|---------|-----------|------|------|
+| `restructure_domain` | Phase 1-2 | Value Objects + Entities | 🔄 準備中 |
+| `restructure_application` | Phase 3 | Use Cases + Repositories | 🔄 準備中 |
+| `restructure_presentation` | Phase 4 | 新ハンドラー (`/api/v2`) | 🔄 準備中 |
+| `full_restructure` | Phase 5 | 上記すべてを有効化 | 🔄 準備中 |
+
+#### レガシー維持 Features（移行期のみ）
+
+| Feature | 説明 | 削除予定 |
+|---------|------|---------|
+| `legacy_handlers` | 旧ハンドラー (`/api/v1`) を維持 | Phase 5 完了後 |
+| `legacy_repositories` | 旧リポジトリを維持 | Phase 5 完了後 |
+
+#### ビルド例
+
+```bash
+# デフォルト構成（全機能有効）
+cargo build --release
+
+# 最小構成（認証とDB のみ）
+cargo build --release --no-default-features --features "auth,database"
+
+# 開発用（monitoring 有効）
+cargo build --features "development"
+
+# Phase 1-2 開発用（新ドメイン層を有効化）
+cargo build --features "default,restructure_domain"
+
+# 完全移行版（すべての新構造を有効化）
+cargo build --features "full_restructure"
+```
+
+詳細は [RESTRUCTURE_PLAN.md](RESTRUCTURE_PLAN.md) を参照してください。
+
+---
+
 ### API レスポンス統一 & コントラクトテスト
 
 全エンドポイントは共通構造 `ApiResponse<T>` を返します。
