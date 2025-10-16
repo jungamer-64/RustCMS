@@ -1,7 +1,7 @@
 # Phase 5-4/5-5 品質保証チェックリスト
 
-**目的**: Phase 5-4 (Deprecation) と Phase 5-5 (削除) の実装時に、品質・セキュリティ・パフォーマンスの基準を維持する  
-**作成日**: 2025-01-17  
+**目的**: Phase 5-4 (Deprecation) と Phase 5-5 (削除) の実装時に、品質・セキュリティ・パフォーマンスの基準を維持する
+**作成日**: 2025-01-17
 **対象**: 開発チーム・QA チーム・リリースマネージャー
 
 ---
@@ -298,11 +298,13 @@ curl http://staging.example.com/api/v2/health
 
 - [ ] すべての変更を `git commit` で確認
 - [ ] コミットメッセージ **conventional commits 準拠**
+
   ```
   ✨ feat: Add Deprecation headers to v1 endpoints
   🐛 fix: Correct pagination offset calculation
   📝 docs: Update migration guide with examples
   ```
+
 - [ ] PR テンプレート **完全入力**
 - [ ] コードレビュー **承認数 ≥ 2**
 
@@ -341,7 +343,7 @@ curl http://staging.example.com/api/v2/health
 # 確認項目
 - name: Build
   run: cargo build --all-features
-  
+
 - name: Clippy
   run: cargo clippy --all-targets --all-features -- -D warnings
 
@@ -459,6 +461,6 @@ curl http://staging.example.com/api/v2/health
 
 ---
 
-**最終更新**: 2025-01-17  
-**次回レビュー**: 2025-02-07  
+**最終更新**: 2025-01-17
+**次回レビュー**: 2025-02-07
 **所有者**: QA Team / Tech Lead
