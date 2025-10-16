@@ -11,7 +11,7 @@
 
 #[cfg(all(feature = "database", feature = "restructure_presentation"))]
 mod staging_integration_tests {
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use uuid::Uuid;
 
     /// Helper to check if staging services are available
@@ -33,18 +33,16 @@ mod staging_integration_tests {
         fn new() -> Self {
             Self {
                 base_url: "http://localhost:8080".to_string(),
-                db_url: std::env::var("DATABASE_URL")
-                    .unwrap_or_else(|_| {
-                        "postgresql://cms_user:cms_password_staging@localhost:5432/cms_staging"
-                            .to_string()
-                    }),
+                db_url: std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+                    "postgresql://cms_user:cms_password_staging@localhost:5432/cms_staging"
+                        .to_string()
+                }),
             }
         }
 
         /// Check if test environment is ready
         fn is_ready(&self) -> bool {
-            is_staging_available()
-                && std::env::var("SKIP_STAGING_TESTS").is_err()
+            is_staging_available() && std::env::var("SKIP_STAGING_TESTS").is_err()
         }
     }
 
@@ -58,7 +56,10 @@ mod staging_integration_tests {
 
         // Verify environment variables
         assert!(!setup.base_url.is_empty(), "Base URL should be configured");
-        assert!(!setup.db_url.is_empty(), "Database URL should be configured");
+        assert!(
+            !setup.db_url.is_empty(),
+            "Database URL should be configured"
+        );
 
         // Verify services are reachable
         if setup.is_ready() {
@@ -152,7 +153,10 @@ mod staging_integration_tests {
             ("Database URL configured", !setup.db_url.is_empty()),
             ("Base URL configured", !setup.base_url.is_empty()),
             ("PostgreSQL 15+ available", is_staging_available()),
-            ("Environment variables set", std::env::var("DATABASE_URL").is_ok()),
+            (
+                "Environment variables set",
+                std::env::var("DATABASE_URL").is_ok(),
+            ),
         ];
 
         println!("\n📋 Staging Deployment Readiness:");
@@ -251,6 +255,8 @@ mod staging_integration_tests {
 mod no_tests {
     #[test]
     fn staging_tests_require_features() {
-        println!("⚠️  Staging integration tests require 'database' and 'restructure_presentation' features");
+        println!(
+            "⚠️  Staging integration tests require 'database' and 'restructure_presentation' features"
+        );
     }
 }

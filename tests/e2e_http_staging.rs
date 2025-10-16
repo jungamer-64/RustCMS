@@ -15,12 +15,11 @@
 //! 3. Run migrations: `cargo run --bin cms-migrate -- migrate --no-seed`
 
 #![cfg(all(feature = "database", feature = "restructure_presentation"))]
-
 // Re-export in case features are not enabled
 #![allow(dead_code)]
 
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::time::Duration;
 
 const BASE_URL: &str = "http://localhost:3000";
@@ -86,16 +85,10 @@ async fn test_http_get_health_endpoint() {
     match response {
         Ok(resp) => {
             // Server is running; verify status
-            println!(
-                "✓ Server is running (status: {})",
-                resp.status()
-            );
+            println!("✓ Server is running (status: {})", resp.status());
         }
         Err(e) => {
-            eprintln!(
-                "✗ Server not available at {}: {}",
-                setup.base_url, e
-            );
+            eprintln!("✗ Server not available at {}: {}", setup.base_url, e);
             eprintln!("  Start Staging: docker-compose -f docker-compose.staging.yml up -d");
         }
     }
@@ -142,10 +135,7 @@ async fn test_http_get_user_not_found() {
     let fake_user_id = "00000000-0000-0000-0000-000000000000";
     let response = setup
         .client
-        .get(&format!(
-            "{}/api/v2/users/{}",
-            setup.base_url, fake_user_id
-        ))
+        .get(&format!("{}/api/v2/users/{}", setup.base_url, fake_user_id))
         .send()
         .await
         .expect("Failed to send GET /api/v2/users/:id request");
@@ -161,7 +151,10 @@ async fn test_http_get_user_not_found() {
         .await
         .expect("Failed to parse JSON error response");
 
-    assert!(body.get("error").is_some(), "Error response should contain 'error' field");
+    assert!(
+        body.get("error").is_some(),
+        "Error response should contain 'error' field"
+    );
     println!("✓ GET /api/v2/users/{{id}} returned 404: {}", body);
 }
 
@@ -193,7 +186,10 @@ async fn test_http_post_user_registration() {
 
     match response.status() {
         StatusCode::CREATED => {
-            let body: Value = response.json().await.expect("Failed to parse JSON response");
+            let body: Value = response
+                .json()
+                .await
+                .expect("Failed to parse JSON response");
             assert!(
                 body.get("id").is_some(),
                 "Response should contain 'id' field"
@@ -244,7 +240,10 @@ async fn test_http_post_user_invalid_email() {
         body.get("error").is_some(),
         "Error response should contain 'error' field"
     );
-    println!("✓ POST /api/v2/users validation rejected invalid email: {}", body);
+    println!(
+        "✓ POST /api/v2/users validation rejected invalid email: {}",
+        body
+    );
 }
 
 /// Test 6: POST /api/v2/posts (create post)
@@ -272,8 +271,14 @@ async fn test_http_post_create_post() {
 
     match response.status() {
         StatusCode::CREATED => {
-            let body: Value = response.json().await.expect("Failed to parse JSON response");
-            assert!(body.get("id").is_some(), "Response should contain 'id' field");
+            let body: Value = response
+                .json()
+                .await
+                .expect("Failed to parse JSON response");
+            assert!(
+                body.get("id").is_some(),
+                "Response should contain 'id' field"
+            );
             println!("✓ POST /api/v2/posts created post: {}", body);
         }
         StatusCode::BAD_REQUEST => {
@@ -398,10 +403,7 @@ async fn test_http_request_timeout() {
 
     match result {
         Ok(resp) => {
-            println!(
-                "✓ Request completed within timeout: {}",
-                resp.status()
-            );
+            println!("✓ Request completed within timeout: {}", resp.status());
         }
         Err(e) if e.is_timeout() => {
             println!("✓ Timeout error detected as expected");
@@ -461,11 +463,7 @@ async fn test_http_response_time_measurement() {
     let setup = HttpTestSetup::new();
     setup.wait_for_server(10).await;
 
-    let endpoints = vec![
-        "/api/v2/tags",
-        "/api/v2/categories",
-        "/api/v2/posts",
-    ];
+    let endpoints = vec!["/api/v2/tags", "/api/v2/categories", "/api/v2/posts"];
 
     for endpoint in endpoints {
         let start = std::time::Instant::now();
@@ -590,8 +588,7 @@ async fn test_http_workflow_user_and_tag_creation() {
         .await
         .expect("Failed to create tag");
 
-    if tag_response.status() != StatusCode::CREATED
-        && tag_response.status() != StatusCode::CONFLICT
+    if tag_response.status() != StatusCode::CREATED && tag_response.status() != StatusCode::CONFLICT
     {
         eprintln!("Tag creation warning: {}", tag_response.status());
     }
