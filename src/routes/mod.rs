@@ -169,40 +169,62 @@ pub fn create_router() -> Router<AppState> {
     #[cfg(feature = "auth")]
     {
         use crate::middleware::auth::auth_middleware;
+        use crate::middleware::deprecation::add_deprecation_headers;
         use axum::middleware;
-        // 公開authルート（register/login/refresh）は認証不要
-        public = public.nest("/api/v1/auth", auth_public_routes());
-        // 保護authルート（logout/profile）のみ認証レイヤを適用
-        let auth_protected = auth_protected_routes().layer(middleware::from_fn(auth_middleware));
+        // 公開authルート（register/login/refresh）は認証不要 + deprecation
+        public = public.nest(
+            "/api/v1/auth",
+            auth_public_routes().layer(middleware::from_fn(add_deprecation_headers)),
+        );
+        // 保護authルート（logout/profile）のみ認証レイヤを適用 + deprecation
+        let auth_protected = auth_protected_routes()
+            .layer(middleware::from_fn(auth_middleware))
+            .layer(middleware::from_fn(add_deprecation_headers));
         public = public.nest("/api/v1/auth", auth_protected);
     }
 
     #[cfg(feature = "database")]
     {
-        // Protect posts and users with auth middleware
+        // Phase 5-4: v1 エンドポイントに Deprecation ヘッダーを追加（RFC 8594）
+        use crate::middleware::deprecation::add_deprecation_headers;
+        use axum::middleware;
+
+        // Protect posts and users with auth middleware + deprecation headers
         {
             use crate::middleware::auth::auth_middleware;
-            use axum::middleware;
-            let posts = post_routes().layer(middleware::from_fn(auth_middleware));
-            let users = user_routes().layer(middleware::from_fn(auth_middleware));
+            let posts = post_routes()
+                .layer(middleware::from_fn(auth_middleware))
+                .layer(middleware::from_fn(add_deprecation_headers));
+            let users = user_routes()
+                .layer(middleware::from_fn(auth_middleware))
+                .layer(middleware::from_fn(add_deprecation_headers));
             public = public.nest("/api/v1/posts", posts);
             public = public.nest("/api/v1/users", users);
         }
-        // Admin-only management endpoints (simple token auth in handlers)
-        public = public.nest("/api/v1/admin", admin_routes());
-        // API Key 管理 (要 auth feature)
+        // Admin-only management endpoints (simple token auth in handlers) + deprecation
+        public = public.nest(
+            "/api/v1/admin",
+            admin_routes().layer(middleware::from_fn(add_deprecation_headers)),
+        );
+        // API Key 管理 (要 auth feature) + deprecation
         #[cfg(feature = "auth")]
         {
             use crate::middleware::auth::auth_middleware;
-            use axum::middleware;
-            let api_keys = api_key_routes().layer(middleware::from_fn(auth_middleware));
+            let api_keys = api_key_routes()
+                .layer(middleware::from_fn(auth_middleware))
+                .layer(middleware::from_fn(add_deprecation_headers));
             public = public.nest("/api/v1/api-keys", api_keys);
         }
     }
 
     #[cfg(feature = "search")]
     {
-        public = public.nest("/api/v1/search", search_routes());
+        use crate::middleware::deprecation::add_deprecation_headers;
+        use axum::middleware;
+        public = public.nest(
+            "/api/v1/search",
+            search_routes().layer(middleware::from_fn(add_deprecation_headers)),
+        );
     }
 
     // === API v2 新ルーティング (Phase 5) ===
