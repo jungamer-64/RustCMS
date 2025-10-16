@@ -1,7 +1,7 @@
 # Phase 5-3: Staging デプロイ & Canary Release 準備
 
-**開始日**: 2025-01-17  
-**見積**: 1-2週間  
+**開始日**: 2025-01-17
+**見積**: 1-2週間
 **目標**: Staging環境での実運用テスト + Canary release設定完成
 
 ---
@@ -16,12 +16,14 @@ cargo add testcontainers --dev --version "0.15"
 ```
 
 **実装ファイル**:
+
 - `tests/common/postgres_helper.rs` - PostgreSQL コンテナ管理
 - `tests/common/http_client.rs` - HTTP テストクライアント
 - `tests/common/test_app.rs` - Axum test server
 - `tests/e2e_api_v2_with_db.rs` - 実DB統合テスト
 
 **利点**:
+
 - 実データベース環境でのテスト
 - テストデータの自動プリペア
 - マイグレーション自動適用
@@ -217,6 +219,7 @@ cargo test --workspace --no-fail-fast --all-features
 ## Phase 5-4への繋ぎ
 
 **次フェーズ実装**:
+
 - API v1 Deprecation ヘッダー実装
 - レガシーコード削除計画
 - 本番デプロイシーケンス
