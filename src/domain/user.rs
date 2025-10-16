@@ -1,0 +1,480 @@
+//! ユーザードメインモデル (User Domain Model)
+//!
+//! Entity + Value Objects 統合パターン（監査推奨）
+//!
+//! このファイルには以下が含まれます：
+//! - Value Objects: UserId, Email, Username
+//! - Entity: User
+//! - ビジネスルール実装
+
+use serde::{Deserialize, Serialize};
+use std::fmt;
+use uuid::Uuid;
+
+// ============================================================================
+// Value Objects
+// ============================================================================
+
+/// ユーザーID（NewType Pattern）
+///
+/// # 不変条件
+/// - 内部のUUIDは常に有効
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct UserId(Uuid);
+
+impl UserId {
+    /// 新しいユーザーIDを生成
+    #[must_use]
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+
+    /// 既存のUUIDからユーザーIDを作成
+    #[must_use]
+    pub const fn from_uuid(id: Uuid) -> Self {
+        Self(id)
+    }
+
+    /// 内部のUUIDへの参照を取得
+    #[must_use]
+    pub const fn as_uuid(&self) -> &Uuid {
+        &self.0
+    }
+
+    /// UUIDを消費して取得
+    #[must_use]
+    pub const fn into_uuid(self) -> Uuid {
+        self.0
+    }
+}
+
+impl Default for UserId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl fmt::Display for UserId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<Uuid> for UserId {
+    fn from(id: Uuid) -> Self {
+        Self(id)
+    }
+}
+
+impl From<UserId> for Uuid {
+    fn from(id: UserId) -> Self {
+        id.0
+    }
+}
+
+/// Email（検証済み）
+///
+/// # 不変条件
+/// - 空でない
+/// - '@'を含む
+/// - 長さが254文字以内（RFC 5321）
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Email(String);
+
+impl Email {
+    /// メールアドレスを検証して作成
+    ///
+    /// # Errors
+    ///
+    /// 以下の場合にエラーを返します：
+    /// - 空の文字列
+    /// - '@'を含まない
+    /// - 長さが254文字を超える
+    pub fn new(email: String) -> Result<Self, EmailError> {
+        if email.is_empty() {
+            return Err(EmailError::Empty);
+        }
+        if !email.contains('@') {
+            return Err(EmailError::MissingAtSign);
+        }
+        if email.len() > 254 {
+            return Err(EmailError::TooLong);
+        }
+        Ok(Self(email))
+    }
+
+    /// 内部の文字列への参照を取得
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// 文字列を消費して取得
+    #[must_use]
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl fmt::Display for Email {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// Email検証エラー
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum EmailError {
+    #[error("Email cannot be empty")]
+    Empty,
+    #[error("Email must contain '@' sign")]
+    MissingAtSign,
+    #[error("Email is too long (max 254 characters)")]
+    TooLong,
+}
+
+/// Username（検証済み）
+///
+/// # 不変条件
+/// - 3〜30文字
+/// - ASCII英数字とアンダースコアのみ
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Username(String);
+
+impl Username {
+    /// ユーザー名を検証して作成
+    ///
+    /// # Errors
+    ///
+    /// 以下の場合にエラーを返します：
+    /// - 3文字未満
+    /// - 30文字を超える
+    /// - 無効な文字を含む
+    pub fn new(username: String) -> Result<Self, UsernameError> {
+        if username.len() < 3 {
+            return Err(UsernameError::TooShort);
+        }
+        if username.len() > 30 {
+            return Err(UsernameError::TooLong);
+        }
+        if !username
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            return Err(UsernameError::InvalidCharacters);
+        }
+        Ok(Self(username))
+    }
+
+    /// 内部の文字列への参照を取得
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// 文字列を消費して取得
+    #[must_use]
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl fmt::Display for Username {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// Username検証エラー
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum UsernameError {
+    #[error("Username is too short (minimum 3 characters)")]
+    TooShort,
+    #[error("Username is too long (maximum 30 characters)")]
+    TooLong,
+    #[error("Username contains invalid characters (only alphanumeric and underscore allowed)")]
+    InvalidCharacters,
+}
+
+// ============================================================================
+// Entity
+// ============================================================================
+
+/// ユーザーエンティティ（ドメインモデル）
+///
+/// ビジネスルールとライフサイクルメソッドを含みます。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct User {
+    id: UserId,
+    username: Username,
+    email: Email,
+    is_active: bool,
+}
+
+impl User {
+    /// 新しいユーザーを作成（コンストラクタ）
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use crate::domain::user::{User, Username, Email};
+    ///
+    /// let username = Username::new("john_doe".to_string()).unwrap();
+    /// let email = Email::new("john@example.com".to_string()).unwrap();
+    /// let user = User::new(username, email);
+    /// ```
+    #[must_use]
+    pub fn new(username: Username, email: Email) -> Self {
+        Self {
+            id: UserId::new(),
+            username,
+            email,
+            is_active: true,
+        }
+    }
+
+    /// 既存のデータからユーザーを復元（リポジトリ用）
+    #[must_use]
+    pub fn restore(id: UserId, username: Username, email: Email, is_active: bool) -> Self {
+        Self {
+            id,
+            username,
+            email,
+            is_active,
+        }
+    }
+
+    // ========================================================================
+    // ビジネスルール
+    // ========================================================================
+
+    /// ユーザーを有効化
+    ///
+    /// ビジネスルール: 無効化されたユーザーを再度有効化できる
+    pub fn activate(&mut self) {
+        self.is_active = true;
+    }
+
+    /// ユーザーを無効化
+    ///
+    /// ビジネスルール: アクティブなユーザーを無効化できる
+    pub fn deactivate(&mut self) {
+        self.is_active = false;
+    }
+
+    /// メールアドレスを変更
+    ///
+    /// ビジネスルール: 検証済みのメールアドレスのみ設定可能
+    pub fn change_email(&mut self, new_email: Email) {
+        self.email = new_email;
+    }
+
+    /// ユーザー名を変更
+    ///
+    /// ビジネスルール: 検証済みのユーザー名のみ設定可能
+    pub fn change_username(&mut self, new_username: Username) {
+        self.username = new_username;
+    }
+
+    // ========================================================================
+    // ゲッター
+    // ========================================================================
+
+    #[must_use]
+    pub const fn id(&self) -> UserId {
+        self.id
+    }
+
+    #[must_use]
+    pub const fn username(&self) -> &Username {
+        &self.username
+    }
+
+    #[must_use]
+    pub const fn email(&self) -> &Email {
+        &self.email
+    }
+
+    #[must_use]
+    pub const fn is_active(&self) -> bool {
+        self.is_active
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Value Objects Tests
+    mod value_objects {
+        use super::*;
+
+        mod user_id {
+            use super::*;
+
+            #[test]
+            fn test_new_generates_unique_ids() {
+                let id1 = UserId::new();
+                let id2 = UserId::new();
+                assert_ne!(id1, id2);
+            }
+
+            #[test]
+            fn test_from_uuid() {
+                let uuid = Uuid::new_v4();
+                let user_id = UserId::from_uuid(uuid);
+                assert_eq!(user_id.as_uuid(), &uuid);
+            }
+
+            #[test]
+            fn test_display() {
+                let id = UserId::new();
+                let display = format!("{id}");
+                assert!(!display.is_empty());
+            }
+        }
+
+        mod email {
+            use super::*;
+
+            #[test]
+            fn test_valid_email() {
+                let email = Email::new("test@example.com".to_string()).unwrap();
+                assert_eq!(email.as_str(), "test@example.com");
+            }
+
+            #[test]
+            fn test_empty_email_fails() {
+                let result = Email::new(String::new());
+                assert!(matches!(result, Err(EmailError::Empty)));
+            }
+
+            #[test]
+            fn test_missing_at_sign_fails() {
+                let result = Email::new("invalid-email".to_string());
+                assert!(matches!(result, Err(EmailError::MissingAtSign)));
+            }
+
+            #[test]
+            fn test_too_long_email_fails() {
+                let long_email = "a".repeat(250) + "@example.com";
+                let result = Email::new(long_email);
+                assert!(matches!(result, Err(EmailError::TooLong)));
+            }
+
+            #[test]
+            fn test_display() {
+                let email = Email::new("test@example.com".to_string()).unwrap();
+                assert_eq!(format!("{email}"), "test@example.com");
+            }
+        }
+
+        mod username {
+            use super::*;
+
+            #[test]
+            fn test_valid_username() {
+                let username = Username::new("john_doe".to_string()).unwrap();
+                assert_eq!(username.as_str(), "john_doe");
+            }
+
+            #[test]
+            fn test_too_short_username_fails() {
+                let result = Username::new("ab".to_string());
+                assert!(matches!(result, Err(UsernameError::TooShort)));
+            }
+
+            #[test]
+            fn test_too_long_username_fails() {
+                let long_name = "a".repeat(31);
+                let result = Username::new(long_name);
+                assert!(matches!(result, Err(UsernameError::TooLong)));
+            }
+
+            #[test]
+            fn test_invalid_characters_fail() {
+                let result = Username::new("john@doe".to_string());
+                assert!(matches!(result, Err(UsernameError::InvalidCharacters)));
+            }
+
+            #[test]
+            fn test_alphanumeric_and_underscore_allowed() {
+                let username = Username::new("user_123".to_string()).unwrap();
+                assert_eq!(username.as_str(), "user_123");
+            }
+        }
+    }
+
+    // Entity Tests
+    mod entity {
+        use super::*;
+
+        #[test]
+        fn test_new_user() {
+            let username = Username::new("testuser".to_string()).unwrap();
+            let email = Email::new("test@example.com".to_string()).unwrap();
+            let user = User::new(username, email);
+
+            assert!(user.is_active());
+            assert_eq!(user.username().as_str(), "testuser");
+            assert_eq!(user.email().as_str(), "test@example.com");
+        }
+
+        #[test]
+        fn test_activate_deactivate() {
+            let username = Username::new("testuser".to_string()).unwrap();
+            let email = Email::new("test@example.com".to_string()).unwrap();
+            let mut user = User::new(username, email);
+
+            assert!(user.is_active());
+
+            user.deactivate();
+            assert!(!user.is_active());
+
+            user.activate();
+            assert!(user.is_active());
+        }
+
+        #[test]
+        fn test_change_email() {
+            let username = Username::new("testuser".to_string()).unwrap();
+            let email = Email::new("old@example.com".to_string()).unwrap();
+            let mut user = User::new(username, email);
+
+            let new_email = Email::new("new@example.com".to_string()).unwrap();
+            user.change_email(new_email);
+
+            assert_eq!(user.email().as_str(), "new@example.com");
+        }
+
+        #[test]
+        fn test_change_username() {
+            let username = Username::new("oldname".to_string()).unwrap();
+            let email = Email::new("test@example.com".to_string()).unwrap();
+            let mut user = User::new(username, email);
+
+            let new_username = Username::new("newname".to_string()).unwrap();
+            user.change_username(new_username);
+
+            assert_eq!(user.username().as_str(), "newname");
+        }
+
+        #[test]
+        fn test_restore() {
+            let id = UserId::new();
+            let username = Username::new("testuser".to_string()).unwrap();
+            let email = Email::new("test@example.com".to_string()).unwrap();
+            let user = User::restore(id, username, email, false);
+
+            assert_eq!(user.id(), id);
+            assert!(!user.is_active());
+        }
+    }
+}
