@@ -1,0 +1,57 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: cms-postgres-staging
+    environment:
+      POSTGRES_USER: cms_user
+      POSTGRES_PASSWORD: cms_password_staging
+      POSTGRES_DB: cms_staging
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_staging_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cms_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cms-staging-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: cms-redis-staging
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_staging_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cms-staging-network
+    command: redis-server --appendonly yes
+
+  # Optional: Adminer for database management UI
+  adminer:
+    image: adminer:latest
+    container_name: cms-adminer-staging
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cms-staging-network
+
+volumes:
+  postgres_staging_data:
+  redis_staging_data:
+
+networks:
+  cms-staging-network:
+    driver: bridge
