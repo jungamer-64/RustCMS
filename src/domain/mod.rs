@@ -1,5 +1,29 @@
-// Re-export surface for domain-level types and models
-// This file was added as part of an incremental restructure step. Do NOT move files yet.
+//! ドメイン層 (Domain Layer)
+//!
+//! ビジネスロジックの中核を担うレイヤーです。
+//! - Entity: ビジネスオブジェクトと不変条件
+//! - Value Objects: 検証済みの値型
+//! - Domain Services: 複数エンティティにまたがるロジック
+//! - Domain Events: ドメインイベント定義
+
+// ============================================================================
+// Phase 1-2: 新しいドメイン層構造（監査済み）
+// ============================================================================
+
+#[cfg(feature = "restructure_domain")]
+pub mod services;
+
+// Phase 1-2 で実装予定
+// #[cfg(feature = "restructure_domain")]
+// pub mod user;    // Entity + Value Objects 統合
+// #[cfg(feature = "restructure_domain")]
+// pub mod post;    // Entity + Value Objects 統合
+// #[cfg(feature = "restructure_domain")]
+// pub mod events;  // Domain Events
+
+// ============================================================================
+// レガシー構造（既存コードとの並行稼働）
+// ============================================================================
 
 #[cfg(feature = "database")]
 pub mod models {
@@ -19,6 +43,5 @@ pub mod value_objects;
 /// Domain prelude: common types that application code may import during
 /// the incremental migration to the domain layer.
 pub mod prelude {
-
     pub use super::value_objects::*;
 }

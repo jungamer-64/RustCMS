@@ -39,6 +39,12 @@ pub mod application;
 pub mod domain;
 pub mod infrastructure;
 
+// Phase 1-4: New restructure modules (監査済み構造)
+#[cfg(feature = "restructure_presentation")]
+pub mod web;
+
+pub mod common;
+
 // Conditional feature modules for scalability
 #[cfg(feature = "database")]
 pub mod database;
