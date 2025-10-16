@@ -23,6 +23,7 @@ use uuid::Uuid;
 // ============================================================================
 
 /// Diesel User モデル（DB スキーマから自動生成）
+#[derive(diesel::Queryable, diesel::Selectable, diesel::Identifiable, Debug, Clone)]
 #[diesel(table_name = crate::database::schema::users)]
 pub struct DbUser {
     pub id: Uuid,
@@ -40,6 +41,7 @@ pub struct DbUser {
 }
 
 /// Diesel User のための新規挿入用構造体
+#[derive(diesel::Insertable, Debug, Clone)]
 #[diesel(table_name = crate::database::schema::users)]
 pub struct NewDbUser {
     pub id: Uuid,
@@ -82,6 +84,7 @@ impl DbUser {
 // ============================================================================
 
 /// Diesel Post モデル（DB スキーマ）
+#[derive(diesel::Queryable, diesel::Selectable, diesel::Identifiable, Debug, Clone)]
 #[diesel(table_name = crate::database::schema::posts)]
 pub struct DbPost {
     pub id: Uuid,
@@ -98,6 +101,7 @@ pub struct DbPost {
 }
 
 /// Diesel Post 挿入モデル
+#[derive(diesel::Insertable, Debug, Clone)]
 #[diesel(table_name = crate::database::schema::posts)]
 pub struct NewDbPost {
     pub id: Uuid,
