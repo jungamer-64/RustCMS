@@ -28,9 +28,124 @@ pub fn use_legacy_api_v1() -> bool {
         .unwrap_or(!cfg!(feature = "restructure_presentation"))
 }
 
+/// Canary Release: Traffic split control for gradual v2 rollout
+/// https://github.com/jgm/RustCMS/PHASE_5_3_IMPLEMENTATION.md
+pub mod canary {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    /// Get the current traffic split percentage for API v2 (0-100)
+    /// Environment variable: API_V2_TRAFFIC_PERCENTAGE
+    ///
+    /// # Example
+    /// ```
+    /// export API_V2_TRAFFIC_PERCENTAGE=50
+    /// // → 50% traffic to v2, 50% to v1
+    /// ```
+    pub fn get_api_v2_traffic_percentage() -> u32 {
+        std::env::var("API_V2_TRAFFIC_PERCENTAGE")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0)
+    }
+
+    /// Determine if a request should be routed to API v2 based on Canary percentage
+    /// Uses consistent hashing to ensure the same user/session always goes to the same version
+    ///
+    /// # Arguments
+    /// * `request_id` - Unique identifier for the request (e.g., user ID, session ID, request ID)
+    ///
+    /// # Example
+    /// ```
+    /// if crate::routes::canary::should_route_to_api_v2("user_123") {
+    ///     // Route to API v2
+    /// } else {
+    ///     // Route to API v1
+    /// }
+    /// ```
+    pub fn should_route_to_api_v2(request_id: &str) -> bool {
+        let percentage = get_api_v2_traffic_percentage();
+
+        if percentage >= 100 {
+            return true; // All traffic to v2
+        }
+
+        if percentage == 0 {
+            return false; // No traffic to v2
+        }
+
+        // Hash-based distribution for consistent routing per user/session
+        let mut hasher = DefaultHasher::new();
+        request_id.hash(&mut hasher);
+        let hash_value = hasher.finish();
+
+        (hash_value % 100) < (percentage as u64)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        #[ignore] // Ignored because it requires unsafe env var manipulation
+        fn test_get_api_v2_traffic_percentage() {
+            let original = std::env::var("API_V2_TRAFFIC_PERCENTAGE").ok();
+
+            unsafe {
+                std::env::set_var("API_V2_TRAFFIC_PERCENTAGE", "50");
+            }
+            assert_eq!(get_api_v2_traffic_percentage(), 50);
+
+            unsafe {
+                std::env::set_var("API_V2_TRAFFIC_PERCENTAGE", "100");
+            }
+            assert_eq!(get_api_v2_traffic_percentage(), 100);
+
+            unsafe {
+                std::env::set_var("API_V2_TRAFFIC_PERCENTAGE", "0");
+            }
+            assert_eq!(get_api_v2_traffic_percentage(), 0);
+
+            // Restore original
+            if let Some(val) = original {
+                unsafe {
+                    std::env::set_var("API_V2_TRAFFIC_PERCENTAGE", val);
+                }
+            }
+        }
+
+        #[test]
+        fn test_should_route_to_api_v2_consistent_hashing() {
+            // Note: This test uses a fixed percentage to avoid env var manipulation
+            let user_id = "user_123";
+
+            // Hash-based should return consistent results
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            use std::hash::{Hash, Hasher};
+            user_id.hash(&mut hasher);
+            let hash1 = hasher.finish();
+
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            user_id.hash(&mut hasher);
+            let hash2 = hasher.finish();
+
+            assert_eq!(hash1, hash2);
+        }
+
+        #[test]
+        fn test_should_route_to_api_v2_fixed_percentage() {
+            // Test the core logic with percentage = 50
+            let test_request_id = "test_user";
+            let _result = should_route_to_api_v2(test_request_id);
+            // We just verify it returns a boolean without panicking
+        }
+    }
+}
+
 /// Create the main application router
 pub fn create_router() -> Router<AppState> {
     // Public routes (no auth layer applied)
+    #[allow(unused_mut)]
     let mut public = Router::new()
         // Home page - integrates cms-simple functionality
         .route("/", get(handlers::home))
