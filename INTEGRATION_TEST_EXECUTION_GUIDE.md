@@ -1,7 +1,7 @@
 # RustCMS 統合テスト実行ガイド
 
-**目的**: Phase 5-4 (Deprecation) と Phase 5-5 (v1 削除) の実装時に、すべてのテストを一元管理し実行する  
-**対象者**: 開発チーム・QA チーム・CI/CD 管理者  
+**目的**: Phase 5-4 (Deprecation) と Phase 5-5 (v1 削除) の実装時に、すべてのテストを一元管理し実行する
+**対象者**: 開発チーム・QA チーム・CI/CD 管理者
 **作成日**: 2025-01-17
 
 ---
@@ -388,7 +388,7 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     services:
       postgres:
         image: postgres:16
@@ -399,7 +399,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      
+
       redis:
         image: redis:7
         options: >-
@@ -407,42 +407,42 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-      
+
       - name: Build
         run: cargo build --all-features
-      
+
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
-      
+
       - name: Format Check
         run: cargo fmt -- --check
-      
+
       - name: Domain Layer Tests
         run: cargo test --lib domain --all-features
-      
+
       - name: Application Layer Tests
         run: cargo test --lib application --all-features
-      
+
       - name: Infrastructure Tests
         run: cargo test --test '*' -- --test-threads=1
         env:
           DATABASE_URL: postgres://postgres:password@localhost:5432/postgres
           REDIS_URL: redis://localhost:6379
-      
+
       - name: E2E Tests
         run: cargo test --test e2e_test -- --test-threads=1 --nocapture
-      
+
       - name: Benchmarks
         run: cargo bench --bench baseline
-      
+
       - name: Coverage
         run: cargo tarpaulin --fail-under 90 --workspace
 ```
@@ -551,6 +551,6 @@ Performance: avg 12.5ms (< 50ms クリア) ✅
 
 ---
 
-**最終更新**: 2025-01-17  
-**次回更新**: 2025-02-07 (Phase 5-5 開始)  
+**最終更新**: 2025-01-17
+**次回更新**: 2025-02-07 (Phase 5-5 開始)
 **所有者**: QA Team
