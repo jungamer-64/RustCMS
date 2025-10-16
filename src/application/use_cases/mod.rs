@@ -5,4 +5,3 @@ pub mod update_user;
 pub use create_user::CreateUserUseCase;
 pub use get_user_by_id::GetUserByIdUseCase;
 pub use update_user::UpdateUserUseCase;
-

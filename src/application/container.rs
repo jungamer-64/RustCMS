@@ -6,12 +6,9 @@
 use std::sync::Arc;
 
 #[cfg(feature = "database")]
-use crate::application::use_cases::{
-    CreateUserUseCase, GetUserByIdUseCase, UpdateUserUseCase,
-};
+use crate::application::use_cases::{CreateUserUseCase, GetUserByIdUseCase, UpdateUserUseCase};
 #[cfg(feature = "database")]
 use crate::infrastructure::repositories::DieselUserRepository;
-
 
 /// Simple app-level container that holds concrete repository adapters and
 /// constructed use-case instances to be shared across handlers and background

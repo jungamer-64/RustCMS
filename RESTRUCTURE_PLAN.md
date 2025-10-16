@@ -81,11 +81,140 @@ impl UnitOfWork {
 
 #### 4. パフォーマンスベンチマーク基準 (+5% 以内)
 
-**対応**:
+**対応**: Migration 前後で `cargo bench` を実行し、性能劣化を検証します。
 
-- Migration 前後で `cargo bench` 実行
-- ホットパスの性能を測定
-- 許容範囲: +5% オーバーヘッド
+##### 測定対象エンドポイント（10個）
+
+| エンドポイント | メソッド | 説明 | 目標レイテンシ (p95) |
+|-------------|---------|------|---------------------|
+| `/api/v1/users/:id` | GET | ユーザー詳細取得 | < 50ms |
+| `/api/v1/users` | POST | ユーザー登録 | < 150ms |
+| `/api/v1/posts/:id` | GET | 投稿詳細取得 | < 70ms |
+| `/api/v1/posts` | POST | 投稿作成 | < 200ms |
+| `/api/v1/posts` | GET | 投稿一覧取得 (ページネーション) | < 100ms |
+| `/api/v1/comments` | POST | コメント追加 | < 120ms |
+| `/api/v1/search` | GET | 全文検索 | < 300ms |
+| `/api/v1/auth/login` | POST | ログイン | < 200ms |
+| `/api/v1/tags` | GET | タグ一覧 | < 50ms |
+| `/api/v1/analytics/summary` | GET | 集計クエリ | < 500ms |
+
+##### ベンチマーク実行手順
+
+```bash
+# === Phase 0: 基準測定 (構造再編開始前) ===
+
+# 1. 現在の main ブランチで測定
+git checkout main
+cargo build --release --features "database,cache,search,auth"
+
+# 2. ベンチマーク実行 (Criterion.rs)
+cargo bench --bench api_benchmarks -- --save-baseline before
+
+# 3. 結果の保存
+cp target/criterion/*/base/estimates.json benches/baseline_before.json
+
+# 4. メモリ使用量の測定
+valgrind --tool=massif --massif-out-file=massif.out.before \
+  cargo run --release --bin cms-server
+
+# 5. データベースクエリ数の記録
+psql -U postgres -d cms_test -c "\
+  SELECT query, calls, total_time, mean_time \
+  FROM pg_stat_statements \
+  ORDER BY total_time DESC LIMIT 20;" \
+  > benches/db_queries_before.txt
+```
+
+##### Phase 別のベンチマーク再実行
+
+**Phase 1-2 完了時**:
+
+```bash
+cargo bench --bench api_benchmarks -- --baseline before
+# 期待: 劣化 ±2% 以内 (Value Objects/Entities は影響小)
+```
+
+**Phase 3 完了時**:
+
+```bash
+cargo bench --bench api_benchmarks -- --baseline before
+# 期待: 劣化 +3% 以内 (Repository 抽象化コスト)
+```
+
+**Phase 4 完了時**:
+
+```bash
+cargo bench --bench api_benchmarks -- --baseline before
+# 期待: 劣化 +5% 以内 (ハンドラー再実装コスト)
+```
+
+**Phase 5 完了時**:
+
+```bash
+cargo bench --bench api_benchmarks -- --baseline before
+# 期待: 改善 -2% または同等 (旧コード削除による最適化)
+```
+
+##### 許容範囲と対応
+
+| 劣化度 | 判定 | 対応 |
+|-------|------|-----|
+| **0~2%** | ✅ 優秀 | そのまま継続 |
+| **2~5%** | ⚠️ 許容範囲 | 原因を記録、Phase 5 で最適化 |
+| **5~10%** | 🔶 要調査 | ホットパスを特定し、最適化実施 |
+| **>10%** | 🚨 Critical | ロールバック検討、設計見直し |
+
+##### ベンチマーク結果の記録
+
+**benches/results.md** に各 Phase の結果を記録:
+
+```markdown
+## Phase 0: 基準測定 (2025-10-16)
+
+| エンドポイント | p50 | p95 | p99 |
+|-------------|-----|-----|-----|
+| GET /users/:id | 23ms | 45ms | 78ms |
+| POST /users | 89ms | 142ms | 210ms |
+| ...
+
+## Phase 3 完了 (2025-11-20)
+
+| エンドポイント | p50 | p95 | p99 | 変化率 |
+|-------------|-----|-----|-----|-------|
+| GET /users/:id | 24ms | 47ms | 81ms | +4.4% |
+| POST /users | 92ms | 148ms | 215ms | +4.2% |
+| ...
+
+**判定**: ⚠️ 許容範囲内 (+4.2% 平均)。Phase 5 で最適化予定。
+```
+
+##### メモリプロファイリング
+
+```bash
+# Phase 0
+cargo build --release
+valgrind --tool=massif --massif-out-file=massif.out.phase0 \
+  cargo run --release --bin cms-server &
+sleep 60 && pkill cms-server
+ms_print massif.out.phase0 > benches/memory_phase0.txt
+
+# Phase 3-5 で同様に実行
+# 期待: メモリ使用量 +10% 以内
+```
+
+##### データベースクエリ最適化
+
+```bash
+# Phase 0: 基準
+psql -U postgres -d cms_test -c "SELECT COUNT(*) FROM pg_stat_statements;"
+# 出力: 1200 queries
+
+# Phase 3: Repository 抽象化後
+# 期待: 1250 queries 以内 (+4% 以内)
+
+# Phase 5: 最適化後
+# 期待: 1180 queries (-2% 改善)
+```
 
 #### 5. ハイブリッドアプローチの導入
 
@@ -830,6 +959,131 @@ mod tests {
 
 **検証**: E2Eテストによる動作確認
 
+## 🔀 並行開発ポリシー
+
+### 原則
+
+構造再編期間中も **緊急バグ修正** と **クリティカルな機能追加** は継続できるようにします。ただし、開発の混乱を避けるため、以下のルールを設けます。
+
+### Phase 別ポリシー
+
+#### Phase 1-2 (週1-7): 機能フリーズ期間
+
+**ルール**: **新機能追加は原則禁止** (ドメイン層の基礎を固めるため)
+
+- ✅ **許可**: クリティカルなバグ修正（セキュリティ、データ損失リスク）
+- ✅ **許可**: ドキュメント更新、テストの追加
+- ❌ **禁止**: 新エンドポイント追加
+- ❌ **禁止**: 既存エンドポイントの大幅な変更
+
+**緊急対応フロー**:
+
+```bash
+# 1. main ブランチから緊急修正ブランチを作成
+git checkout main
+git pull origin main
+git checkout -b hotfix/critical-bug-123
+
+# 2. 修正実装とテスト
+cargo test --workspace
+
+# 3. PR 作成 (レビュー必須)
+gh pr create --title "[HOTFIX] Critical Bug #123" --label "hotfix"
+
+# 4. マージ後、Phase 1-2 ブランチに cherry-pick
+git checkout phase2-domain-layer
+git cherry-pick <hotfix-commit-hash>
+```
+
+#### Phase 3 (週8-11): 限定的な新機能許可
+
+**ルール**: **軽微な機能追加のみ許可** (旧構造で実装)
+
+- ✅ **許可**: 既存エンドポイントへのパラメータ追加
+- ✅ **許可**: バグ修正、パフォーマンス改善
+- ⚠️ **条件付き許可**: 新エンドポイント（旧ハンドラーで実装し、Phase 4 で移行）
+- ❌ **禁止**: Application Layer の直接変更
+
+**新機能追加フロー**:
+
+```bash
+# 1. 旧構造 (src/handlers/) で実装
+# src/handlers/new_feature.rs
+pub async fn new_endpoint(/* ... */) -> Result<Json<Response>> {
+    // 旧スタイルで実装
+}
+
+# 2. Phase 4 移行リストに追加
+echo "- [ ] new_endpoint の移行" >> MIGRATION_CHECKLIST.md
+
+# 3. マージ後、Phase 4 で新構造に移行
+```
+
+#### Phase 4-5 (週12-16): 新構造への移行期間
+
+**ルール**: **新機能は新構造でのみ実装**
+
+- ✅ **推奨**: 新エンドポイントは `/api/v2` で実装（新ハンドラー）
+- ✅ **許可**: 旧エンドポイント (`/api/v1`) のバグ修正
+- ❌ **禁止**: 旧ハンドラー (`src/handlers/`) への新機能追加
+
+**新機能追加フロー**:
+
+```bash
+# 1. 新構造で実装
+# src/presentation/http/handlers/new_feature.rs
+pub async fn new_endpoint_v2(
+    State(app_state): State<AppState>,
+    Json(request): Json<NewFeatureRequest>,
+) -> Result<Json<NewFeatureResponse>> {
+    // Use Case 経由で実装
+    let use_case = app_state.container.new_feature_use_case();
+    let result = use_case.execute(request).await?;
+    Ok(Json(result))
+}
+
+# 2. /api/v2 ルーティングに追加
+app.route("/api/v2/new-feature", post(new_endpoint_v2))
+```
+
+### 競合解決ガイドライン
+
+#### 旧構造と新構造の衝突時
+
+**優先順位**:
+
+1. **セキュリティ修正**: 最優先（両方に適用）
+2. **データ整合性バグ**: 高優先（両方に適用）
+3. **新機能**: Phase に応じて旧 or 新で実装
+
+**衝突例と対応**:
+
+```rust
+// 例: User エンティティに新フィールド追加が必要
+
+// Phase 1-2 中の対応
+// → 旧 models/user.rs に追加し、Phase 2 完了後に domain/entities/user.rs に移行
+
+// Phase 3-4 中の対応
+// → domain/entities/user.rs に直接追加（新構造が優先）
+```
+
+### コミュニケーションルール
+
+- **Slack/Discord**: `#restructure-wip` チャンネルで進捗共有
+- **PR ラベル**: `restructure-phase-N` ラベルで Phase 識別
+- **週次ミーティング**: 毎週金曜に進捗と競合確認
+
+### ドキュメント更新義務
+
+新機能追加時は以下を更新:
+
+- [ ] `CHANGELOG.md` にエントリ追加
+- [ ] 該当 Phase の `MIGRATION_CHECKLIST.md` に移行タスク追加（Phase 3 以降）
+- [ ] API ドキュメント (`docs/API.md`) 更新
+
+---
+
 ### Phase 5: クリーンアップと最適化（1週間）
 
 **目標**: 古い構造を削除し、ドキュメント更新
@@ -889,7 +1143,260 @@ fn transfer(from: AccountId, to: AccountId, amount: Money)
 - ゼロコスト抽象化（Rustの強み）
 - コンパイル時最適化による高速化
 
-## 🚨 リスクと対策
+## � Feature Flag 戦略
+
+### 目的
+
+構造再編の各 Phase を **feature flag で段階的に有効化** し、旧構造と新構造を並行稼働させることで、リスクを最小化します。
+
+### 新規 Feature Flags
+
+#### Phase 別フラグ
+
+```toml
+# Cargo.toml に追加
+[features]
+# === 既存フラグ ===
+default = ["auth", "cache", "compression", "database", "email", "search"]
+auth = ["dep:argon2", "dep:biscuit-auth"]
+cache = ["dep:deadpool-redis", "dep:redis"]
+database = ["dep:deadpool-diesel", "dep:diesel", ...]
+search = ["dep:tantivy"]
+
+# === 構造再編フラグ (Phase 別) ===
+restructure_domain = []          # Phase 1-2: Value Objects + Entities
+restructure_application = []     # Phase 3: Use Cases + Repositories
+restructure_presentation = []    # Phase 4: 新ハンドラー
+
+# === レガシー維持フラグ ===
+legacy_handlers = []             # 旧ハンドラーを残す (Phase 4-5 で使用)
+legacy_repositories = []         # 旧リポジトリを残す (Phase 3-5 で使用)
+
+# === 統合フラグ ===
+full_restructure = [
+    "restructure_domain",
+    "restructure_application",
+    "restructure_presentation"
+]
+```
+
+### Phase 別の Feature Flag 使用方針
+
+#### Phase 1-2: ドメイン層構築
+
+**有効化**: `restructure_domain`
+
+```rust
+// src/domain/mod.rs
+#[cfg(feature = "restructure_domain")]
+pub mod value_objects;
+
+#[cfg(feature = "restructure_domain")]
+pub mod entities;
+
+// 旧コードは引き続き動作
+#[cfg(not(feature = "restructure_domain"))]
+pub use crate::models::*;
+```
+
+**CI ビルド**:
+
+```yaml
+# .github/workflows/ci.yml
+- name: Build with restructure_domain
+  run: cargo build --features "database,cache,search,restructure_domain"
+
+- name: Build without restructure_domain (legacy)
+  run: cargo build --features "database,cache,search"
+```
+
+#### Phase 3: アプリケーション層構築
+
+**有効化**: `restructure_application` (depends on `restructure_domain`)
+
+```rust
+// src/application/mod.rs
+#[cfg(feature = "restructure_application")]
+pub mod use_cases;
+
+#[cfg(feature = "restructure_application")]
+pub mod ports;
+
+// 旧リポジトリは legacy_repositories フラグで維持
+#[cfg(all(not(feature = "restructure_application"), feature = "legacy_repositories"))]
+pub use crate::repositories::*;
+```
+
+**Cargo.toml 依存関係**:
+
+```toml
+[features]
+restructure_application = ["restructure_domain"]  # domain 必須
+```
+
+#### Phase 4: プレゼンテーション層リファクタリング
+
+**有効化**: `restructure_presentation`
+
+```rust
+// src/routes/mod.rs
+pub fn configure_routes(app: Router) -> Router {
+    #[cfg(feature = "restructure_presentation")]
+    {
+        app.nest("/api/v2", v2_routes())  // 新ハンドラー
+    }
+
+    #[cfg(any(not(feature = "restructure_presentation"), feature = "legacy_handlers"))]
+    {
+        app.nest("/api/v1", v1_routes())  // 旧ハンドラー
+    }
+}
+```
+
+**API バージョニング**:
+
+- `/api/v1`: 旧ハンドラー (`legacy_handlers` フラグで制御)
+- `/api/v2`: 新ハンドラー (`restructure_presentation` フラグで制御)
+
+#### Phase 5: クリーンアップ
+
+**無効化**: `legacy_handlers`, `legacy_repositories` を削除
+
+```bash
+# Phase 5 開始時
+git rm src/handlers/
+git rm src/repositories/
+
+# Cargo.toml から legacy フラグを削除
+sed -i '/legacy_handlers/d' Cargo.toml
+sed -i '/legacy_repositories/d' Cargo.toml
+```
+
+### 環境変数による実行時切り替え
+
+**開発環境**: 新旧並行稼働
+
+```bash
+# .env
+ENABLE_RESTRUCTURE_DOMAIN=true
+ENABLE_RESTRUCTURE_APPLICATION=false  # まだ Phase 3 未完了
+```
+
+```rust
+// src/app.rs
+pub fn create_app_state() -> AppState {
+    let use_new_domain = std::env::var("ENABLE_RESTRUCTURE_DOMAIN")
+        .unwrap_or("false".into()) == "true";
+
+    if use_new_domain {
+        #[cfg(feature = "restructure_domain")]
+        {
+            // 新ドメイン層使用
+        }
+    } else {
+        // 旧モデル使用
+    }
+}
+```
+
+### CI/CD での Feature Flag 検証
+
+```yaml
+# .github/workflows/feature-matrix.yml
+strategy:
+  matrix:
+    features:
+      # === 既存構造 (baseline) ===
+      - "database,cache,search,auth"
+
+      # === Phase 1-2: ドメイン層のみ ===
+      - "database,cache,search,auth,restructure_domain"
+
+      # === Phase 3: アプリケーション層追加 ===
+      - "database,cache,search,auth,restructure_domain,restructure_application"
+
+      # === Phase 4: 完全移行 ===
+      - "database,cache,search,auth,full_restructure"
+
+      # === レガシー維持 (Phase 4-5 移行期) ===
+      - "database,cache,search,auth,full_restructure,legacy_handlers"
+
+steps:
+  - name: Build with feature set
+    run: cargo build --features "${{ matrix.features }}"
+
+  - name: Test with feature set
+    run: cargo test --features "${{ matrix.features }}"
+```
+
+### Production デプロイメント戦略
+
+#### Stage 1: カナリアリリース (10% トラフィック)
+
+```bash
+# デプロイ設定
+cargo build --release --features "full_restructure,legacy_handlers"
+
+# Nginx でトラフィック分割
+upstream backend {
+    server new-backend:8080 weight=1;  # 10%
+    server old-backend:8080 weight=9;  # 90%
+}
+```
+
+#### Stage 2: 段階的拡大 (50% トラフィック)
+
+```bash
+# 2週間後、問題なければ50%に
+upstream backend {
+    server new-backend:8080 weight=5;  # 50%
+    server old-backend:8080 weight=5;  # 50%
+}
+```
+
+#### Stage 3: 完全移行 (100% トラフィック)
+
+```bash
+# 4週間後、完全移行
+cargo build --release --features "full_restructure"
+# legacy_handlers フラグを削除
+```
+
+### Feature Flag 削除計画
+
+| Phase | Flag | 削除タイミング |
+|-------|------|--------------|
+| Phase 1-2 | `restructure_domain` | Phase 5 完了後 (default に統合) |
+| Phase 3 | `restructure_application` | Phase 5 完了後 (default に統合) |
+| Phase 4 | `restructure_presentation` | Phase 5 完了後 (default に統合) |
+| Phase 4-5 | `legacy_handlers` | Phase 5 完了時 (即削除) |
+| Phase 3-5 | `legacy_repositories` | Phase 5 完了時 (即削除) |
+
+### ドキュメント記載
+
+`README.md` に Feature Flags セクションを追加:
+
+```markdown
+## Feature Flags
+
+### 構造再編関連 (Phase 1-5)
+
+- `restructure_domain`: 新ドメイン層を有効化 (Value Objects, Entities)
+- `restructure_application`: 新アプリケーション層を有効化 (Use Cases, Repositories)
+- `restructure_presentation`: 新プレゼンテーション層を有効化 (`/api/v2`)
+- `full_restructure`: 上記すべてを有効化
+
+### レガシー維持 (移行期のみ)
+
+- `legacy_handlers`: 旧ハンドラー (`/api/v1`) を維持
+- `legacy_repositories`: 旧リポジトリを維持
+
+**推奨**: Phase 5 完了後は `full_restructure` をデフォルトに統合し、legacy フラグは削除されます。
+```
+
+---
+
+## �🚨 リスクと対策
 
 ### リスク1: 移行期間中の開発停滞
 

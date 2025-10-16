@@ -978,7 +978,6 @@ impl AppState {
     //
     // TODO: Implement post-related use-cases as part of the next refactoring iteration.
 
-
     // ---------------- Cache helper (get or compute & store) ----------------
     #[cfg(feature = "cache")]
     /// キャッシュから値を取得し、存在しない場合は計算して保存します。
