@@ -1,8 +1,8 @@
 # API v1 → v2 クライアント移行ガイド
 
-**対象**: すべての RustCMS API クライアント (JavaScript, Python, Go, Rust など)  
-**非推奨開始**: 2025-01-17  
-**削除予定日**: 2025-03-17  
+**対象**: すべての RustCMS API クライアント (JavaScript, Python, Go, Rust など)
+**非推奨開始**: 2025-01-17
+**削除予定日**: 2025-03-17
 **移行期間**: 2ヶ月
 
 ---
@@ -30,6 +30,7 @@
 ### Phase 1: 準備 (1 週間)
 
 **タスク**:
+
 - [ ] 現在の v1 API 使用状況を確認
 - [ ] 変更点を理解
 - [ ] テストスイートを準備
@@ -47,6 +48,7 @@ grep -r "/api/v1/" src/ | wc -l
 ### Phase 2: 実装 (1 週間)
 
 **タスク**:
+
 - [ ] URL をすべて v2 に更新
 - [ ] エラーハンドリングを修正
 - [ ] ページネーションロジックを修正
@@ -54,6 +56,7 @@ grep -r "/api/v1/" src/ | wc -l
 ### Phase 3: テスト (1 週間)
 
 **タスク**:
+
 - [ ] ユニットテスト実行
 - [ ] インテグレーションテスト実行
 - [ ] ステージング環境でテスト
@@ -61,6 +64,7 @@ grep -r "/api/v1/" src/ | wc -l
 ### Phase 4: デプロイ (1 週間)
 
 **タスク**:
+
 - [ ] 開発環境にデプロイ
 - [ ] ステージング環境にデプロイ
 - [ ] 本番環境にデプロイ
@@ -88,6 +92,7 @@ const API_BASE = 'https://api.example.com/api/v2';
 ### 2. エラーレスポンス形式の変更
 
 **v1 エラーレスポンス**:
+
 ```json
 HTTP/1.1 400 Bad Request
 {
@@ -96,6 +101,7 @@ HTTP/1.1 400 Bad Request
 ```
 
 **v2 エラーレスポンス**:
+
 ```json
 HTTP/1.1 400 Bad Request
 {
@@ -142,12 +148,14 @@ try {
 ### 3. ページネーションの変更
 
 **v1 ページネーション** (ページベース):
+
 ```bash
 GET /api/v1/posts?page=2&limit=10
 # 2ページ目、1ページ 10 件
 ```
 
 **v2 ページネーション** (オフセットベース):
+
 ```bash
 GET /api/v2/posts?offset=10&limit=10
 # 10 件スキップ後、10 件取得
@@ -218,17 +226,17 @@ class APIClient {
 
   async request(endpoint, options = {}) {
     const response = await fetch(`${this.baseUrl}${endpoint}`, options);
-    
+
     if (!response.ok) {
       const data = await response.json();
-      
+
       // v1: throw new Error(data.error)
       // v2: throw new Error with multiple errors
       const errors = data.errors || [];
       const message = errors.map(e => `${e.field}: ${e.message}`).join('; ');
       throw new Error(message || 'Unknown error');
     }
-    
+
     return response.json();
   }
 
@@ -261,16 +269,16 @@ class APIClient:
     def request(self, method, endpoint, **kwargs):
         url = f"{self.base_url}{endpoint}"
         response = self.session.request(method, url, **kwargs)
-        
+
         if not response.ok:
             data = response.json()
-            
+
             # v1: errors = [data['error']]
             # v2: errors = [f"{e['field']}: {e['message']}" for e in data['errors']]
             errors = data.get('errors', [])
             message = '; '.join([f"{e['field']}: {e['message']}" for e in errors])
             raise Exception(message or 'Unknown error')
-        
+
         return response.json()
 
     def get_posts(self, offset=0, limit=10):
@@ -314,7 +322,7 @@ func GetPosts(offset, limit int) ([]Post, error) {
     // Changed from: /posts?page=1&limit=10
     // Changed to:   /posts?offset=0&limit=10
     url := fmt.Sprintf("%s/posts?offset=%d&limit=%d", apiBase, offset, limit)
-    
+
     resp, err := http.Get(url)
     if err != nil {
         return nil, err
@@ -324,7 +332,7 @@ func GetPosts(offset, limit int) ([]Post, error) {
     if resp.StatusCode >= 400 {
         var errResp ErrorResponse
         json.NewDecoder(resp.Body).Decode(&errResp)
-        
+
         var message string
         for _, err := range errResp.Errors {
             message += fmt.Sprintf("%s: %s; ", err.Field, err.Message)
@@ -362,14 +370,14 @@ impl ApiClient {
         // Changed from: /posts?page=1&limit=10
         // Changed to:   /posts?offset=0&limit=10
         let url = format!("{}​/posts?offset={}&limit={}", API_BASE, offset, limit);
-        
+
         let response = self.client.get(&url).send().await
             .map_err(|e| e.to_string())?;
-        
+
         if !response.status().is_success() {
             let error_data: serde_json::Value = response.json().await
                 .map_err(|e| e.to_string())?;
-            
+
             // v1: error_data["error"].as_str()
             // v2: error_data["errors"][0]["message"]
             let errors = error_data["errors"].as_array().unwrap_or(&vec![]);
@@ -382,10 +390,10 @@ impl ApiClient {
                 })
                 .collect::<Vec<_>>()
                 .join("; ");
-            
+
             return Err(message);
         }
-        
+
         response.json().await.map_err(|e| e.to_string())
     }
 }
@@ -494,6 +502,7 @@ curl -X POST https://api.example.com/api/v2/users \
 **原因**: エンドポイントが v2 に移動した可能性
 
 **解決策**:
+
 ```
 # v1: /api/v1/users/:id
 # v2: /api/v2/users/:id (同じ)
@@ -507,6 +516,7 @@ grep -r "/api/v1/" .
 **原因**: v2 エラー形式が異なる
 
 **解決策**:
+
 ```javascript
 // Before (v1)
 const error = response.data.error;
@@ -521,6 +531,7 @@ const message = errors.map(e => e.message).join(', ');
 **原因**: `page` パラメータが v2 で廃止された
 
 **解決策**:
+
 ```
 # Before (v1)
 /api/v1/posts?page=2&limit=10
@@ -538,13 +549,13 @@ const message = errors.map(e => e.message).join(', ');
 
 問題が発生した場合は、以下に連絡してください:
 
-- **メール**: support@example.com
+- **メール**: <support@example.com>
 - **Slack**: #api-support
-- **GitHub Issues**: https://github.com/example/cms/issues
-- **ドキュメント**: https://docs.example.com/migration
+- **GitHub Issues**: <https://github.com/example/cms/issues>
+- **ドキュメント**: <https://docs.example.com/migration>
 
 ---
 
-**作成日**: 2025-01-17  
-**最終更新**: 2025-01-17  
+**作成日**: 2025-01-17
+**最終更新**: 2025-01-17
 **ステータス**: 公開準備中
