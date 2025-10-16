@@ -827,34 +827,34 @@ pub fn error_to_response(error: ApplicationError) -> Response {
 - 実行時間: 0.01s (30s以内)
 - エラーケースカバー: 30/32 (93.8%)
 
-### Phase 5-3: Staging デプロイ（計画開始）
+### Phase 5-3: Staging デプロイ（実装中）
 
 **開始日**: 2025-01-17  
-**戦略**: Docker Compose 活用 (testcontainers 依存性回避)
+**進捗**: 30% 完成 (Canary + Staging環境)
 
-**タスク**:
-- [ ] Docker Compose Staging 設定 (docker-compose.staging.yml)
-- [ ] E2E 統合テスト実装 (tests/e2e_staging_integration.rs)
-- [ ] Canary traffic 制御 (src/routes/canary.rs)
-- [ ] Performance benchmark (benches/staging_perf.rs)
+**完了タスク**:
+- ✅ Canary traffic split 制御 (環境変数ベース)
+- ✅ Docker Compose Staging環境 (PostgreSQL + Redis)
+- ✅ Staging E2E統合テスト (7 tests)
+
+**残タスク**:
+- [ ] HTTP reqwest クライアント化
+- [ ] Performance benchmark (criterion)
 - [ ] CI/CD パイプライン拡張
 
-**ドキュメント**:
-- 📘 PHASE_5_3_IMPLEMENTATION.md - 実装ガイド
-- 📘 PHASE_5_3_STAGING.md - 概要
-- ❌ PHASE_5_3_PLAN.md (詳細版 - 参考用)
+**テスト**: 247/247 passing (Domain 188 + E2E 36 + E2E compat 21 + Canary 2)
 
 ---
 
 ### 進捗タイムライン
 
-| Phase | 実装 | テスト | 完了日 |
-|-------|------|--------|--------|
-| 5-1 | ✅ API ルーティング分離 | 211/211 ✅ | 2025-01-17 |
-| 5-2 | ✅ E2E テストスイート (57) | 268/268 ✅ | 2025-01-17 |
-| 5-3 | 🔄 Staging & Canary | - | Week 1 |
-| 5-4 | ⏳ API v1 Deprecation | - | Week 2-3 |
-| 5-5 | ⏳ レガシー削除 | - | Week 4-5 |
+| Phase | 実装 | テスト | 状態 |
+|-------|------|--------|------|
+| 5-1 | ✅ API ルーティング分離 | 211/211 ✅ | COMPLETE |
+| 5-2 | ✅ E2E テストスイート (57) | 268/268 ✅ | COMPLETE |
+| 5-3 | 🔄 Canary + Staging | 247/247 ✅ | 30% (Canary/Staging done) |
+| 5-4 | ⏳ API v1 Deprecation | - | Planning |
+| 5-5 | ⏳ レガシー削除 | - | Planning |
 
 ---
 
