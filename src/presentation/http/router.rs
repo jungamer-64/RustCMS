@@ -36,26 +36,25 @@ use crate::presentation::http::handlers::*;
     feature = "restructure_presentation",
     feature = "restructure_application"
 ))]
-pub fn api_v2_router() -> Router {
+pub fn api_v2_router<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     Router::new()
         // User routes
         .route("/users/register", post(register_user))
-        .route("/users/:user_id", get(get_user))
-        .route("/users/:user_id", put(update_user))
-        .route("/users/:user_id", delete(delete_user))
+        .route("/users/{user_id}", get(get_user).put(update_user).delete(delete_user))
         // Post routes
         .route("/posts", post(create_post))
-        .route("/posts/:slug", get(get_post))
-        .route("/posts/:post_id", put(update_post))
+        .route("/posts/{slug}", get(get_post).put(update_post))
         // Comment routes
-        .route("/posts/:post_id/comments", post(create_comment))
-        .route("/posts/:post_id/comments", get(list_comments))
+        .route("/posts/{post_id}/comments", post(create_comment).get(list_comments))
         // Tag routes
         .route("/tags", post(create_tag))
-        .route("/tags/:slug", get(get_tag))
+        .route("/tags/{slug}", get(get_tag))
         // Category routes
         .route("/categories", post(create_category))
-        .route("/categories/:slug", get(get_category))
+        .route("/categories/{slug}", get(get_category))
 }
 
 // Stub for when feature flags are not enabled
@@ -63,23 +62,27 @@ pub fn api_v2_router() -> Router {
     feature = "restructure_presentation",
     feature = "restructure_application"
 )))]
-pub fn api_v2_router() -> Router {
+pub fn api_v2_router<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     Router::new()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::Router;
 
     #[test]
     fn test_api_v2_router_creation() {
-        let _router = api_v2_router();
+        let _router: Router<()> = api_v2_router();
         // Router は内部で検証されます
     }
 
     #[test]
     fn test_api_v2_routes_exist() {
         // ルートが定義されていることを確認
-        let _router = api_v2_router();
+        let _router: Router<()> = api_v2_router();
     }
 }

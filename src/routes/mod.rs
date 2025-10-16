@@ -1,6 +1,7 @@
 //! API Routes
 //!
 //! Defines all HTTP routes and their corresponding handlers
+//! Supports both API v1 (legacy) and API v2 (restructured) via feature flags
 
 use axum::{
     Router,
@@ -11,6 +12,21 @@ use crate::middleware::rate_limiting::RateLimitLayer; // unified IP rate limitin
 use crate::middleware::security::SecurityHeadersLayer;
 use crate::{AppState, handlers}; // security headers
 // logging middleware layer integration pending (currently unused)
+
+/// Feature flag status
+pub fn is_api_v2_enabled() -> bool {
+    // Check environment variable or default to feature flag
+    std::env::var("API_V2_ENABLED")
+        .map(|v| v.to_lowercase() == "true")
+        .unwrap_or(cfg!(feature = "restructure_presentation"))
+}
+
+pub fn use_legacy_api_v1() -> bool {
+    // Check environment variable or default based on feature flag
+    std::env::var("USE_LEGACY_API_V1")
+        .map(|v| v.to_lowercase() == "true")
+        .unwrap_or(!cfg!(feature = "restructure_presentation"))
+}
 
 /// Create the main application router
 pub fn create_router() -> Router<AppState> {
@@ -72,6 +88,16 @@ pub fn create_router() -> Router<AppState> {
     #[cfg(feature = "search")]
     {
         public = public.nest("/api/v1/search", search_routes());
+    }
+
+    // === API v2 新ルーティング (Phase 5) ===
+    #[cfg(all(
+        feature = "restructure_presentation",
+        feature = "restructure_application"
+    ))]
+    {
+        use crate::presentation::http::router::api_v2_router;
+        public = public.nest("/api/v2", api_v2_router());
     }
 
     // Compose final router: apply security layers globally
