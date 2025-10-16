@@ -400,15 +400,15 @@ async fn initialize_auth(
     #[cfg(feature = "database")]
     {
         if let Some(_) = database {
-            // Prefer container-provided repository wiring when available so
-            // global adapter construction is centralized in AppContainer.
-            if let Some(c) = container {
-                // Coerce the concrete Arc<DieselUserRepository> to an
-                // Arc<dyn UserRepository> for AuthService initialization.
-                let repo: Arc<dyn crate::repositories::user_repository::UserRepository> =
-                    c.user_repo.clone();
-                let auth = AuthService::new_with_repo(config, repo)?;
-                info!("✅ Authentication service initialized (container-backed)");
+            // Phase 5-4: AppContainer は Use Case を提供するが、
+            // 直接的な repository アクセスは AppState 経由で行う
+            // （container.state() -> database -> repository）
+            if let Some(_c) = container {
+                // 現在の設計では AuthService は database 経由で初期化
+                // （AppContainer の Use Case は別の責務）
+                let db = database.unwrap();
+                let auth = AuthService::new(config, db)?;
+                info!("✅ Authentication service initialized (AppState-backed)");
                 return Ok(auth);
             }
 
@@ -625,14 +625,9 @@ impl AppState {
 
             app_state_builder.database = Some(initialize_database(&config).await?);
 
-            // Construct the application-level container early so other
-            // initializers (auth service) can reuse the centrally
-            // constructed adapters.
-            let container = crate::application::AppContainer::new(
-                app_state_builder.database.as_ref().unwrap().clone(),
-                early_event_bus.clone(),
-            );
-            app_state_builder.container = Some(Arc::new(container));
+            // Note: AppContainer は後で AppState 全体を受け取るため、
+            // ここでは早期構築をスキップする（Phase 5-4 設計変更）
+            // app_state_builder.container は build() 後に設定
         }
 
         #[cfg(feature = "auth")]
@@ -662,17 +657,12 @@ impl AppState {
         let mut app_state = app_state_builder.build();
 
         // Construct application-level container (DI) if database feature is enabled.
-        // If an early container was already created and stored in the builder,
-        // avoid replacing it here.
+        // AppContainer は AppState 全体への Arc を受け取る（Phase 5-4 設計）
         #[cfg(feature = "database")]
         {
-            if app_state.container.is_none() {
-                let container = crate::application::AppContainer::new(
-                    app_state.database.clone(),
-                    app_state.event_bus.clone(),
-                );
-                app_state.container = Some(Arc::new(container));
-            }
+            let app_state_arc = Arc::new(app_state.clone());
+            let container = crate::application::AppContainer::new(app_state_arc);
+            app_state.container = Some(Arc::new(container));
         }
 
         // Configure rate limiter
@@ -924,7 +914,7 @@ impl AppState {
         >,
     > {
         if let Some(container) = self.container.as_ref() {
-            return container.create_user.clone();
+            return container.create_user();
         }
         let repo =
             crate::infrastructure::repositories::DieselUserRepository::new(self.database.clone());
@@ -943,7 +933,7 @@ impl AppState {
         >,
     > {
         if let Some(container) = self.container.as_ref() {
-            return container.get_user_by_id.clone();
+            return container.get_user_by_id();
         }
         let repo =
             crate::infrastructure::repositories::DieselUserRepository::new(self.database.clone());
@@ -962,7 +952,7 @@ impl AppState {
         >,
     > {
         if let Some(container) = self.container.as_ref() {
-            return container.update_user.clone();
+            return container.update_user();
         }
         let repo =
             crate::infrastructure::repositories::DieselUserRepository::new(self.database.clone());
@@ -1166,7 +1156,7 @@ impl AppState {
 
             // Prefer container-provided use-case when available
             if let Some(container) = self.container.as_ref() {
-                let uc = container.create_user.clone();
+                let uc = container.create_user();
                 return timed_op!(self, "db", async move {
                     match uc.execute(request).await {
                         Ok(u) => Ok(u),

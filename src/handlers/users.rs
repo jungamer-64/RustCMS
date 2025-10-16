@@ -195,7 +195,7 @@ pub async fn get_user(
 
                 // Prefer using the centrally-constructed AppContainer when available.
                 if let Some(container) = state.container.as_ref() {
-                    let uc = container.get_user_by_id.clone();
+                    let uc = container.get_user_by_id();
                     let user_opt = uc
                         .execute(UserId::from_uuid(id))
                         .await
@@ -287,7 +287,7 @@ pub async fn update_user(
 
                 // Prefer central container-provided use-case when present
                 if let Some(container) = st.container.as_ref() {
-                    let uc = container.update_user.clone();
+                    let uc = container.update_user();
                     return match uc.execute(UserId::from_uuid(uid), req).await {
                         Ok(u) => Ok(u),
                         Err(RepoErr::NotFound) => {
