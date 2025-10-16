@@ -7,7 +7,7 @@
 //!
 //! テスト実行: cargo test --test e2e_api_v1_compatibility --lib --no-default-features
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 // ============================================================================
@@ -400,9 +400,11 @@ fn test_api_v1_deprecation_messages() {
 
     // When & Then: 非推奨メッセージが正しいことを確認
     assert!(deprecation_messages.len() > 0);
-    assert!(deprecation_messages
-        .iter()
-        .any(|msg| msg.contains("deprecated")));
+    assert!(
+        deprecation_messages
+            .iter()
+            .any(|msg| msg.contains("deprecated"))
+    );
 }
 
 // ============================================================================
