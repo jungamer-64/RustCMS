@@ -1,8 +1,8 @@
 # AppContainer エラー診断＆修正ガイド
 
-**問題**: `error[E0412]: cannot find type 'AppContainer' in module 'crate::application'`  
-**ステータス**: 診断完了、修正方針提示  
-**作成日**: 2025-01-17  
+**問題**: `error[E0412]: cannot find type 'AppContainer' in module 'crate::application'`
+**ステータス**: 診断完了、修正方針提示
+**作成日**: 2025-01-17
 **優先度**: High (Phase 5-4 実装のブロッカー)
 
 ---
@@ -255,11 +255,13 @@ impl From<ApplicationError> for AppError {
 3. `src/app.rs` の `AppContainer` 参照が解決される
 
 **メリット**:
+
 - ✅ 短時間で実装可能 (2-3時間)
 - ✅ `AppState` と共存可能（段階的移行）
 - ✅ Phase 4 以降の実装に影響小
 
 **デメリット**:
+
 - ⚠️ 一時的な設計（Phase 3 で本格化）
 - ⚠️ 両方の container が共存
 
@@ -297,11 +299,13 @@ pub struct AppState {
 ```
 
 **メリット**:
+
 - ✅ DI container の一元化
 - ✅ `Arc<AppState>` のみで十分
 - ✅ 設計が単純化
 
 **デメリット**:
+
 - ⚠️ 大規模リファクタリング（8-16時間）
 - ⚠️ テスト修正必須
 
@@ -374,6 +378,7 @@ git commit -m "🔧 Fix: Implement AppContainer for DI"
 ### エラー: 「AppContainer is generic」
 
 **症状**:
+
 ```
 error: AppContainer requires generic type parameter
 ```
@@ -381,6 +386,7 @@ error: AppContainer requires generic type parameter
 **原因**: Feature flag で条件付きコンパイルが必要
 
 **対応**:
+
 ```rust
 #[cfg(all(feature = "database", feature = "restructure_application"))]
 pub struct AppContainer {
@@ -391,6 +397,7 @@ pub struct AppContainer {
 ### エラー: 「Circular dependency detected」
 
 **症状**:
+
 ```
 circular_dependency: application → app (AppState)
 ```
@@ -402,6 +409,7 @@ circular_dependency: application → app (AppState)
 ### エラー: 「Missing feature flag」
 
 **症状**:
+
 ```
 error: cannot find type 'RegisterUserUseCase' when 'database' feature disabled
 ```
@@ -468,6 +476,6 @@ curl https://staging.example.com/api/v2/health
 
 ---
 
-**最終更新**: 2025-01-17  
-**ステータス**: 修正方針確定、実装待機中  
+**最終更新**: 2025-01-17
+**ステータス**: 修正方針確定、実装待機中
 **所有者**: Architecture Team
