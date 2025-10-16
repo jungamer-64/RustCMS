@@ -741,9 +741,48 @@ pub fn error_to_response(error: ApplicationError) -> Response {
 
 ---
 
+## ⚡ Phase 5-1: API バージョニング準備
+
+**ステータス**: ✅ **完成** (2025-01-17)
+
+### 実装内容
+
+1. **Feature flag 統合制御**
+   - `is_api_v2_enabled()`: 環境変数 `API_V2_ENABLED` で /api/v2 動作制御
+   - `use_legacy_api_v1()`: 環境変数 `USE_LEGACY_API_V1` で旧 API 互換性維持
+
+2. **ルーティング分離**
+   - `/api/v1`: 既存ハンドラー（`src/handlers/`）
+   - `/api/v2`: 新ハンドラー（`src/presentation/http/handlers.rs`）
+   - 並行稼働可能（feature flag で制御）
+
+3. **Generic Router<S> 対応**
+   - `api_v2_router<S>() where S: Clone + Send + Sync + 'static`
+   - Axum 0.8 パス構文対応 (`:id` → `{id}`)
+   - `Router<AppState>` との型互換性
+
+### 新ファイル
+
+- ✅ `PHASE_5_PLAN.md` — Phase 5 全体計画書
+
+### テスト結果
+
+- ✅ 全テスト: **211/211 passing** (Domain: 188 + router: 2 + others: 21)
+- ✅ ビルド: Clean (警告のみ)
+- ✅ Feature flag 組み合わせ: 全て成功
+
+### 次フェーズ（Phase 5-2）
+
+- [ ] E2E テスト実装 (tests/e2e_api_v1/, tests/e2e_api_v2/)
+- [ ] Staging デプロイ検証
+- [ ] Canary release 設定
+
+---
+
 ### 次フェーズ予定
 
-- 📋 **Phase 4.9+1**: Infrastructure との統合テスト
-- 📋 **Phase 5**: レガシーコード段階的削除 + API v1 から v2 への migration
+- 📋 **Phase 5-2**: E2E テスト準備 + Staging デプロイ
+- 📋 **Phase 5-3**: Canary release (10% → 50% → 100%)
+- 📋 **Phase 5-4**: API v1 Deprecation + レガシーコード削除
 - 📋 **Phase 6**: パフォーマンス最適化 + 本番環境準備
 
