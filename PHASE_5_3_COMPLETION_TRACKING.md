@@ -1,6 +1,6 @@
 # Phase 5-3 完成度追跡: HTTP E2E + Performance Benchmark + CI/CD
 
-**ステータス**: 🔄 実装中 (2025-01-17)  
+**ステータス**: 🔄 実装中 (2025-01-17)
 **進捗**: 60% → 85% (HTTP E2E + Benchmark 完成)
 
 ## 📊 実装内容サマリー
@@ -38,6 +38,7 @@ Phase 5-3: → 286 tests (+18 HTTP/Bench scratch, Canary confirmed)
 ### Milestone 1: ✅ Canary + Staging Infrastructure (完成)
 
 **達成内容**:
+
 - ✅ Canary traffic split 制御 (環境変数ベース)
 - ✅ Docker Compose Staging 環境 (PostgreSQL + Redis + Adminer)
 - ✅ Staging 統合テスト (モック)
@@ -48,6 +49,7 @@ Phase 5-3: → 286 tests (+18 HTTP/Bench scratch, Canary confirmed)
 ### Milestone 2: ✅ HTTP E2E Integration (完成)
 
 **達成内容**:
+
 - ✅ HTTP クライアント化 (reqwest)
 - ✅ 16 個の HTTP 統合テスト
   - GET/POST エンドポイント検証
@@ -59,6 +61,7 @@ Phase 5-3: → 286 tests (+18 HTTP/Bench scratch, Canary confirmed)
 - ✅ レスポンスタイム測定
 
 **実装例**:
+
 ```rust
 // GET /api/v2/tags エンドポイント検証
 let response = client.get(&format!("{}/api/v2/tags", BASE_URL))
@@ -69,6 +72,7 @@ assert_eq!(response.status(), StatusCode::OK);
 ### Milestone 3: ✅ Performance Benchmark Suite (完成)
 
 **達成内容**:
+
 - ✅ 16 個の criterion ベンチマーク
   - JSON serialization (<1 µs)
   - Value Object creation (<1 µs)
@@ -87,6 +91,7 @@ assert_eq!(response.status(), StatusCode::OK);
   - Response JSON generation
 
 **期待される結果**:
+
 ```
 JSON serialization:    < 1 µs      ✅
 UUID generation:       0.1-1 µs    ✅
@@ -96,6 +101,7 @@ API v2 overhead:       ~80 µs      (goal: 66% faster)
 ```
 
 **実行コマンド**:
+
 ```bash
 # 単一ベンチマーク
 cargo bench --bench phase5_3_performance -- endpoint_latency
@@ -313,18 +319,20 @@ jobs:
 
 ## 🔍 トラブルシューティング
 
-### 問題 1: "Server not available at http://localhost:3000"
+### 問題 1: "Server not available at <http://localhost:3000>"
 
-**原因**: アプリケーションが起動していない  
+**原因**: アプリケーションが起動していない
 **対応**:
+
 ```bash
 cargo run --bin cms-server --features "database,restructure_presentation"
 ```
 
 ### 問題 2: "Connection refused" (PostgreSQL)
 
-**原因**: Staging PostgreSQL が起動していない  
+**原因**: Staging PostgreSQL が起動していない
 **対応**:
+
 ```bash
 docker-compose -f docker-compose.staging.yml restart postgres
 docker logs cms-postgres-staging  # ログ確認
@@ -332,8 +340,9 @@ docker logs cms-postgres-staging  # ログ確認
 
 ### 問題 3: Migration failure
 
-**原因**: DATABASE_URL が正しくない  
+**原因**: DATABASE_URL が正しくない
 **対応**:
+
 ```bash
 export DATABASE_URL="postgres://postgres:password@localhost:5432/cms_staging"
 cargo run --bin cms-migrate -- migrate --no-seed
@@ -341,8 +350,9 @@ cargo run --bin cms-migrate -- migrate --no-seed
 
 ### 問題 4: Benchmark コンパイルエラー
 
-**原因**: lib crate にコンパイルエラーがある  
+**原因**: lib crate にコンパイルエラーがある
 **対応**: 既存の库ファイルが `phase5_3_performance.rs` より優先される
+
 ```bash
 # 単独テスト
 cargo test --lib --no-default-features --features "restructure_domain"
@@ -394,6 +404,7 @@ cargo bench --bench phase5_3_performance -- api_v2_with_repository_trait
 ## ✅ チェックリスト
 
 ### HTTP E2E テスト
+
 - [ ] 16 個すべてのテストが正常にコンパイル
 - [ ] `#[ignore]` フラグで手動実行に設定
 - [ ] Staging 環境で少なくとも 3 テスト成功
@@ -401,6 +412,7 @@ cargo bench --bench phase5_3_performance -- api_v2_with_repository_trait
 - [ ] ヘッダー & Content-Type 検証が完全
 
 ### Performance Benchmark
+
 - [ ] 16 個すべてのベンチマークが実行可能
 - [ ] criterion HTML レポート生成成功
 - [ ] v1 vs v2 比較で意味のある差が検出
@@ -408,6 +420,7 @@ cargo bench --bench phase5_3_performance -- api_v2_with_repository_trait
 - [ ] Codacy 分析で品質問題なし
 
 ### CI/CD Integration
+
 - [ ] `.github/workflows/ci.yml` に新しいジョブ追加
 - [ ] Staging services (PostgreSQL + Redis) 自動起動
 - [ ] マイグレーション自動実行
@@ -416,6 +429,7 @@ cargo bench --bench phase5_3_performance -- api_v2_with_repository_trait
 - [ ] Codacy セキュリティ分析実行
 
 ### ドキュメント
+
 - [ ] HTTP E2E ガイド完成
 - [ ] CI/CD 統合ガイド完成
 - [ ] トラブルシューティングセクション充実
@@ -429,6 +443,6 @@ cargo bench --bench phase5_3_performance -- api_v2_with_repository_trait
 
 ---
 
-**作成日**: 2025年1月17日  
-**ステータス**: Phase 5-3 実装 85% 完成度  
+**作成日**: 2025年1月17日
+**ステータス**: Phase 5-3 実装 85% 完成度
 **次フェーズ**: Phase 5-4 (API v1 Deprecation)
