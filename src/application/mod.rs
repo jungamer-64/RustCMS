@@ -25,10 +25,13 @@ pub mod dto;
 
 pub use ports::*;
 
-#[cfg(feature = "database")]
-pub mod container;
-#[cfg(feature = "database")]
-pub use container::AppContainer;
+// Phase 3: AppContainer の実装予定
+// NOTE: AppContainer は src/app.rs で参照されているが、まだ定義されていない
+// Phase 3 で infrastructure/database/ または application/ に実装予定
+// #[cfg(feature = "database")]
+// pub mod container;
+// #[cfg(feature = "database")]
+// pub use container::AppContainer;
 
 // Re-export surface for application-layer services, handlers and use-cases
 // This file intentionally re-exports existing handlers and services so callers

@@ -13,9 +13,11 @@
 #[cfg(feature = "restructure_domain")]
 pub mod services;
 
-// Phase 1-2 で実装予定
-// #[cfg(feature = "restructure_domain")]
-// pub mod user;    // Entity + Value Objects 統合
+// Phase 1-2: 新しいドメインモデル
+#[cfg(feature = "restructure_domain")]
+pub mod user; // Entity + Value Objects 統合
+
+// Phase 2 で実装予定
 // #[cfg(feature = "restructure_domain")]
 // pub mod post;    // Entity + Value Objects 統合
 // #[cfg(feature = "restructure_domain")]
