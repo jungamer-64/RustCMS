@@ -126,11 +126,7 @@ mod domain_extended {
     }
 
     impl Notification {
-        fn new(
-            user_id: String,
-            notification_type: NotificationType,
-            content: String,
-        ) -> Self {
+        fn new(user_id: String, notification_type: NotificationType, content: String) -> Self {
             Self {
                 id: uuid::Uuid::new_v4().to_string(),
                 user_id,
@@ -154,7 +150,10 @@ mod domain_extended {
         );
 
         assert_eq!(notification.user_id, "user123");
-        assert_eq!(notification.notification_type, NotificationType::PostReplied);
+        assert_eq!(
+            notification.notification_type,
+            NotificationType::PostReplied
+        );
         assert!(!notification.is_read);
     }
 
@@ -190,11 +189,7 @@ mod domain_extended {
                 return Err("Titles must be less than 255 characters".to_string());
             }
 
-            Ok(Self {
-                en,
-                ja,
-                es: None,
-            })
+            Ok(Self { en, ja, es: None })
         }
 
         fn with_spanish(mut self, es: String) -> Result<Self, String> {
@@ -208,10 +203,8 @@ mod domain_extended {
 
     #[test]
     fn test_multi_language_title_creation() {
-        let title = MultiLanguageTitle::new(
-            "Hello World".to_string(),
-            "こんにちは世界".to_string(),
-        );
+        let title =
+            MultiLanguageTitle::new("Hello World".to_string(), "こんにちは世界".to_string());
 
         assert!(title.is_ok());
         let t = title.unwrap();
@@ -241,12 +234,10 @@ mod domain_extended {
 
     #[test]
     fn test_multi_language_title_with_spanish() {
-        let title = MultiLanguageTitle::new(
-            "Hello World".to_string(),
-            "こんにちは世界".to_string(),
-        )
-        .unwrap()
-        .with_spanish("Hola Mundo".to_string());
+        let title =
+            MultiLanguageTitle::new("Hello World".to_string(), "こんにちは世界".to_string())
+                .unwrap()
+                .with_spanish("Hola Mundo".to_string());
 
         assert!(title.is_ok());
         let t = title.unwrap();
@@ -257,9 +248,18 @@ mod domain_extended {
 
     #[derive(Debug, Clone, PartialEq)]
     enum DomainEvent {
-        RatingCreated { post_id: String, score: u8 },
-        FavoriteAdded { post_id: String, user_id: String },
-        NotificationSent { user_id: String, notification_type: String },
+        RatingCreated {
+            post_id: String,
+            score: u8,
+        },
+        FavoriteAdded {
+            post_id: String,
+            user_id: String,
+        },
+        NotificationSent {
+            user_id: String,
+            notification_type: String,
+        },
     }
 
     #[test]
@@ -280,7 +280,10 @@ mod domain_extended {
         ];
 
         assert_eq!(events.len(), 3);
-        assert!(matches!(events[0], DomainEvent::RatingCreated { score: 5, .. }));
+        assert!(matches!(
+            events[0],
+            DomainEvent::RatingCreated { score: 5, .. }
+        ));
     }
 
     // ============= AggregateRoot パターン (仮) =============
@@ -322,11 +325,7 @@ mod domain_extended {
 
         fn add_favorite(&mut self, favorite: Favorite) -> Result<(), String> {
             // Business rule: Each user can favorite only once
-            if self
-                .favorites
-                .iter()
-                .any(|f| f.user_id == favorite.user_id)
-            {
+            if self.favorites.iter().any(|f| f.user_id == favorite.user_id) {
                 return Err("User has already favorited this post".to_string());
             }
 
