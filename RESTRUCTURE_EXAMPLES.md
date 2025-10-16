@@ -2,9 +2,17 @@
 
 本ドキュメントは `RESTRUCTURE_PLAN.md` に記載された計画の具体的な実装例を示します。
 
+> **更新情報**: 2025年版 監査済み構造（Sonnet 4.5）に基づく実装例を追加しました。  
+> **ファイル統合パターン**: Entity + Value Objects を単一ファイルに統合する方式を採用しています。
+
 ## 目次
 
-- [Value Objects の実装例](#value-objects-の実装例)
+- [🆕 監査済み構造の実装例（推奨）](#監査済み構造の実装例推奨)
+  - [domain/user.rs（Entity + Value Objects 統合）](#domainuserrs-entity--value-objects-統合)
+  - [application/user.rs（CQRS統合）](#applicationuserrs-cqrs統合)
+  - [application/ports/repositories.rs（Port定義）](#applicationportsrepositoriesrs-port定義)
+  - [infrastructure/database/repositories.rs（実装）](#infrastructuredatabaserepositoriesrs-実装)
+- [Value Objects の実装例（分割版）](#value-objects-の実装例分割版)
 - [Entity の実装例](#entity-の実装例)
 - [Repository Pattern の実装例](#repository-pattern-の実装例)
 - [Use Case の実装例](#use-case-の実装例)
@@ -12,6 +20,399 @@
 - [エラーハンドリングの実装例](#エラーハンドリングの実装例)
 
 ---
+
+## 監査済み構造の実装例（推奨）
+
+### domain/user.rs（Entity + Value Objects 統合）
+
+監査結果に基づき、**Entity と Value Objects を単一ファイルに統合**します。この方式は:
+
+- ✅ 関連する型の局所化（高凝集）
+- ✅ import 文の削減
+- ✅ 500行以下なら単一ファイルで十分
+
+```rust
+// src/domain/user.rs
+// Entity + Value Objects 統合パターン（監査推奨）
+
+use serde::{Deserialize, Serialize};
+use std::fmt;
+use uuid::Uuid;
+use crate::error::DomainError;
+
+// ============================================================================
+// Value Objects
+// ============================================================================
+
+/// ユーザーID（NewType Pattern）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct UserId(Uuid);
+
+impl UserId {
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+
+    pub const fn from_uuid(id: Uuid) -> Self {
+        Self(id)
+    }
+
+    pub const fn as_uuid(&self) -> &Uuid {
+        &self.0
+    }
+}
+
+impl Default for UserId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl fmt::Display for UserId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// Email（検証済み）
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Email(String);
+
+impl Email {
+    pub fn new(email: String) -> Result<Self, DomainError> {
+        if !email.contains('@') || email.len() > 255 {
+            return Err(DomainError::InvalidEmail);
+        }
+        Ok(Self(email))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for Email {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// Username（検証済み）
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Username(String);
+
+impl Username {
+    pub fn new(username: String) -> Result<Self, DomainError> {
+        if username.len() < 3 || username.len() > 30 {
+            return Err(DomainError::InvalidUsername);
+        }
+        Ok(Self(username))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for Username {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+// ============================================================================
+// Entity
+// ============================================================================
+
+/// ユーザーエンティティ（ドメインモデル）
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct User {
+    id: UserId,
+    username: Username,
+    email: Email,
+    is_active: bool,
+}
+
+impl User {
+    /// 新しいユーザーを作成（コンストラクタ）
+    pub fn new(username: Username, email: Email) -> Self {
+        Self {
+            id: UserId::new(),
+            username,
+            email,
+            is_active: true,
+        }
+    }
+
+    /// ビジネスルール: ユーザーを有効化
+    pub fn activate(&mut self) {
+        self.is_active = true;
+    }
+
+    /// ビジネスルール: ユーザーを無効化
+    pub fn deactivate(&mut self) {
+        self.is_active = false;
+    }
+
+    /// ゲッター
+    pub const fn id(&self) -> UserId {
+        self.id
+    }
+
+    pub fn username(&self) -> &Username {
+        &self.username
+    }
+
+    pub fn email(&self) -> &Email {
+        &self.email
+    }
+
+    pub const fn is_active(&self) -> bool {
+        self.is_active
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_user_creation() {
+        let username = Username::new("testuser".to_string()).unwrap();
+        let email = Email::new("test@example.com".to_string()).unwrap();
+        let user = User::new(username, email);
+
+        assert!(user.is_active());
+    }
+
+    #[test]
+    fn test_invalid_email() {
+        let result = Email::new("invalid-email".to_string());
+        assert!(result.is_err());
+    }
+}
+```
+
+### application/user.rs（CQRS統合）
+
+監査結果に基づき、**Commands + Queries + DTOs を単一ファイルに統合**します。
+
+```rust
+// src/application/user.rs
+// CQRS統合パターン（監査推奨）
+
+use crate::domain::user::{User, UserId, Username, Email};
+use crate::application::ports::repositories::UserRepository;
+use crate::error::AppError;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+// ============================================================================
+// DTOs
+// ============================================================================
+
+/// ユーザー作成リクエスト
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateUserRequest {
+    pub username: String,
+    pub email: String,
+}
+
+/// ユーザーレスポンス
+#[derive(Debug, Clone, Serialize)]
+pub struct UserDto {
+    pub id: String,
+    pub username: String,
+    pub email: String,
+    pub is_active: bool,
+}
+
+impl From<User> for UserDto {
+    fn from(user: User) -> Self {
+        Self {
+            id: user.id().to_string(),
+            username: user.username().as_str().to_string(),
+            email: user.email().as_str().to_string(),
+            is_active: user.is_active(),
+        }
+    }
+}
+
+// ============================================================================
+// Commands（書き込み操作）
+// ============================================================================
+
+/// ユーザー登録コマンド
+pub struct RegisterUser {
+    repo: Arc<dyn UserRepository>,
+}
+
+impl RegisterUser {
+    pub fn new(repo: Arc<dyn UserRepository>) -> Self {
+        Self { repo }
+    }
+
+    pub async fn execute(&self, req: CreateUserRequest) -> Result<UserDto, AppError> {
+        // Value Objects作成（検証込み）
+        let username = Username::new(req.username)?;
+        let email = Email::new(req.email)?;
+
+        // エンティティ作成
+        let user = User::new(username, email);
+
+        // 永続化
+        self.repo.save(user.clone()).await?;
+
+        Ok(user.into())
+    }
+}
+
+// ============================================================================
+// Queries（読み取り操作）
+// ============================================================================
+
+/// ユーザー取得クエリ
+pub struct GetUserById {
+    repo: Arc<dyn UserRepository>,
+}
+
+impl GetUserById {
+    pub fn new(repo: Arc<dyn UserRepository>) -> Self {
+        Self { repo }
+    }
+
+    pub async fn execute(&self, id: UserId) -> Result<UserDto, AppError> {
+        let user = self.repo.find_by_id(id).await?;
+        Ok(user.into())
+    }
+}
+```
+
+### application/ports/repositories.rs（Port定義）
+
+監査結果に基づき、**複数のRepository traitを単一ファイルに統合**します。
+
+```rust
+// src/application/ports/repositories.rs
+// Repository Port定義（監査推奨: 単一ファイル統合）
+
+use crate::domain::user::{User, UserId};
+use crate::domain::post::{Post, PostId};
+use crate::error::AppError;
+use async_trait::async_trait;
+
+/// ユーザーリポジトリ（Port/Interface）
+#[async_trait]
+pub trait UserRepository: Send + Sync {
+    async fn save(&self, user: User) -> Result<(), AppError>;
+    async fn find_by_id(&self, id: UserId) -> Result<User, AppError>;
+    async fn find_by_email(&self, email: &str) -> Result<Option<User>, AppError>;
+    async fn delete(&self, id: UserId) -> Result<(), AppError>;
+}
+
+/// 投稿リポジトリ（Port/Interface）
+#[async_trait]
+pub trait PostRepository: Send + Sync {
+    async fn save(&self, post: Post) -> Result<(), AppError>;
+    async fn find_by_id(&self, id: PostId) -> Result<Post, AppError>;
+    async fn list_all(&self) -> Result<Vec<Post>, AppError>;
+    async fn delete(&self, id: PostId) -> Result<(), AppError>;
+}
+```
+
+### infrastructure/database/repositories.rs（実装）
+
+監査結果に基づき、**複数のRepository実装を単一ファイルに統合**します。
+
+```rust
+// src/infrastructure/database/repositories.rs
+// Repository実装（監査推奨: 単一ファイル統合）
+
+use crate::application::ports::repositories::{UserRepository, PostRepository};
+use crate::domain::user::{User, UserId};
+use crate::domain::post::{Post, PostId};
+use crate::error::AppError;
+use diesel::prelude::*;
+use diesel::r2d2::{ConnectionManager, Pool};
+use async_trait::async_trait;
+
+pub struct DieselUserRepository {
+    pool: Pool<ConnectionManager<PgConnection>>,
+}
+
+impl DieselUserRepository {
+    pub fn new(pool: Pool<ConnectionManager<PgConnection>>) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl UserRepository for DieselUserRepository {
+    async fn save(&self, user: User) -> Result<(), AppError> {
+        // Diesel実装
+        todo!()
+    }
+
+    async fn find_by_id(&self, id: UserId) -> Result<User, AppError> {
+        // Diesel実装
+        todo!()
+    }
+
+    async fn find_by_email(&self, email: &str) -> Result<Option<User>, AppError> {
+        // Diesel実装
+        todo!()
+    }
+
+    async fn delete(&self, id: UserId) -> Result<(), AppError> {
+        // Diesel実装
+        todo!()
+    }
+}
+
+pub struct DieselPostRepository {
+    pool: Pool<ConnectionManager<PgConnection>>,
+}
+
+impl DieselPostRepository {
+    pub fn new(pool: Pool<ConnectionManager<PgConnection>>) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl PostRepository for DieselPostRepository {
+    async fn save(&self, post: Post) -> Result<(), AppError> {
+        // Diesel実装
+        todo!()
+    }
+
+    async fn find_by_id(&self, id: PostId) -> Result<Post, AppError> {
+        // Diesel実装
+        todo!()
+    }
+
+    async fn list_all(&self) -> Result<Vec<Post>, AppError> {
+        // Diesel実装
+        todo!()
+    }
+
+    async fn delete(&self, id: PostId) -> Result<(), AppError> {
+        // Diesel実装
+        todo!()
+    }
+}
+```
+
+---
+
+## Value Objects の実装例（分割版）
+
+以下は従来の分割版の実装例です。ファイル数が増えても良い場合はこちらを参照してください。
+
+### UserId (NewType Pattern)
 
 ## Value Objects の実装例
 
