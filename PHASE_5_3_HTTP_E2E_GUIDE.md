@@ -1,16 +1,18 @@
 # Phase 5-3 拡張: HTTP E2E テスト実装ガイド
 
-**ステータス**: 🔄 実装中 (2025-01-17)  
+**ステータス**: 🔄 実装中 (2025-01-17)
 **目的**: Staging 環境での実際の HTTP 通信テストを実装し、API の動作検証を自動化
 
 ## 📋 概要
 
 前のセッション (Phase 5-3) で以下を完成させました:
+
 - ✅ Canary traffic split 制御ロジック (環境変数ベース)
 - ✅ Docker Compose Staging 環境 (PostgreSQL + Redis)
 - ✅ Staging E2E 統合テスト (7個、モック)
 
 本セッションの拡張内容:
+
 - 🔄 **HTTP E2E テストスイート** (`tests/e2e_http_staging.rs`)
   - 16 個の HTTP ベースのテスト
   - `reqwest` クライアント使用
@@ -42,6 +44,7 @@ async fn test_http_get_user_not_found()        // ✅ 404 エラー検証
 ```
 
 **検証項目**:
+
 - ステータスコード (200 OK, 404 Not Found)
 - JSON レスポンス形式
 - 空配列/エラーレスポンス構造
@@ -56,6 +59,7 @@ async fn test_http_post_create_post()          // ✅ 投稿作成
 ```
 
 **検証項目**:
+
 - 201 CREATED ステータス
 - リソース ID の返却
 - バリデーションエラー (400)
@@ -69,6 +73,7 @@ async fn test_http_deprecation_headers()       // ✅ API v1 非推奨ヘッダ�
 ```
 
 **検証項目**:
+
 - `Content-Type: application/json`
 - `Deprecation` ヘッダー (API v1)
 
@@ -81,6 +86,7 @@ async fn test_http_request_timeout()           // ✅ タイムアウト処理
 ```
 
 **検証項目**:
+
 - 不正な HTTP メソッド処理
 - リクエストタイムアウト
 
@@ -93,6 +99,7 @@ async fn test_http_response_time_measurement() // ✅ レスポンスタイム
 ```
 
 **検証項目**:
+
 - 5 個の同時リクエスト成功
 - エンドポイントごとのレスポンスタイム
 
@@ -105,6 +112,7 @@ async fn test_http_api_v1_backward_compat()    // ✅ API v1 互換性
 ```
 
 **検証項目**:
+
 - `/api/v2` エンドポイント動作
 - `/api/v1` 後方互換性
 
@@ -117,6 +125,7 @@ async fn test_http_response_schema_validation()      // ✅ JSON スキーマ
 ```
 
 **検証項目**:
+
 - 複数エンドポイント連携
 - JSON 形式の一貫性
 
@@ -125,11 +134,13 @@ async fn test_http_response_schema_validation()      // ✅ JSON スキーマ
 ### 前提条件
 
 1. **Staging 環境の起動**
+
    ```bash
    docker-compose -f docker-compose.staging.yml up -d
    ```
 
 2. **環境変数設定**
+
    ```bash
    export DATABASE_URL="postgres://postgres:password@localhost:5432/cms_staging"
    export REDIS_URL="redis://localhost:6379"
@@ -137,11 +148,13 @@ async fn test_http_response_schema_validation()      // ✅ JSON スキーマ
    ```
 
 3. **マイグレーション実行**
+
    ```bash
    cargo run --bin cms-migrate -- migrate --no-seed
    ```
 
 4. **アプリケーション起動**
+
    ```bash
    cargo run --bin cms-server --features "database,restructure_presentation"
    ```
@@ -149,6 +162,7 @@ async fn test_http_response_schema_validation()      // ✅ JSON スキーマ
 ### テスト実行コマンド
 
 #### 全テスト実行
+
 ```bash
 cargo test --test e2e_http_staging \
   --no-default-features --features "database,restructure_presentation" \
@@ -156,6 +170,7 @@ cargo test --test e2e_http_staging \
 ```
 
 #### 特定テスト実行
+
 ```bash
 cargo test --test e2e_http_staging test_http_get_health_endpoint \
   --no-default-features --features "database,restructure_presentation" \
@@ -163,6 +178,7 @@ cargo test --test e2e_http_staging test_http_get_health_endpoint \
 ```
 
 #### タイムアウト設定変更
+
 ```bash
 RUST_TEST_TIME_UNIT=10s cargo test --test e2e_http_staging \
   --no-default-features --features "database,restructure_presentation" \
@@ -209,6 +225,7 @@ pub async fn wait_for_server(&self, max_retries: u32) {
 **原因**: Staging 環境が起動していない
 
 **対応**:
+
 ```bash
 docker-compose -f docker-compose.staging.yml up -d
 docker ps  # 確認
@@ -219,6 +236,7 @@ docker ps  # 確認
 **原因**: レスポンス形式が期待と異なる
 
 **対応**: `--nocapture` フラグでレスポンス内容を確認
+
 ```bash
 cargo test test_http_get_tags_empty_list -- --ignored --nocapture
 ```
@@ -228,6 +246,7 @@ cargo test test_http_get_tags_empty_list -- --ignored --nocapture
 **原因**: サーバーレスポンスが遅い
 
 **対応**: タイムアウト値を増やす
+
 ```bash
 RUST_TEST_TIME_STEP=100s cargo test ...
 ```
@@ -237,6 +256,7 @@ RUST_TEST_TIME_STEP=100s cargo test ...
 **原因**: アプリケーションが起動していない
 
 **対応**:
+
 ```bash
 cargo run --bin cms-server --features "database,restructure_presentation"
 ```
@@ -328,7 +348,7 @@ for endpoint in endpoints {
 
 ---
 
-**作成日**: 2025年1月17日  
-**バージョン**: 1.0  
-**ステータス**: Phase 5-3 実装中  
+**作成日**: 2025年1月17日
+**バージョン**: 1.0
+**ステータス**: Phase 5-3 実装中
 **次回レビュー**: Performance Benchmark 実装後
