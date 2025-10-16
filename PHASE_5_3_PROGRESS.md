@@ -9,25 +9,29 @@
 ### ✅ Task 1: Canary Traffic Split 制御 (1時間)
 
 **実装内容**:
+
 - `src/routes/mod.rs` に `canary` モジュール追加
 - `get_api_v2_traffic_percentage()` 関数実装
 - `should_route_to_api_v2()` Consistent hashing ロジック
 - テスト: 2/2 passing ✅
 
 **機能**:
+
 ```rust
 pub fn get_api_v2_traffic_percentage() -> u32
 pub fn should_route_to_api_v2(request_id: &str) -> bool
 ```
 
 **環境変数**:
+
 ```bash
 API_V2_TRAFFIC_PERCENTAGE=50  # 50% traffic to v2
 ```
 
 **Canary タイムライン**:
+
 - Week 1: 10% v2
-- Week 2: 50% v2  
+- Week 2: 50% v2
 - Week 3: 90% v2
 - Week 4+: 100% v2
 
@@ -36,11 +40,13 @@ API_V2_TRAFFIC_PERCENTAGE=50  # 50% traffic to v2
 **ファイル作成**: `docker-compose.staging.yml`
 
 **サービス**:
+
 - PostgreSQL 15 (port 5432)
 - Redis 7 (port 6379)
 - Adminer UI (port 8080)
 
 **起動**:
+
 ```bash
 docker-compose -f docker-compose.staging.yml up -d
 ```
@@ -50,6 +56,7 @@ docker-compose -f docker-compose.staging.yml up -d
 **ファイル作成**: `tests/e2e_staging_integration.rs`
 
 **テスト内容** (7 tests):
+
 - Staging環境設定確認
 - Canary traffic split ロジック (3 tests)
 - 環境変数設定検証
@@ -58,6 +65,7 @@ docker-compose -f docker-compose.staging.yml up -d
 - Canary timeline検証 (4段階)
 
 **テスト実行**:
+
 ```bash
 cargo test --test e2e_staging_integration \
   --features "database,restructure_domain,restructure_application,restructure_presentation"

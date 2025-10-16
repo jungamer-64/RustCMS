@@ -1,6 +1,6 @@
 # Phase 5-3: Staging デプロイ実装ガイド
 
-**ステータス**: 実装フェーズ開始準備  
+**ステータス**: 実装フェーズ開始準備
 **前提**: Phase 5-1, 5-2 完了 (268/268 tests passing)
 
 ---
@@ -20,6 +20,7 @@ DATABASE_URL=postgres://user:pass@localhost:5432/cms_test cargo test --test e2e_
 ```
 
 **メリット**:
+
 - 既存の `docker-compose.yml` を活用
 - 依存関係競合なし
 - CI/CD との統合が容易
@@ -38,6 +39,7 @@ fn test_user_registration_full_flow_simulated() {
 ```
 
 **メリット**:
+
 - 即座に実行可能
 - CI でコスト削減
 - ロジック検証に最適
@@ -53,6 +55,7 @@ cargo run --release
 ```
 
 **メリット**:
+
 - 実環境での段階的検証
 - ロールバック可能
 - リスク最小化
