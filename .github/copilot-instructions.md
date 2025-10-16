@@ -2,30 +2,118 @@
 
 目的: このリポジトリでAI支援のコード作成やリファクタリングを行う際に、すぐに生産的になれる必須の知識と明確な守るべきルールをまとめます。
 
+**最終更新**: 2025年01月17日 | **Phase**: 2 進行中（5 entities × 109 tests, 4,081 lines）
+
 ---
 
 ## 1) 大局 (Big picture)
-- 単一クレートで複数バイナリを持つ（`cms-server` が default-run、`cms-migrate`、`cms-admin`、`dump_openapi` 等は `src/bin/*`）。バイナリごとに責務が分かれています（実行用／管理用／マイグレーション等）。
-- 機能フラグで機能群を切り替える設計（`auth`, `database`, `cache`, `search`, ...）。CIは複数の feature セットでビルド/テストします（`--all-features`, `--no-default-features` 等）。
-- 中核は `AppState`（`src/app.rs`）で、サービス（DB／Auth／Cache／Search）・イベントバス・メトリクスなどを集約。初期化は `AppStateBuilder` 経由。
-- イベント駆動: `src/events.rs` の `AppEvent`（単一 enum） と `create_event_bus(capacity)` を使う。`spawn_event_listeners`（`src/listeners.rs`）でリスナーを立ち上げ、`tokio::spawn` で背景タスクとして実行。
 
-## 2) 変更・実装時に最初に確認するファイル（優先）
-- `src/app.rs` — AppState / AppStateBuilder（機能を追加する際はここを更新）
-- `src/events.rs` — イベント定義と EventBus 型
-- `src/listeners.rs` — リスナーの spawn／イベント処理方針（必ず再読）
-- `src/error.rs` — `AppError` と HTTP 変換ルール（エラー表現はここで統一）
-- `src/handlers/`, `src/repositories/`, `src/models/` — 既存のレイヤー構造を素早く理解するため
-- `Cargo.toml` と `.github/workflows/ci.yml` — ビルド/テスト matrix と feature ポリシーを確認する
-- `config/` フォルダ（`default.toml` / `production.toml`）— 実行時設定のキー名や既定値
+### アーキテクチャ概要
+- **単一クレート、複数バイナリ**: `cms-server`（default）、`cms-migrate`、`cms-admin`、`dump_openapi` 等は `src/bin/*`
+- **Domain-Driven Design 進行中**: Phase 1 で Value Objects + Entity 統合パターン確立（`src/domain/user.rs` 参照）
+- **機能フラグ戦略**: `auth`, `database`, `cache`, `search` + **新規フラグ** `restructure_domain`（DDD 新コード用）
+  - CI は複数 feature セット（`--all-features`, `--no-default-features`, `--features "restructure_domain"` 等）でビルド/テスト
+- **中核サービス集約**: `AppState`（`src/app.rs` 2570行）がDB／Auth／Cache／Search・イベントバス・メトリクスを統合。`AppStateBuilder` で初期化
+- **イベント駆動**: `src/events.rs` の `AppEvent` enum ＆ `create_event_bus(capacity)` をベース。`spawn_event_listeners`（`src/listeners.rs`）で背景タスク実行
+- **三層エラー階層**: `DomainError` → `ApplicationError` → `AppError` （`src/common/types.rs` で定義、既存 `error.rs` と共存）
+
+### Phase 1 完了内容
+- ✅ Value Objects 統合パターン: Entity ＋ Value Objects を単一ファイルに（`src/domain/user.rs` 480行, 18 tests）
+- ✅ 共通型階層: `src/common/types.rs`（229行）で層別エラー型定義。Result 型エイリアス（DomainResult, ApplicationResult 等）
+- ✅ Repository Ports: `src/application/ports/repositories.rs` で trait 定義（5 traits, 24 methods）
+- ✅ 全テスト: 178/178 passing（feature flags で検証済み）
+
+### Phase 2 実装中（2025-01-17）
+- ✅ User Entity: 480行, 18 tests
+- ✅ Post Entity: 708行, 19 tests (6 Value Objects + publish/draft state)
+- ✅ Comment Entity: 539行, 16 tests (3 Value Objects + threading)
+- ✅ Tag Entity: 585行, 22 tests (3 Value Objects + usage counter)
+- ✅ Category Entity: 651行, 31 tests (4 Value Objects + slug uniqueness, post_count tracking)
+- **累積**: 2,963行のドメインコード, 106個のユニットテスト, 19個のValue Objects, 5個のRepositoryPorts
+
+## 2) 変更・実装時に最初に確認するファイル（優先度順）
+
+### 🔴 Critical（必ず読む）
+- **`src/domain/user.rs`** — Entity + Value Objects 統合パターン（481行, Phase 1 完了）。新しい domain エンティティはこれをテンプレートにする
+  - 例: `UserId`（NewType）、`Email`（検証済み）、`Username`、`User` Entity のビジネスメソッド（18個テスト）
+  - **重要**: Value Objects 内に検証ロジックを集約。エラー型は `src/common/types.rs` の `DomainError` 使用
+- **`src/common/types.rs`** — 三層エラー型階層（180行）。`DomainError`, `ApplicationError`, `InfrastructureError`, `AppError`, Result 型エイリアス
+  - 新しいエラーはここに追加し、`From<X> impl` で相互変換を実装
+- **`src/app.rs`** — AppState と初期化ロジック（2570行）。新機能追加時はここに optional フィールド ＋ `AppStateBuilder` に検査を追加
+- **`src/events.rs`** — AppEvent enum と EventBus 型。新しいイベントはここで variant 追加
+- **`Cargo.toml` + `.github/workflows/ci.yml`** — Feature matrix 確認。新 feature 追加時は CI matrix に追加すること
+
+### 🟡 High（コンテキスト依存）
+- **`src/listeners.rs`** — リスナーの spawn 方法とイベント処理方針（Fire-and-Forget 設計）。リスナー追加時必読
+- **`src/error.rs`** — 既存 AppError 実装（`IntoResponse` で HTTP 変換）。`src/common/types.rs` と共存
+- **`src/application/ports/repositories.rs`** — Repository trait 定義（Port）。Phase 2 版（5 traits: User/Post/Comment/Tag/Category）
+- **`RESTRUCTURE_PLAN.md` + `RESTRUCTURE_EXAMPLES.md`** — 再編計画と実装例。Phase 2-5 のガイドライン
+- **`.github/instructions/codacy.instructions.md`** — Codacy CLI 連携ルール（ファイル編集後は分析実行必須）
+
+### 🔵 Reference
+- **`src/handlers/`, `src/repositories/`, `src/models/`** — レガシーコード。並行利用期間中のみ参照
+- **`config/`** — 実行時設定（default.toml / production.toml）
 
 ## 3) 具体的なコード規約・パターン（このリポジトリ固有）
-- イベントの発行は Fire-and-Forget: ほとんどの箇所で `let _ = event_bus.send(AppEvent::...);` を採用。リスナーは冪等／再実行可能に実装すること。
-  - リスナー側では "最新の正しい状態をDBから取得する" 方針が採用されています（例: `state.db_get_user_by_id(data.id)`）。イベントは軽量データに留める。
-- `AppStateBuilder::build` は feature-初期化不足をパニックで検出する設計。ビルド時に `cfg(feature = "...")` に合わせてフィールドを追加すること。
-- trait 設計スタイルが混在しています（例: `SessionStore` は `async_trait`、`UserRepository` は `BoxFuture` を返す非-async_traitパターン）。新しい trait を追加する際は、**既存モジュールのスタイルに合わせる**（一貫性を重視）。
-- エラーは `AppError` に集約して `IntoResponse` で HTTP へ変換します。ハンドラ内では `crate::Result<T>` を返す慣習を踏襲してください。
-- 型安全化のため NewType / 値オブジェクトが増えてきています（例: `domain/value_objects/*` の計画）。識別子や検証済み文字列は専用型で扱う方針を優先。
+
+### Domain Layer (新しい DDD パターン)
+
+**Value Objects（検証済み値型）**:
+- NewType パターンで型安全性を確保。例: `UserId(Uuid)`, `Email(String)`, `Username(String)`
+- 検証ロジックを impl ブロック内に集約（`pub fn new(value: String) -> Result<Self, DomainError>`）
+- `src/domain/user.rs` を参考実装とする（Email は 100+ 行のバリデーション含む）
+
+**Entities（ビジネスロジック集約）**:
+- Entity と Value Objects を**同一ファイルに統合**（監査推奨）
+- ビジネスメソッドは Entity に実装（例: `User::activate()`, `User::change_email(new_email)` → イベント発行）
+- 不変条件（invariants）は struct フィールドを private にして impl で保証
+- Domain Events 発行: `pub fn events(&self) -> Vec<DomainEvent>` メソッドで events 外部化（リスナー側が消費）
+
+**Error Handling**:
+- Domain層 エラーは `DomainError` を使用（`src/common/types.rs` で定義）
+- エラーバリアント: `InvalidUserId`, `InvalidEmail`, `EmailAlreadyInUse`, `BusinessRuleViolation` 等
+- 変換: `impl From<DomainError> for ApplicationError` で Application層へ自動変換
+
+### Application Layer (Use Cases & Ports)
+
+**Repository Ports (Traits)**:
+- trait 定義を `src/application/ports/repositories.rs` で集約
+- `async_trait` vs `BoxFuture` 混在。**既存パターンに合わせる**（一貫性優先）
+- DTOs は Application Layer で定義。`From<DomainEntity>` impl で domain 型から変換
+
+**Use Cases**:
+- Phase 2 以降に実装予定。`src/application/use_cases/` を作成（`RegisterUser`, `PublishPost` 等）
+- DTO ベースの request/response を使う
+- Repository ports を DI で受け取る
+
+### Infrastructure Layer (Implementations)
+
+**Repositories**:
+- `src/infrastructure/database/repositories.rs` (or by entity) に実装
+- trait impl で feature flag 対応（例: `#[cfg(feature = "database")]` 属性を使用）
+- Diesel クエリは private ヘルパーメソッドに分離
+
+**Event Bus**:
+- `src/events.rs` の `create_event_bus(capacity)` で broadcast channel 生成
+- リスナーは `src/listeners.rs` で `spawn_event_listeners()` で起動
+- Fire-and-Forget 設計: `let _ = event_bus.send(AppEvent::...);`
+
+### Cross-Layer Patterns
+
+**Feature Flags**:
+- 既存: `auth`, `database`, `cache`, `search`
+- 新規: `restructure_domain`, `restructure_application`, `restructure_presentation`
+- CI は 4+ feature セットで検証（`--all-features`, `--no-default-features`, 混合など）
+
+**Error Propagation**:
+- Domain → Application: `impl From<DomainError> for ApplicationError`
+- Application → App (HTTP): `impl From<AppError> for IntoResponse`
+- 既存 `error.rs` と `common/types.rs` 共存（後期段階で統合予定）
+
+**Testing**:
+- Domain/Value Object: 100% ユニットテスト（外部依存なし）。`proptest`, `rstest` 活用
+- Application: mockall で Repository port をモック化。Tokio test
+- Infrastructure: testcontainers で PostgreSQL/Redis 起動（統合テスト）
 
 ## 4) ビルド / テスト / ローカル実行の必須コマンド（開発者向け）
 - 形式チェック: `cargo fmt --all -- --check` と `cargo clippy --workspace --all-targets --all-features -- -D warnings`（CI と同じ clippy ポリシー）
@@ -34,35 +122,53 @@
   - DB/Redisを必要とする場合は環境変数を設定（例: `DATABASE_URL=postgres://postgres:REPLACE_ME@localhost:5432/cms_test`）。
   - マイグレーション: `cargo run --bin cms-migrate -- migrate --no-seed`（CIの実行例を参照）
   - テスト実行（CIスタイル）: `cargo test --workspace --no-fail-fast <feature-args>`
+  - **Phase 1 検証**: `cargo test --lib --no-default-features --features "restructure_domain"`（新 Domain Layer 専用）
 - スナップショット: `cargo insta test`（CI で実行されるため、スナップショットを更新する場合は慎重に）
 - OpenAPI 出力: `OPENAPI_OUT=./openapi-full.json cargo run --features "auth database search cache" --bin dump_openapi`
 - 統合テスト: CI の `integration-tests` ジョブを参照（BISCUIT鍵の扱い・DBマイグレーション手順あり）。
+- **Codacy 分析（ファイル編集後は必須）**:
+  - 単一ファイル: `mcp_codacy_codacy_cli_analyze --rootPath /path/to/repo --file src/path/to/edited_file.rs`
+  - 全プロジェクト: `mcp_codacy_codacy_cli_analyze --rootPath /path/to/repo`（セキュリティ脆弱性チェック: `--tool trivy`）
 
 ## 5) CI の重要な前提（守るべきこと）
 - CI は `RUSTFLAGS: -D warnings` で警告をエラー化しているため、警告が出ないように修正すること。
 - CI matrix は複数の feature セット（`--all-features` / `--no-default-features` / カスタム）でビルド/テストします。ローカルで変更の影響範囲を確認するには各 feature セットでのビルドを推奨。
 - 依存関係追加時は `cargo-deny` / `cargo-audit` のチェックが存在するので、新しい crate の導入は CI での警告を確認してからマージする。
 
-## 6) インテグレーション・外部依存とリソース
+## 6) Codacy 連携ルール（重要・必読）
+- **ファイル編集後は必ず実行**: `mcp_codacy_codacy_cli_analyze` で対象ファイルの品質・セキュリティ分析を実行すること
+- **依存関係追加後は必須**: `--tool trivy` で脆弱性スキャンを実行してから続行
+- **自動判定**: Codacy CLI が未インストールの場合は自動で提案
+- **詳細**: `.github/instructions/codacy.instructions.md` を参照
+
+## 7) インテグレーション・外部依存とリソース
 - PostgreSQL（Diesel）、Redis、Tantivy（ローカルインデックス）、Biscuit-auth/WebAuthn、rustls 等が統合ポイント。関連実装は `infrastructure/` 以下にまとまる想定。
 - Integration テストや CI は DB/Redis コンテナを用いるため、ローカル実行時には同等のサービスを立ち上げること。
 - BISCUIT 秘密鍵は CI では secrets 経由で与えられます。ローカルで不足する場合は CI に倣って `gen_biscuit_keys` バイナリ（`src/bin/gen_biscuit_keys.rs`）で一時生成可能。
 
-## 7) 変更時のチェックリスト（AI がコードを生成/変更する際）
+## 8) 変更時のチェックリスト（AI がコードを生成/変更する際）
 - 変更箇所に対応する feature gate（`cfg(feature = "...")`）の追加/更新を忘れないこと。
 - `AppState` にサービスを追加する場合は `AppStateBuilder` に optional フィールドを追加し、`build()` で検査・panic を維持する。
 - `AppEvent` を拡張する際は軽量データにし、既存リスナーの挙動と互換性を確認する。リスナーは必ず冪等であること。
 - エンドポイントの変更は OpenAPI (dump_openapi) と insta スナップショットに反映させること。
 - テストを追加したら、該当する feature セットで `cargo test --workspace` を実行して CI マトリクスと同等の検証を行う。
+- **新規ドメインモデル実装時**:
+  - `src/domain/user.rs` を参考テンプレートとする（Value Objects + Entity 統合パターン）
+  - エラーは `src/common/types.rs` の `DomainError` を拡張して追加
+  - リポジトリポートは `src/application/ports/repositories.rs` で trait を定義
+  - ビジネスルール違反は domain layer で検出・防御（infrastructure layer に委ねない）
 
-## 8) 参考（必読）
-- `src/app.rs` — AppState と初期化ロジック（重要）
-- `src/events.rs` — AppEvent / EventBus（イベント設計の単一の出発点）
+## 9) 参考（必読）
+- `src/domain/user.rs` — Value Objects + Entity 統合パターンの完成版（480行, 18 tests）
+- `src/common/types.rs` — 三層エラー型階層とResult型エイリアス（229行）
+- `src/app.rs` — AppState と初期化ロジック（2570行）
+- `src/events.rs` — AppEvent enum / EventBus（イベント設計の単一の出発点）
 - `src/listeners.rs` — イベントリスナーの起動と実装方針
-- `src/error.rs` — エラーの一元化と HTTP マッピング
+- `src/error.rs` — 既存 AppError と HTTP マッピング
 - `.github/workflows/ci.yml` — CI の実行手順と feature matrix（ローカル検証はここを参照）
 - `RESTRUCTURE_PLAN.md` と `RESTRUCTURE_EXAMPLES.md` — 現在の再編計画と実装例（方針確認用）
-- `.github/instructions/codacy.instructions.md` — Codacy 連携ルール（ファイル編集後はコマンド実行が必須なルールあり）
+- `.github/instructions/codacy.instructions.md` — Codacy CLI 連携ルール（ファイル編集後はコマンド実行が必須なルールあり）
+- `RESTRUCTURE_SUMMARY.md` — Phase 進捗状況（Phase 2 進行中 🚀）
 
 ---
 

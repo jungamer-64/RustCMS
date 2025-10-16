@@ -7,6 +7,7 @@
 #### タスク
 
 - [ ] **ディレクトリ構造作成**
+
   ```bash
   mkdir -p src/{domain,application,infrastructure,presentation}
   mkdir -p src/domain/{entities,value_objects,services,events}
@@ -22,7 +23,7 @@
 
 - [ ] **Value Objects 実装 (5個)**
   - [ ] `UserId` - ユーザー識別子
-  - [ ] `PostId` - 投稿識別子  
+  - [ ] `PostId` - 投稿識別子
   - [ ] `Email` - 検証済みメールアドレス
   - [ ] `Username` - ユーザー名（3-20文字）
   - [ ] `Slug` - URL用スラッグ
@@ -459,6 +460,6 @@ cargo test --test event_integration
 
 ---
 
-**作成日**: 2025年10月16日  
-**最終更新**: 2025年10月16日  
+**作成日**: 2025年10月16日
+**最終更新**: 2025年10月16日
 **ステータス**: Phase 1 Week 1 開始準備中

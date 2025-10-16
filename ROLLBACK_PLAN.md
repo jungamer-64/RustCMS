@@ -432,12 +432,14 @@ jq '.coverage' /tmp/before/tarpaulin.json /tmp/after/tarpaulin.json
 ### 即座に実施
 
 - [ ] **CI が Green になることを確認**
+
   ```bash
   cargo test --workspace --all-features
   cargo clippy --workspace --all-features -- -D warnings
   ```
 
 - [ ] **ベンチマークが Phase 前と同等**
+
   ```bash
   cargo bench --bench baseline
   ```
@@ -462,6 +464,6 @@ jq '.coverage' /tmp/before/tarpaulin.json /tmp/after/tarpaulin.json
 
 ---
 
-**作成日**: 2025年10月16日  
-**最終更新**: 2025年10月16日  
+**作成日**: 2025年10月16日
+**最終更新**: 2025年10月16日
 **ステータス**: Phase 1 開始前

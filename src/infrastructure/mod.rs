@@ -11,9 +11,11 @@
 // Phase 3: 新しいインフラストラクチャ層構造（監査済み）
 // ============================================================================
 
+// Phase 3 実装中: restructure_application フラグで新 database 層を有効化
+#[cfg(all(feature = "restructure_application", feature = "database"))]
+pub mod database;
+
 // Phase 3 で実装予定
-// #[cfg(all(feature = "restructure_application", feature = "database"))]
-// pub mod database;  // DB実装統合（models.rs, repositories.rs）
 // #[cfg(all(feature = "restructure_application", feature = "cache"))]
 // pub mod cache;     // Cache実装統合
 // #[cfg(all(feature = "restructure_application", feature = "search"))]
@@ -32,7 +34,8 @@
 
 // Database adapter re-exports are feature gated because `crate::database` is
 // only compiled when the `database` feature is enabled.
-#[cfg(feature = "database")]
+// Note: Phase 3 new database impl (restructure_application) takes precedence over legacy
+#[cfg(all(not(feature = "restructure_application"), feature = "database"))]
 pub mod database {
     pub use crate::database::*;
 }
@@ -72,5 +75,9 @@ pub use search::*;
 
 #[cfg(feature = "auth")]
 pub use auth::*;
+
+// Phase 3: DieselUserRepository は database から直接インポート（ambiguous re-export を回避）
+#[cfg(all(feature = "restructure_application", feature = "database"))]
+pub use database::DieselUserRepository;
 
 pub use repositories::*;

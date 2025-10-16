@@ -32,10 +32,10 @@ pub trait UnitOfWork: Send + Sync {
 pub trait Transaction: Send + Sync {
     /// トランザクションをコミット
     async fn commit(self: Box<Self>) -> Result<(), TransactionError>;
-    
+
     /// トランザクションをロールバック
     async fn rollback(self: Box<Self>) -> Result<(), TransactionError>;
-    
+
     /// トランザクション内でリポジトリを取得
     fn user_repository(&self) -> Box<dyn UserRepository>;
     fn post_repository(&self) -> Box<dyn PostRepository>;
@@ -45,10 +45,10 @@ pub trait Transaction: Send + Sync {
 pub enum TransactionError {
     #[error("Failed to begin transaction: {0}")]
     BeginFailed(String),
-    
+
     #[error("Failed to commit transaction: {0}")]
     CommitFailed(String),
-    
+
     #[error("Failed to rollback transaction: {0}")]
     RollbackFailed(String),
 }
@@ -82,7 +82,7 @@ impl UnitOfWork for DieselUnitOfWork {
             .get()
             .await
             .map_err(|e| TransactionError::BeginFailed(e.to_string()))?;
-        
+
         Ok(Box::new(DieselTransaction::new(conn)))
     }
 }
@@ -99,7 +99,7 @@ impl DieselTransaction {
         // Diesel では connection.begin_test_transaction() を使用
         // または手動で BEGIN を実行
         connection.execute("BEGIN").expect("Failed to begin transaction");
-        
+
         Self {
             connection,
             committed: false,
@@ -116,34 +116,34 @@ impl Transaction for DieselTransaction {
                 "Transaction already rolled back".to_string()
             ));
         }
-        
+
         self.connection
             .execute("COMMIT")
             .map_err(|e| TransactionError::CommitFailed(e.to_string()))?;
-        
+
         self.committed = true;
         Ok(())
     }
-    
+
     async fn rollback(mut self: Box<Self>) -> Result<(), TransactionError> {
         if self.committed {
             return Err(TransactionError::RollbackFailed(
                 "Transaction already committed".to_string()
             ));
         }
-        
+
         self.connection
             .execute("ROLLBACK")
             .map_err(|e| TransactionError::RollbackFailed(e.to_string()))?;
-        
+
         self.rolled_back = true;
         Ok(())
     }
-    
+
     fn user_repository(&self) -> Box<dyn UserRepository> {
         Box::new(DieselUserRepository::with_connection(&self.connection))
     }
-    
+
     fn post_repository(&self) -> Box<dyn PostRepository> {
         Box::new(DieselPostRepository::with_connection(&self.connection))
     }
@@ -179,27 +179,27 @@ impl<U: UnitOfWork> TransferPostOwnershipUseCase<U> {
     ) -> Result<(), ApplicationError> {
         // トランザクション開始
         let tx = self.unit_of_work.begin().await?;
-        
+
         // トランザクション内でリポジトリ取得
         let user_repo = tx.user_repository();
         let post_repo = tx.post_repository();
-        
+
         // 複数の操作を実行
         let new_owner = user_repo.find_by_id(new_owner_id).await?
             .ok_or(ApplicationError::UserNotFound)?;
-        
+
         let mut post = post_repo.find_by_id(post_id).await?
             .ok_or(ApplicationError::PostNotFound)?;
-        
+
         // ビジネスロジック
         post.change_author(new_owner_id)?;
-        
+
         // 保存
         post_repo.save(&post).await?;
-        
+
         // コミット（失敗時は自動ロールバック）
         tx.commit().await?;
-        
+
         Ok(())
     }
 }
@@ -218,7 +218,7 @@ impl Transaction for DieselTransaction {
             .map_err(|e| TransactionError::SavepointFailed(e.to_string()))?;
         Ok(())
     }
-    
+
     async fn rollback_to_savepoint(&self, name: &str) -> Result<(), TransactionError> {
         self.connection
             .execute(&format!("ROLLBACK TO SAVEPOINT {}", name))
@@ -233,10 +233,10 @@ impl Transaction for DieselTransaction {
 ```rust
 pub async fn execute(&self) -> Result<(), ApplicationError> {
     let tx = self.unit_of_work.begin().await?;
-    
+
     // 外側の操作
     self.operation_a(&tx).await?;
-    
+
     // ネストされた操作（セーブポイント使用）
     tx.savepoint("nested").await?;
     match self.operation_b(&tx).await {
@@ -248,7 +248,7 @@ pub async fn execute(&self) -> Result<(), ApplicationError> {
             tracing::warn!("Operation B failed, but continuing: {}", e);
         }
     }
-    
+
     tx.commit().await?;
     Ok(())
 }
@@ -271,7 +271,7 @@ impl TransactionalEventBus {
     pub fn publish_pending(&self, event: DomainEvent) {
         self.pending_events.lock().unwrap().push(event);
     }
-    
+
     /// コミット成功後に一括発行
     pub async fn flush(&self) -> Result<(), EventError> {
         let events = self.pending_events.lock().unwrap().drain(..).collect::<Vec<_>>();
@@ -280,7 +280,7 @@ impl TransactionalEventBus {
         }
         Ok(())
     }
-    
+
     /// ロールバック時にバッファをクリア
     pub fn clear(&self) {
         self.pending_events.lock().unwrap().clear();
@@ -292,16 +292,16 @@ impl UseCase {
     pub async fn execute(&self) -> Result<(), ApplicationError> {
         let tx = self.unit_of_work.begin().await?;
         let event_bus = TransactionalEventBus::new(self.event_bus.clone());
-        
+
         // 操作実行
         self.do_work(&tx, &event_bus).await?;
-        
+
         // コミット
         tx.commit().await?;
-        
+
         // イベント発行（コミット後）
         event_bus.flush().await?;
-        
+
         Ok(())
     }
 }
@@ -320,7 +320,7 @@ impl TransactionalCacheInvalidator {
     pub fn schedule_invalidation(&self, key: String) {
         self.pending_invalidations.lock().unwrap().push(key);
     }
-    
+
     /// コミット後に実行
     pub async fn execute(&self) -> Result<(), CacheError> {
         let keys = self.pending_invalidations.lock().unwrap().drain(..).collect::<Vec<_>>();
@@ -329,7 +329,7 @@ impl TransactionalCacheInvalidator {
         }
         Ok(())
     }
-    
+
     /// ロールバック時はクリア
     pub fn clear(&self) {
         self.pending_invalidations.lock().unwrap().clear();
@@ -345,33 +345,33 @@ impl TransactionalCacheInvalidator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_transaction_commit() {
         let uow = DieselUnitOfWork::new(test_pool());
         let tx = uow.begin().await.unwrap();
-        
+
         let user_repo = tx.user_repository();
         user_repo.save(&test_user()).await.unwrap();
-        
+
         tx.commit().await.unwrap();
-        
+
         // 検証: データが保存されている
     }
-    
+
     #[tokio::test]
     async fn test_transaction_rollback() {
         let uow = DieselUnitOfWork::new(test_pool());
         let tx = uow.begin().await.unwrap();
-        
+
         let user_repo = tx.user_repository();
         user_repo.save(&test_user()).await.unwrap();
-        
+
         tx.rollback().await.unwrap();
-        
+
         // 検証: データが保存されていない
     }
-    
+
     #[tokio::test]
     async fn test_auto_rollback_on_drop() {
         let uow = DieselUnitOfWork::new(test_pool());
@@ -381,7 +381,7 @@ mod tests {
             user_repo.save(&test_user()).await.unwrap();
             // tx が Drop される
         }
-        
+
         // 検証: 自動ロールバックされている
     }
 }
@@ -404,6 +404,6 @@ mod tests {
 
 ---
 
-**作成日**: 2025年10月16日  
-**ステータス**: 設計完了  
+**作成日**: 2025年10月16日
+**ステータス**: 設計完了
 **次回レビュー**: Phase 2 開始前

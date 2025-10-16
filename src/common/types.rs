@@ -17,28 +17,42 @@ use thiserror::Error;
 pub enum DomainError {
     #[error("Invalid user ID: {0}")]
     InvalidUserId(String),
-
     #[error("Invalid email: {0}")]
     InvalidEmail(String),
-
     #[error("Invalid username: {0}")]
     InvalidUsername(String),
-
-    #[error("User is not active")]
-    InactiveUser,
-
-    #[error("Email already in use: {0}")]
-    EmailAlreadyInUse(String),
-
-    #[error("Username already in use: {0}")]
-    UsernameAlreadyInUse(String),
-
-    #[error("Business rule violation: {0}")]
-    BusinessRuleViolation(String),
-
+    #[error("Invalid slug: {0}")]
+    InvalidSlug(String),
+    #[error("Invalid title: {0}")]
+    InvalidTitle(String),
+    #[error("Invalid content: {0}")]
+    InvalidContent(String),
+    #[error("Invalid published at: {0}")]
+    InvalidPublishedAt(String),
+    #[error("Invalid comment text: {0}")]
+    InvalidCommentText(String),
+    #[error("Invalid comment author: {0}")]
+    InvalidCommentAuthor(String),
+    #[error("Invalid comment post: {0}")]
+    InvalidCommentPost(String),
+    #[error("Invalid comment status: {0}")]
+    InvalidCommentStatus(String),
     #[error("Invalid state transition: {0}")]
     InvalidStateTransition(String),
-
+    #[error("Invalid tag name: {0}")]
+    InvalidTagName(String),
+    #[error("Invalid tag description: {0}")]
+    InvalidTagDescription(String),
+    #[error("Invalid tag status: {0}")]
+    InvalidTagStatus(String),
+    #[error("Invalid category name: {0}")]
+    InvalidCategoryName(String),
+    #[error("Invalid category slug: {0}")]
+    InvalidCategorySlug(String),
+    #[error("Invalid category description: {0}")]
+    InvalidCategoryDescription(String),
+    #[error("Invalid category status: {0}")]
+    InvalidCategoryStatus(String),
     #[error("Unknown domain error: {0}")]
     Unknown(String),
 }

@@ -325,9 +325,9 @@ pub async fn create_post(state: AppState) {
 
 ### 1. ディレクトリ構造（レイヤードアーキテクチャ）
 
-> **監査評価**: ⭐⭐⭐⭐⭐ (4.8/5.0) — Sonnet 4.5 による包括的監査済み  
-> **ファイル数削減**: 66 → 34 ファイル (-48.5%)  
-> **採用推奨**: Phase 1-5 の段階的移行に最適  
+> **監査評価**: ⭐⭐⭐⭐⭐ (4.8/5.0) — Sonnet 4.5 による包括的監査済み
+> **ファイル数削減**: 66 → 34 ファイル (-48.5%)
+> **採用推奨**: Phase 1-5 の段階的移行に最適
 
 #### 最終推奨構造（監査修正版）
 
@@ -858,16 +858,16 @@ mod tests {
    ```bash
    # Phase 1-2: Domain層
    mkdir -p src/domain/services
-   
+
    # Phase 3: Application層
    mkdir -p src/application/{dto,ports}
-   
+
    # Phase 3: Infrastructure層
    mkdir -p src/infrastructure/{database,cache,search,auth,events}
-   
+
    # Phase 4: Web層 (Presentation → web に改名)
    mkdir -p src/web/handlers
-   
+
    # 共有ユーティリティ (shared → common に改名)
    mkdir -p src/common
    ```

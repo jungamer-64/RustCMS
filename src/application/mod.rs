@@ -10,28 +10,30 @@
 // Phase 3: 新しいアプリケーション層構造（監査済み）
 // ============================================================================
 
-pub mod ports;
 pub mod dto;
+pub mod ports;
 
-// Phase 3 で実装予定
-// #[cfg(feature = "restructure_application")]
-// pub mod user;    // CQRS統合（Commands + Queries + DTOs）
-// #[cfg(feature = "restructure_application")]
-// pub mod post;    // CQRS統合
+// Phase 3 Step 7-8: CQRS統合（Commands + Queries + DTOs）
+#[cfg(feature = "restructure_application")]
+pub mod user;
+
+#[cfg(feature = "restructure_application")]
+pub mod post;
+
+#[cfg(feature = "restructure_application")]
+pub mod comment;
+
+#[cfg(feature = "restructure_application")]
+pub mod tag;
+
+#[cfg(feature = "restructure_application")]
+pub mod category;
 
 // ============================================================================
 // レガシー構造（既存コードとの並行稼働）
 // ============================================================================
 
 pub use ports::*;
-
-// Phase 3: AppContainer の実装予定
-// NOTE: AppContainer は src/app.rs で参照されているが、まだ定義されていない
-// Phase 3 で infrastructure/database/ または application/ に実装予定
-// #[cfg(feature = "database")]
-// pub mod container;
-// #[cfg(feature = "database")]
-// pub use container::AppContainer;
 
 // Re-export surface for application-layer services, handlers and use-cases
 // This file intentionally re-exports existing handlers and services so callers

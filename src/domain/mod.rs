@@ -18,10 +18,21 @@ pub mod services;
 pub mod user; // Entity + Value Objects 統合
 
 // Phase 2 で実装予定
-// #[cfg(feature = "restructure_domain")]
-// pub mod post;    // Entity + Value Objects 統合
-// #[cfg(feature = "restructure_domain")]
-// pub mod events;  // Domain Events
+#[cfg(feature = "restructure_domain")]
+pub mod post; // Entity + Value Objects 統合
+
+#[cfg(feature = "restructure_domain")]
+pub mod comment; // Entity + Value Objects 統合
+
+#[cfg(feature = "restructure_domain")]
+pub mod tag; // Entity + Value Objects 統合
+
+#[cfg(feature = "restructure_domain")]
+pub mod category; // Entity + Value Objects 統合
+
+// Phase 2 拡張: Domain Events
+#[cfg(feature = "restructure_domain")]
+pub mod events; // Domain Events
 
 // ============================================================================
 // レガシー構造（既存コードとの並行稼働）

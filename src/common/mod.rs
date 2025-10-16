@@ -11,8 +11,8 @@
 // Phase 1 で実装完了
 pub mod types;
 pub use types::{
-    AppError, ApplicationError, ApplicationResult, DomainError, DomainResult,
-    InfrastructureError, InfrastructureResult, Result,
+    AppError, ApplicationError, ApplicationResult, DomainError, DomainResult, InfrastructureError,
+    InfrastructureResult, Result,
 };
 
 // Phase 2 で実装予定

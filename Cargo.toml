@@ -281,7 +281,7 @@ tempfile = "3.8"
 # TEMP: testcontainers は bollard バージョン競合により一時的に無効化
 # Phase 3 統合テストでは bollard を直接使用するか、Docker Compose で代替
 # testcontainers = "0.25"
-bollard = "0.18"  # testcontainers の代替 (Docker API 直接操作)
+bollard = "0.18"                                                 # testcontainers の代替 (Docker API 直接操作)
 tokio-test = "0.4"
 wiremock = "0.6"
 http-body-util = { version = "0.1", package = "http-body-util" }
@@ -317,14 +317,20 @@ production = ["default"]
 search = ["dep:tantivy"]
 
 # === 構造再編 Features (Phase 1-5) ===
-restructure_domain = []          # Phase 1-2: Value Objects + Entities
-restructure_application = ["restructure_domain"]  # Phase 3: Use Cases + Repositories
-restructure_presentation = ["restructure_application"]  # Phase 4: 新ハンドラー
-full_restructure = ["restructure_domain", "restructure_application", "restructure_presentation"]
+restructure_domain = [] # Phase 1-2: Value Objects + Entities
+restructure_application = [
+    "restructure_domain",
+] # Phase 3: Use Cases + Repositories
+restructure_presentation = ["restructure_application"] # Phase 4: 新ハンドラー
+full_restructure = [
+    "restructure_domain",
+    "restructure_application",
+    "restructure_presentation",
+]
 
 # === レガシー維持 Features (移行期のみ) ===
-legacy_handlers = []             # 旧ハンドラーを残す (Phase 4-5)
-legacy_repositories = []         # 旧リポジトリを残す (Phase 3-5)
+legacy_handlers = []     # 旧ハンドラーを残す (Phase 4-5)
+legacy_repositories = [] # 旧リポジトリを残す (Phase 3-5)
 
 # === 統合テスト ===
 # NOTE: testcontainers は現在無効化中 (bollard バージョン競合)
@@ -351,16 +357,16 @@ debug = true
 opt-level = 3
 debug = false
 strip = true
-lto = "thin"        # "fat" → "thin" に変更 (ビルド時間短縮)
-codegen-units = 16  # 1 → 16 に変更 (並列化)
+lto = "thin"            # "fat" → "thin" に変更 (ビルド時間短縮)
+codegen-units = 16      # 1 → 16 に変更 (並列化)
 panic = "abort"
 overflow-checks = false
 
 # CI 用の最適化プロファイル (Production デプロイ用)
 [profile.release-ci]
 inherits = "release"
-lto = "fat"         # CI では時間をかけて最適化
-codegen-units = 1   # 最大限の最適化
+lto = "fat"          # CI では時間をかけて最適化
+codegen-units = 1    # 最大限の最適化
 
 
 # ===== CARGO CONFIGURATION =====

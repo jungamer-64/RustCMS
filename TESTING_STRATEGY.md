@@ -132,7 +132,7 @@ async fn test_register_user_success() {
         .expect_find_by_email()
         .with(eq(Email::new("test@example.com".into()).unwrap()))
         .returning(|_| Ok(None));
-    
+
     mock_repo
         .expect_create()
         .withf(|user| user.email().as_str() == "test@example.com")
@@ -169,7 +169,7 @@ async fn test_register_user_duplicate_email() {
     mock_repo
         .expect_find_by_email()
         .returning(|_| Ok(Some(User::new(/* ... */))));
-    
+
     let use_case = RegisterUserUseCase::new(Arc::new(mock_repo), /* ... */);
     let result = use_case.execute(/* ... */).await;
 
@@ -337,7 +337,7 @@ async fn test_register_user_endpoint() {
 
     // Assert
     assert_eq!(response.status(), StatusCode::CREATED);
-    
+
     let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
     let user: UserDto = serde_json::from_slice(&body).unwrap();
     assert_eq!(user.email, "test@example.com");
@@ -573,6 +573,6 @@ impl UserBuilder {
 
 ---
 
-**作成日**: 2025年10月16日  
-**最終更新**: 2025年10月16日  
+**作成日**: 2025年10月16日
+**最終更新**: 2025年10月16日
 **ステータス**: Phase 1 準備完了

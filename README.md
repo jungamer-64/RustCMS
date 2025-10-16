@@ -270,7 +270,6 @@ Grafana ダッシュボード例: `monitoring/grafana/auth_unification_dashboard
 
 - フラット互換フィールド無効構成 (--no-default-features + 必要最小 features) 全テスト
 
-
 補助スキャン (任意 CI informational ジョブ例):
 
 ```bash
@@ -291,7 +290,6 @@ Phase4 直前チェック:
 ```
 
 有効化すると以下が有効になります:
-
 
 将来のメジャーリリースでこの feature とフラットフィールドは削除予定です。新規実装は `response.tokens.*` を参照してください。
 
