@@ -47,17 +47,17 @@ pub async fn add_deprecation_headers(
     // v1 エンドポイントのみに追加
     if original_uri.contains("/api/v1/") {
         let headers = response.headers_mut();
-        
+
         headers.insert(
             "Deprecation",
             HeaderValue::from_static("true"),
         );
-        
+
         headers.insert(
             "Sunset",
             HeaderValue::from_static("Sun, 17 Mar 2025 00:00:00 GMT"),
         );
-        
+
         // /api/v1/users/123 → /api/v2/users/123 にマップ
         let v2_path = original_uri.replace("/api/v1/", "/api/v2/");
         let link_header = format!("<{}>; rel=\"successor-version\"", v2_path);
@@ -66,7 +66,7 @@ pub async fn add_deprecation_headers(
             HeaderValue::from_str(&link_header).unwrap(),
         );
     }
-    
+
     response
 }
 ```
@@ -292,21 +292,23 @@ API v1 は **2025-03-17 に削除予定** です。今すぐ v2 への移行を�
 #### ステップバイステップ
 
 1. **URL 置換**
+
    ```bash
    # Before
    curl https://api.example.com/api/v1/users/123
-   
+
    # After
    curl https://api.example.com/api/v2/users/123
    ```
 
 2. **エラーハンドリング更新**
+
    ```javascript
    // Before
    if (response.error) {
      console.error(response.error);
    }
-   
+
    // After
    if (response.errors && response.errors.length > 0) {
      response.errors.forEach(err => console.error(err));
@@ -314,10 +316,11 @@ API v1 は **2025-03-17 に削除予定** です。今すぐ v2 への移行を�
    ```
 
 3. **ページネーション更新**
+
    ```bash
    # Before
    curl 'https://api.example.com/api/v1/posts?page=2&limit=10'
-   
+
    # After
    curl 'https://api.example.com/api/v2/posts?offset=10&limit=10'
    ```
@@ -350,6 +353,6 @@ API v1 は **2025-03-17 に削除予定** です。今すぐ v2 への移行を�
 
 ---
 
-**作成日**: 2025-01-17  
-**ステータス**: 実装準備中  
+**作成日**: 2025-01-17
+**ステータス**: 実装準備中
 **次フェーズ**: Phase 5-4 (2025-01-24 開始)
