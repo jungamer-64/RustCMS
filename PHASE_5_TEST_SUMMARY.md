@@ -34,6 +34,7 @@
 ### API v2 エンドポイント
 
 **User Management** (8 tests)
+
 ```
 ✅ POST   /api/v2/users/register          → register_user
 ✅ GET    /api/v2/users/{user_id}         → get_user
@@ -46,6 +47,7 @@
 ```
 
 **Blog Post Management** (6 tests)
+
 ```
 ✅ POST   /api/v2/posts                   → create_post
 ✅ GET    /api/v2/posts/{slug}            → get_post
@@ -56,6 +58,7 @@
 ```
 
 **Comment Management** (4 tests)
+
 ```
 ✅ POST   /api/v2/posts/{post_id}/comments    → create_comment
 ✅ GET    /api/v2/posts/{post_id}/comments    → list_comments
@@ -64,6 +67,7 @@
 ```
 
 **Tag Management** (4 tests)
+
 ```
 ✅ POST   /api/v2/tags                    → create_tag
 ✅ GET    /api/v2/tags/{slug}             → get_tag
@@ -72,6 +76,7 @@
 ```
 
 **Category Management** (4 tests)
+
 ```
 ✅ POST   /api/v2/categories              → create_category
 ✅ GET    /api/v2/categories/{slug}       → get_category
@@ -80,12 +85,14 @@
 ```
 
 **Integration Flows** (2 tests)
+
 ```
 ✅ User → Post → Comment: Full workflow
 ✅ Post → Tags → Categories: Multi-entity workflow
 ```
 
 **Error Handling** (5 tests)
+
 ```
 ✅ Invalid JSON → Bad Request (400)
 ✅ Missing required field → Bad Request (400)
@@ -95,6 +102,7 @@
 ```
 
 **Format Validation** (2 tests)
+
 ```
 ✅ User DTO format consistency
 ✅ Error response format consistency
@@ -103,6 +111,7 @@
 ### API v1 互換性検証
 
 **Endpoint Existence** (3 tests)
+
 ```
 ✅ /api/v1/users/* endpoints exist
 ✅ /api/v1/posts/* endpoints exist
@@ -110,6 +119,7 @@
 ```
 
 **Response Formats** (3 tests)
+
 ```
 ✅ User response format (id, username, email, role, timestamps)
 ✅ Post response format (id, title, content, published, timestamps)
@@ -117,6 +127,7 @@
 ```
 
 **Deprecation Headers** (3 tests)
+
 ```
 ✅ Deprecation: true header present
 ✅ Sunset: <date> header present
@@ -124,6 +135,7 @@
 ```
 
 **Backward Compatibility** (3 tests)
+
 ```
 ✅ Register user with legacy format (profile, avatar_url)
 ✅ Partial update support (only required fields)
@@ -131,12 +143,14 @@
 ```
 
 **Migration Mapping** (2 tests)
+
 ```
 ✅ v1 User data → v2 DTO mapping
 ✅ v1 Post data → v2 DTO mapping (published → status)
 ```
 
 **Error Handling** (5 tests)
+
 ```
 ✅ User not found → 404
 ✅ Validation error → 400
@@ -146,6 +160,7 @@
 ```
 
 **Performance Comparison** (2 tests)
+
 ```
 ✅ v1 baseline: 150ms
 ✅ v2 target: 50ms (66% improvement)
@@ -168,6 +183,7 @@
 ### テストカバレッジの内訳
 
 **ユニットテスト** (211 tests - Domain + Application)
+
 - Domain Value Objects: 45 tests
 - Domain Entities: 106 tests
 - Application DTOs: 21 tests
@@ -175,6 +191,7 @@
 - Other: 37 tests
 
 **E2E テスト** (57 tests - HTTP API)
+
 - API v2 new: 36 tests
 - API v1 legacy: 21 tests
 
@@ -227,16 +244,17 @@ Total:                    ~0.01s
 fn test_api_v2_endpoint_returns_expected_status() {
     // Given: Input fixture
     let user = TestUser::new("test", "test@example.com");
-    
+
     // When: Action (in actual implementation, HTTP request)
     let request = user.request_json();
-    
+
     // Then: Assertion
     assert_eq!(request["username"], "test");
 }
 ```
 
 **特徴:**
+
 - Fixture-based approach (TestUser, TestPost, etc.)
 - JSON validation
 - Response DTO format checking
@@ -254,18 +272,19 @@ fn test_api_v1_backward_compatibility() {
         "email": "user@example.com",
         "profile": { /* optional */ }
     });
-    
+
     // When: Mapping to v2
     let v2_request = json!({
         /* mapped fields */
     });
-    
+
     // Then: Verification
     assert_eq!(legacy_request["username"], v2_request["username"]);
 }
 ```
 
 **特徴:**
+
 - レガシーデータ形式の保持確認
 - 非推奨ヘッダーチェック
 - マイグレーションマッピング検証
