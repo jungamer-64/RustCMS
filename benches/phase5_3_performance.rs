@@ -3,7 +3,7 @@
 // Compare API v1 vs v2 performance for key endpoints.
 // Run with: cargo bench --bench phase5_3_performance --features "database,restructure_presentation"
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 
 /// Mock data for benchmarking
 struct MockPayload {
@@ -19,7 +19,8 @@ impl MockPayload {
             user_email: "bench@example.com".to_string(),
             user_username: "benchuser".to_string(),
             post_title: "Benchmark Post".to_string(),
-            post_content: "This is a benchmark post with sufficient content for validation.".to_string(),
+            post_content: "This is a benchmark post with sufficient content for validation."
+                .to_string(),
         }
     }
 }
@@ -95,7 +96,7 @@ fn bench_feature_flag_logic(c: &mut Criterion) {
 /// Tests end-to-end latency for key operations
 fn bench_endpoint_latency(c: &mut Criterion) {
     let mut group = c.benchmark_group("endpoint_latency");
-    
+
     // Baseline: no processing
     group.bench_function("baseline_no_op", |b| {
         b.iter(|| {
@@ -133,16 +134,13 @@ fn bench_endpoint_latency(c: &mut Criterion) {
 /// Tests performance of filtering and pagination
 fn bench_collection_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("collection_operations");
-    
+
     // Create mock collection
     let items: Vec<u64> = (0..1000).collect();
 
     group.bench_function("filter_1000_items", |b| {
         b.iter(|| {
-            let _filtered: Vec<_> = black_box(&items)
-                .iter()
-                .filter(|&&x| x % 2 == 0)
-                .collect();
+            let _filtered: Vec<_> = black_box(&items).iter().filter(|&&x| x % 2 == 0).collect();
         });
     });
 
@@ -183,9 +181,7 @@ fn bench_string_operations(c: &mut Criterion) {
     group.bench_function("validate_email_format", |b| {
         let email = black_box("user@example.com".to_string());
         b.iter(|| {
-            let _valid = email.contains('@') 
-                && email.len() < 254
-                && email.len() > 5;
+            let _valid = email.contains('@') && email.len() < 254 && email.len() > 5;
         });
     });
 
@@ -246,9 +242,7 @@ fn bench_tokio_overhead(c: &mut Criterion) {
 
     c.bench_function("tokio_spawn_overhead", |b| {
         b.to_async(&rt).iter(|| async {
-            let handle = tokio::spawn(async {
-                black_box(42u64)
-            });
+            let handle = tokio::spawn(async { black_box(42u64) });
             let _ = handle.await;
         });
     });
@@ -284,7 +278,7 @@ fn bench_newtype_vs_string(c: &mut Criterion) {
     group.bench_function("newtype_clone", |b| {
         let id = black_box(uuid::Uuid::nil());
         b.iter(|| {
-            let _cloned = id;  // Copy for Uuid
+            let _cloned = id; // Copy for Uuid
         });
     });
 
@@ -340,7 +334,7 @@ fn bench_api_version_comparison(c: &mut Criterion) {
             // Through trait object
             let _user_id = uuid::Uuid::new_v4();
             let _email = "user@example.com";
-            let _should_route = true;  // Feature flag check
+            let _should_route = true; // Feature flag check
         });
     });
 
