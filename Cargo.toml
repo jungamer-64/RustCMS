@@ -470,18 +470,27 @@ path = "src/bin/dev_tools.rs"
 required-features = ["dev-tools"]
 
 # ===== BENCHMARKS (パフォーマンス測定) =====
-# NOTE: Phase 1 Week 2 でベンチマークファイルを作成する際にコメント解除してください
-# [[bench]]
-# name = "api_benchmarks"
-# harness = false
-# required-features = ["database", "cache"]
 
+# Phase 5-3: Staging Deployment & Canary Release Performance Tests
+[[bench]]
+name = "phase5_3_performance"
+harness = false
+# uses criterion crate (included in dev-dependencies)
+
+# Phase 1-2: Value Object and Domain Layer Benchmarks
+# [[bench]]
+# name = "value_object_benchmarks"
+# harness = false
+# required-features = ["restructure_domain"]
+
+# Phase 3: Application Layer & Repository Pattern Benchmarks
 # [[bench]]
 # name = "repository_benchmarks"
 # harness = false
 # required-features = ["database", "restructure_application"]
 
+# Phase 4: API & Presentation Layer Benchmarks
 # [[bench]]
-# name = "value_object_benchmarks"
+# name = "api_benchmarks"
 # harness = false
-# required-features = ["restructure_domain"]
+# required-features = ["database", "cache", "restructure_presentation"]
