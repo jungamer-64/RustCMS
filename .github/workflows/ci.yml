@@ -440,6 +440,98 @@ jobs:
           path: lcov.info
           retention-days: 5
 
+  # HTTP E2E Tests (Phase 5-3)
+  http-e2e-tests:
+    name: HTTP E2E Tests (Phase 5-3)
+    runs-on: ubuntu-latest
+    needs: test
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: cms_e2e
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=5s --health-timeout=5s --health-retries=5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=5s --health-retries=10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
+        with:
+          toolchain: stable
+      - name: Cache (Swatinem/rust-cache)
+        uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0
+        with:
+          workspaces: . -> target
+      - name: Run HTTP E2E tests (reqwest client)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgres://postgres:REPLACE_ME@localhost:5432/cms_e2e' }}
+          RUST_BACKTRACE: 1
+        run: |
+          set -euo pipefail
+          cargo test --test "e2e_http_staging" --test "presentation_http_e2e_tests" --color always -- --test-threads=1
+      - name: Upload HTTP E2E test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: http-e2e-results-${{ github.sha }}
+          path: target/debug/deps/e2e_http-*.d
+          retention-days: 7
+
+  # Performance Benchmark (Phase 5-3)
+  performance-benchmark:
+    name: Performance Benchmark (Phase 5-3)
+    runs-on: ubuntu-latest
+    needs: test
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: cms_bench
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=5s --health-timeout=5s --health-retries=5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=5s --health-retries=10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
+        with:
+          toolchain: stable
+      - name: Cache (Swatinem/rust-cache)
+        uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0
+        with:
+          workspaces: . -> target
+      - name: Run performance benchmarks (criterion)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgres://postgres:REPLACE_ME@localhost:5432/cms_bench' }}
+          RUST_BACKTRACE: 1
+        run: |
+          set -euo pipefail
+          cargo bench --bench phase5_3_performance -- --verbose
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: target/criterion/
+          retention-days: 30
+
   # オプション: 将来カバレッジを追加する場合のテンプレ (disabled by default)
   # coverage:
   #   name: Coverage (tarpaulin)
