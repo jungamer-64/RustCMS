@@ -1,8 +1,8 @@
 # RustCMS API v1→v2 統合ガイド完全版
 
-**対象**: v1 エンドポイントを使用しているすべてのクライアント開発者  
-**作成日**: 2025-01-17  
-**完成期限**: 2025-03-17  
+**対象**: v1 エンドポイントを使用しているすべてのクライアント開発者
+**作成日**: 2025-01-17
+**完成期限**: 2025-03-17
 **テンプレート言語**: JavaScript/TypeScript, Python, Go, Rust, Ruby, Java, PHP
 
 ---
@@ -42,12 +42,14 @@
 ### 1. ベースURL の変更
 
 **v1:**
+
 ```
 https://api.example.com/api/v1/users
 https://api.example.com/api/v1/posts
 ```
 
 **v2:**
+
 ```
 https://api.example.com/api/v2/users
 https://api.example.com/api/v2/posts
@@ -95,6 +97,7 @@ sed -i 's|/api/v1/|/api/v2/|g' your_code.js
 ```
 
 **重要な違い**:
+
 - `error` (単数) → `errors` (配列)
 - 各エラーに `code` フィールド追加
 - `suggestion` フィールドでユーザーへのガイダンス
@@ -109,7 +112,8 @@ GET /api/v1/users?page=2&limit=10
 → 結果: 11-20 番目のレコード
 ```
 
-**計算式**: 
+**計算式**:
+
 ```
 offset = (page - 1) × limit
 limit = limit
@@ -123,6 +127,7 @@ GET /api/v2/users?offset=10&limit=10
 ```
 
 **計算式**:
+
 ```
 offset = (page - 1) × limit  # v1 から v2 への変換
 page = (offset / limit) + 1   # v2 から v1 への逆変換
@@ -131,6 +136,7 @@ page = (offset / limit) + 1   # v2 から v1 への逆変換
 #### レスポンス形式の変更
 
 **v1:**
+
 ```json
 {
   "data": [...],
@@ -141,6 +147,7 @@ page = (offset / limit) + 1   # v2 から v1 への逆変換
 ```
 
 **v2:**
+
 ```json
 {
   "data": [...],
@@ -163,6 +170,7 @@ page = (offset / limit) + 1   # v2 から v1 への逆変換
 #### 基本的なクライアント実装
 
 **v1 (旧):**
+
 ```javascript
 async function fetchUsers(page = 1) {
   const response = await fetch(
@@ -173,6 +181,7 @@ async function fetchUsers(page = 1) {
 ```
 
 **v2 (新):**
+
 ```typescript
 // 型安全なクライアント実装
 interface APIError {
@@ -538,148 +547,148 @@ def register_user():
 package cms
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"net/url"
+ "bytes"
+ "encoding/json"
+ "fmt"
+ "io"
+ "net/http"
+ "net/url"
 )
 
 // ErrorDetail は v2 API のエラー詳細
 type ErrorDetail struct {
-	Field      string `json:"field"`
-	Message    string `json:"message"`
-	Code       string `json:"code"`
-	Suggestion string `json:"suggestion,omitempty"`
+ Field      string `json:"field"`
+ Message    string `json:"message"`
+ Code       string `json:"code"`
+ Suggestion string `json:"suggestion,omitempty"`
 }
 
 // APIResponse は v2 API のレスポンス形式
 type APIResponse struct {
-	Data       []map[string]interface{} `json:"data,omitempty"`
-	Pagination *Pagination              `json:"pagination,omitempty"`
-	Errors     []ErrorDetail            `json:"errors,omitempty"`
-	RequestID  string                   `json:"request_id,omitempty"`
-	Timestamp  string                   `json:"timestamp,omitempty"`
-	Status     int                      `json:"status,omitempty"`
+ Data       []map[string]interface{} `json:"data,omitempty"`
+ Pagination *Pagination              `json:"pagination,omitempty"`
+ Errors     []ErrorDetail            `json:"errors,omitempty"`
+ RequestID  string                   `json:"request_id,omitempty"`
+ Timestamp  string                   `json:"timestamp,omitempty"`
+ Status     int                      `json:"status,omitempty"`
 }
 
 // Pagination はページネーション情報
 type Pagination struct {
-	Offset  int `json:"offset"`
-	Limit   int `json:"limit"`
-	Total   int `json:"total"`
-	HasNext bool `json:"has_next"`
-	HasPrev bool `json:"has_prev"`
+ Offset  int `json:"offset"`
+ Limit   int `json:"limit"`
+ Total   int `json:"total"`
+ HasNext bool `json:"has_next"`
+ HasPrev bool `json:"has_prev"`
 }
 
 // Client は RustCMS API クライアント
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
-	token      string
+ baseURL    string
+ httpClient *http.Client
+ token      string
 }
 
 // NewClient は新しいクライアントを作成
 func NewClient(baseURL, token string) *Client {
-	return &Client{
-		baseURL:    baseURL,
-		httpClient: &http.Client{},
-		token:      token,
-	}
+ return &Client{
+  baseURL:    baseURL,
+  httpClient: &http.Client{},
+  token:      token,
+ }
 }
 
 // GetUsers はユーザー一覧を取得
 func (c *Client) GetUsers(offset, limit int) (*APIResponse, error) {
-	path := fmt.Sprintf("%s/users", c.baseURL)
-	q := url.Values{
-		"offset": {fmt.Sprintf("%d", offset)},
-		"limit":  {fmt.Sprintf("%d", limit)},
-	}
-	path = fmt.Sprintf("%s?%s", path, q.Encode())
+ path := fmt.Sprintf("%s/users", c.baseURL)
+ q := url.Values{
+  "offset": {fmt.Sprintf("%d", offset)},
+  "limit":  {fmt.Sprintf("%d", limit)},
+ }
+ path = fmt.Sprintf("%s?%s", path, q.Encode())
 
-	req, err := http.NewRequest("GET", path, nil)
-	if err != nil {
-		return nil, err
-	}
+ req, err := http.NewRequest("GET", path, nil)
+ if err != nil {
+  return nil, err
+ }
 
-	return c.do(req)
+ return c.do(req)
 }
 
 // CreateUser はユーザーを作成
 func (c *Client) CreateUser(email, username, password string) (*APIResponse, error) {
-	payload := map[string]string{
-		"email":    email,
-		"username": username,
-		"password": password,
-	}
+ payload := map[string]string{
+  "email":    email,
+  "username": username,
+  "password": password,
+ }
 
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
+ body, err := json.Marshal(payload)
+ if err != nil {
+  return nil, err
+ }
 
-	req, err := http.NewRequest(
-		"POST",
-		fmt.Sprintf("%s/users", c.baseURL),
-		bytes.NewReader(body),
-	)
-	if err != nil {
-		return nil, err
-	}
+ req, err := http.NewRequest(
+  "POST",
+  fmt.Sprintf("%s/users", c.baseURL),
+  bytes.NewReader(body),
+ )
+ if err != nil {
+  return nil, err
+ }
 
-	return c.do(req)
+ return c.do(req)
 }
 
 // do はリクエストを実行しレスポンスをパース
 func (c *Client) do(req *http.Request) (*APIResponse, error) {
-	req.Header.Set("Content-Type", "application/json")
-	if c.token != "" {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.token))
-	}
+ req.Header.Set("Content-Type", "application/json")
+ if c.token != "" {
+  req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.token))
+ }
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+ resp, err := c.httpClient.Do(req)
+ if err != nil {
+  return nil, err
+ }
+ defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
+ body, err := io.ReadAll(resp.Body)
+ if err != nil {
+  return nil, err
+ }
 
-	var apiResp APIResponse
-	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return nil, err
-	}
+ var apiResp APIResponse
+ if err := json.Unmarshal(body, &apiResp); err != nil {
+  return nil, err
+ }
 
-	if resp.StatusCode >= 400 {
-		return nil, &APIError{
-			StatusCode: resp.StatusCode,
-			Response:   &apiResp,
-		}
-	}
+ if resp.StatusCode >= 400 {
+  return nil, &APIError{
+   StatusCode: resp.StatusCode,
+   Response:   &apiResp,
+  }
+ }
 
-	return &apiResp, nil
+ return &apiResp, nil
 }
 
 // APIError は API エラー
 type APIError struct {
-	StatusCode int
-	Response   *APIResponse
+ StatusCode int
+ Response   *APIResponse
 }
 
 func (e *APIError) Error() string {
-	if e.Response == nil {
-		return fmt.Sprintf("HTTP %d", e.StatusCode)
-	}
-	if len(e.Response.Errors) > 0 {
-		return fmt.Sprintf("API Error: %s (Request ID: %s)", 
-			e.Response.Errors[0].Message, 
-			e.Response.RequestID)
-	}
-	return fmt.Sprintf("HTTP %d", e.StatusCode)
+ if e.Response == nil {
+  return fmt.Sprintf("HTTP %d", e.StatusCode)
+ }
+ if len(e.Response.Errors) > 0 {
+  return fmt.Sprintf("API Error: %s (Request ID: %s)",
+   e.Response.Errors[0].Message,
+   e.Response.RequestID)
+ }
+ return fmt.Sprintf("HTTP %d", e.StatusCode)
 }
 ```
 
@@ -840,17 +849,17 @@ mod tests {
 // 複数のユーザーを並列で作成
 async function batchCreateUsers(users: Array<{email: string, username: string, password: string}>) {
   const client = new APIClient();
-  
+
   try {
-    const promises = users.map(user => 
+    const promises = users.map(user =>
       client.createUser(user.email, user.username, user.password)
     );
-    
+
     const results = await Promise.allSettled(promises);
-    
+
     const succeeded = [];
     const failed = [];
-    
+
     results.forEach((result, index) => {
       if (result.status === 'fulfilled') {
         succeeded.push(result.value);
@@ -861,7 +870,7 @@ async function batchCreateUsers(users: Array<{email: string, username: string, p
         });
       }
     });
-    
+
     return { succeeded, failed };
   } catch (error) {
     console.error('Batch operation failed:', error);
@@ -894,10 +903,10 @@ def retry_with_backoff(
             # リトライ不可のエラーはすぐにスロー
             if e.status_code < 500:
                 raise
-            
+
             if attempt == max_retries - 1:
                 raise
-            
+
             # 指数バックオフで待機
             delay = min(base_delay * (backoff_factor ** attempt), max_delay)
             print(f"Retry attempt {attempt + 1} after {delay}s...")
@@ -925,7 +934,7 @@ class CacheEntry:
         self.value = value
         self.created_at = datetime.now()
         self.ttl_seconds = ttl_seconds
-    
+
     def is_expired(self) -> bool:
         return datetime.now() > self.created_at + timedelta(seconds=self.ttl_seconds)
 
@@ -934,26 +943,26 @@ class CachedAPIClient(RustCMSClient):
         super().__init__(*args, **kwargs)
         self.cache: Dict[str, CacheEntry] = {}
         self.cache_ttl = cache_ttl
-    
+
     def _cache_key(self, method: str, **params) -> str:
         param_str = "_".join(f"{k}={v}" for k, v in sorted(params.items()))
         return f"{method}:{param_str}"
-    
+
     def get_users(self, offset: int = 0, limit: int = 10) -> APIResponse:
         cache_key = self._cache_key("get_users", offset=offset, limit=limit)
-        
+
         # キャッシュをチェック
         if cache_key in self.cache:
             entry = self.cache[cache_key]
             if not entry.is_expired():
                 print(f"Cache hit for {cache_key}")
                 return entry.value
-        
+
         # キャッシュミス：API から取得
         result = super().get_users(offset, limit)
         self.cache[cache_key] = CacheEntry(result, self.cache_ttl)
         return result
-    
+
     def invalidate_cache(self, pattern: Optional[str] = None):
         """キャッシュを無効化"""
         if pattern is None:
@@ -973,7 +982,7 @@ class CachedAPIClient(RustCMSClient):
 | エラー | 原因 | 解決方法 |
 |--------|------|---------|
 | `404 Not Found` | エンドポイント URL が正しくない | `/api/v1/` が `/api/v2/` に変更されたか確認 |
-| `400 Bad Request` + `INVALID_EMAIL` | メールフォーマットが不正 | RFC 5321 準拠の形式を使用 (user@example.com) |
+| `400 Bad Request` + `INVALID_EMAIL` | メールフォーマットが不正 | RFC 5321 準拠の形式を使用 (<user@example.com>) |
 | `400 Bad Request` + `PASSWORD_TOO_SHORT` | パスワードが短すぎる | 最小 12 文字以上を使用 |
 | `401 Unauthorized` | 認証トークンが無効 | トークンの有効期限を確認、更新 |
 | `429 Too Many Requests` | レート制限に引っかかった | リクエスト間隔を広げるか、バックオフを実装 |
@@ -1079,7 +1088,7 @@ client.fetchUsers(0, 10)
 |---------|------|----------|
 | **Slack #api-support** | リアルタイム技術サポート | 1-2h |
 | **GitHub Issues** | バグ報告・フィーチャリクエスト | 24h |
-| **Email api-team@example.com** | 重大な問題・緊急対応 | 1h |
+| **Email <api-team@example.com>** | 重大な問題・緊急対応 | 1h |
 
 ### 移行完了確認
 
@@ -1091,5 +1100,5 @@ v1 削除期限は **2025-03-17** です。それまでに以下を確認して�
 
 ---
 
-**最終更新**: 2025-01-17  
+**最終更新**: 2025-01-17
 **次回見直し**: 2025-02-07 (Phase 5-5 開始時)
