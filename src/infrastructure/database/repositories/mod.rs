@@ -6,46 +6,41 @@
 //!
 //! # アーキテクチャ
 //!
-//! - **DieselUserRepository**: User エンティティの CRUD 操作
-//! - **DieselPostRepository**: Post エンティティの CRUD 操作
-//! - **DieselCommentRepository**: Comment エンティティの CRUD 操作
+//! - **DieselUserRepository**: User エンティティの CRUD 操作 ✅ (Phase 3 Week 10 完成)
+//! - **DieselPostRepository**: Post エンティティの CRUD 操作 ✅ (Phase 3 Week 10 完成)
+//! - **DieselCommentRepository**: Comment エンティティの CRUD 操作 (Phase 3 Week 10 予定)
 //! - **DieselTagRepository**: Tag エンティティの CRUD 操作
 //! - **DieselCategoryRepository**: Category エンティティの CRUD 操作
 //!
 //! # Feature ゲート
 //!
-//! すべての Repository 実装は `restructure_application` feature の下に置かれます。
-//! Phase 3 実装時のみ有効になります。
+//! すべての Repository 実装は `restructure_domain` feature の下に置かれます。
+//! Phase 3 実装時に有効になります。
 
-#[cfg(feature = "restructure_application")]
-pub mod diesel_user_repository;
+// Phase 3 Week 10: User Repository 実装完了
+#[cfg(feature = "restructure_domain")]
+pub mod user_repository;
 
-#[cfg(feature = "restructure_application")]
-pub mod diesel_post_repository;
+// Phase 3 Week 10: Post Repository 実装完了
+#[cfg(feature = "restructure_domain")]
+pub mod post_repository;
 
-#[cfg(feature = "restructure_application")]
-pub mod diesel_comment_repository;
+// Phase 3 Week 10: Comment Repository 実装完了
+#[cfg(feature = "restructure_domain")]
+pub mod comment_repository;
 
-#[cfg(feature = "restructure_application")]
-pub mod diesel_tag_repository;
+#[cfg(feature = "restructure_domain")]
+pub use user_repository::DieselUserRepository;
 
-#[cfg(feature = "restructure_application")]
-pub mod diesel_category_repository;
+#[cfg(feature = "restructure_domain")]
+pub use post_repository::DieselPostRepository;
 
-#[cfg(feature = "restructure_application")]
-pub use diesel_user_repository::DieselUserRepository;
+#[cfg(feature = "restructure_domain")]
+pub use comment_repository::DieselCommentRepository;
 
-#[cfg(feature = "restructure_application")]
-pub use diesel_post_repository::DieselPostRepository;
-
-#[cfg(feature = "restructure_application")]
-pub use diesel_comment_repository::DieselCommentRepository;
-
-#[cfg(feature = "restructure_application")]
-pub use diesel_tag_repository::DieselTagRepository;
-
-#[cfg(feature = "restructure_application")]
-pub use diesel_category_repository::DieselCategoryRepository;
+// Phase 3 Week 10: Comment Repository (予定)
+// #[cfg(feature = "restructure_domain")]
+// pub mod comment_repository;
 
 #[cfg(test)]
 mod tests {
