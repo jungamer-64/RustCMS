@@ -1444,6 +1444,7 @@ cargo build --release --features "full_restructure"
 ## 🚀 Phase 6 進捗状況 (2025-10-18 更新)
 
 ### Phase 6.0 - Domain Architecture Setup ✅ **COMPLETE**
+
 - ✅ Domain entities (User, Post, Comment, Tag, Category)
 - ✅ Value Objects pattern established
 - ✅ Repository ports defined (5 traits)
@@ -1452,6 +1453,7 @@ cargo build --release --features "full_restructure"
 - **Status**: All domain models ready for database integration
 
 ### Phase 6.1 - Placeholder Implementation ✅ **COMPLETE**
+
 - ✅ All 5 repositories converted from error stubs → placeholder Ok()
 - ✅ Comment/Tag/Category repositories placeholders
 - ✅ Feature gates verified across CI matrix
@@ -1459,6 +1461,7 @@ cargo build --release --features "full_restructure"
 - **Status**: Ready for database integration
 
 ### Phase 6.2 - Comment Database Integration ✅ **COMPLETE** (2025-10-17)
+
 - ✅ Database helper methods (6): create, get, update, delete, list_by_post, count
 - ✅ Comment entity reconstruction from raw DB tuples
 - ✅ Repository methods: save, find_by_id, find_by_post, delete ✅ COMPLETE
@@ -1469,6 +1472,7 @@ cargo build --release --features "full_restructure"
 - **Commits**: 4 (database helpers, entity reconstruction, docs)
 
 #### Database Schema (Comments Table)
+
 ```sql
 CREATE TABLE comments (
     id UUID PRIMARY KEY,
@@ -1488,10 +1492,12 @@ CREATE TABLE comments (
 ```
 
 **Columns used in Phase 6.2**:
+
 - `id`, `post_id`, `author_id`, `content`, `status`, `created_at`, `updated_at`
 - Future: `parent_id` (for threading), `like_count` (Phase 7)
 
 #### Diesel Schema Definition
+
 ```rust
 diesel::table! {
     comments (id) {
@@ -1516,12 +1522,14 @@ diesel::joinable!(comments -> users (author_id));
 ```
 
 ### Phase 6.2b - Comment Completion (Pending)
+
 - [ ] `find_by_author(author_id, limit, offset)` implementation
 - [ ] `list_all(limit, offset)` implementation
 - [ ] Database helpers: `list_comments_by_author()`, `list_all_comments()`
 - **Estimated**: 1-2 days
 
 ### Phase 6.3 - Tag/Category Database Integration (Pending)
+
 - [ ] Tag database schema definition
 - [ ] Category database schema definition
 - [ ] Tag CRUD helpers (6 methods)
@@ -1531,6 +1539,7 @@ diesel::joinable!(comments -> users (author_id));
 - **Estimated**: 3-5 days
 
 #### Proposed Tag Schema
+
 ```sql
 CREATE TABLE tags (
     id UUID PRIMARY KEY,
@@ -1546,6 +1555,7 @@ CREATE INDEX idx_tags_usage_count ON tags(usage_count DESC);
 ```
 
 #### Proposed Category Schema
+
 ```sql
 CREATE TABLE categories (
     id UUID PRIMARY KEY,
@@ -1564,6 +1574,7 @@ CREATE INDEX idx_categories_post_count ON categories(post_count DESC);
 ```
 
 ### Phase 6.4 - Integration Tests (Pending)
+
 - [ ] testcontainers PostgreSQL environment setup
 - [ ] 50+ integration test cases (CRUD + pagination + concurrent)
 - [ ] Performance benchmarking
@@ -1571,6 +1582,7 @@ CREATE INDEX idx_categories_post_count ON categories(post_count DESC);
 - **Estimated**: 3-4 days
 
 ### Overall Phase 6 Progress
+
 - **Completed**: 60% (3/5 sub-phases)
 - **Lines of Domain Code**: 3,000+
 - **Repository Ports**: 5 (User, Post, Comment, Tag, Category)

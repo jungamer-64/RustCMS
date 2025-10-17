@@ -162,13 +162,26 @@ impl CommentRepository for DieselCommentRepository {
 
     async fn find_by_author(
         &self,
-        _author_id: crate::domain::entities::user::UserId,
-        _limit: i64,
+        author_id: crate::domain::entities::user::UserId,
+        limit: i64,
         _offset: i64,
     ) -> Result<Vec<Comment>, RepositoryError> {
-        // Phase 6.2b: Placeholder - database helper needed
-        // TODO: Implement actual database retrieval by author_id
-        Ok(vec![])
+        // Phase 6.2b: Delegate to database layer
+        let page = if _offset > 0 { (_offset / limit) + 1 } else { 1 };
+        let results = self.db
+            .list_comments_by_author(author_id.into_uuid(), page as u32, limit as u32)
+            .map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+        
+        // Reconstruct Comment entities from database tuples
+        let mut comments = Vec::new();
+        for (id, post_id, author_id, content, status, created_at, updated_at) in results {
+            let comment = Self::reconstruct_comment(
+                id, post_id, author_id, content, status, created_at, updated_at
+            )?;
+            comments.push(comment);
+        }
+        
+        Ok(comments)
     }
 
     async fn delete(&self, id: CommentId) -> Result<(), RepositoryError> {
@@ -180,12 +193,25 @@ impl CommentRepository for DieselCommentRepository {
 
     async fn list_all(
         &self,
-        _limit: i64,
+        limit: i64,
         _offset: i64,
     ) -> Result<Vec<Comment>, RepositoryError> {
-        // Phase 6.2b: Placeholder - database helper needed
-        // TODO: Implement actual database retrieval for all comments
-        Ok(vec![])
+        // Phase 6.2b: Delegate to database layer
+        let page = if _offset > 0 { (_offset / limit) + 1 } else { 1 };
+        let results = self.db
+            .list_all_comments(page as u32, limit as u32)
+            .map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+        
+        // Reconstruct Comment entities from database tuples
+        let mut comments = Vec::new();
+        for (id, post_id, author_id, content, status, created_at, updated_at) in results {
+            let comment = Self::reconstruct_comment(
+                id, post_id, author_id, content, status, created_at, updated_at
+            )?;
+            comments.push(comment);
+        }
+        
+        Ok(comments)
     }
 }
 

@@ -1066,8 +1066,80 @@ impl Database {
         })
     }
 
+    /// List comments by author with all fields needed for domain entity reconstruction
+    /// 著者のコメントを取得します（ドメインエンティティ復元用の全フィールド）。
+    ///
+    /// # Errors
+    /// クエリが失敗した場合にエラーを返します。
+    pub fn list_comments_by_author(
+        &self,
+        author_id: Uuid,
+        page: u32,
+        limit: u32,
+    ) -> Result<Vec<(Uuid, Uuid, Option<Uuid>, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+        use crate::database::schema::comments::dsl as comments_dsl;
+        use diesel::prelude::*;
+
+        let (_page, lim, offset) = Self::paged_params(page, limit);
+
+        self.with_conn(|conn| {
+            comments_dsl::comments
+                .filter(comments_dsl::author_id.eq(author_id))
+                .filter(comments_dsl::status.ne("deleted"))
+                .order_by(comments_dsl::created_at.desc())
+                .limit(lim)
+                .offset(offset)
+                .select((
+                    comments_dsl::id,
+                    comments_dsl::post_id,
+                    comments_dsl::author_id,
+                    comments_dsl::content,
+                    comments_dsl::status,
+                    comments_dsl::created_at,
+                    comments_dsl::updated_at,
+                ))
+                .load::<(Uuid, Uuid, Option<Uuid>, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
+                .map_err(|e| crate::AppError::Internal(format!("Failed to list comments by author: {}", e)))
+        })
+    }
+
+    /// List all comments with all fields needed for domain entity reconstruction
+    /// すべてのコメントを取得します（ドメインエンティティ復元用の全フィールド）。
+    ///
+    /// # Errors
+    /// クエリが失敗した場合にエラーを返します。
+    pub fn list_all_comments(
+        &self,
+        page: u32,
+        limit: u32,
+    ) -> Result<Vec<(Uuid, Uuid, Option<Uuid>, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+        use crate::database::schema::comments::dsl as comments_dsl;
+        use diesel::prelude::*;
+
+        let (_page, lim, offset) = Self::paged_params(page, limit);
+
+        self.with_conn(|conn| {
+            comments_dsl::comments
+                .filter(comments_dsl::status.ne("deleted"))
+                .order_by(comments_dsl::created_at.desc())
+                .limit(lim)
+                .offset(offset)
+                .select((
+                    comments_dsl::id,
+                    comments_dsl::post_id,
+                    comments_dsl::author_id,
+                    comments_dsl::content,
+                    comments_dsl::status,
+                    comments_dsl::created_at,
+                    comments_dsl::updated_at,
+                ))
+                .load::<(Uuid, Uuid, Option<Uuid>, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
+                .map_err(|e| crate::AppError::Internal(format!("Failed to list all comments: {}", e)))
+        })
+    }
+
     // ========================================================================
-    // Tag & Category CRUD Operations (Phase 6.2b - Phase 6.3)
+    // Tag & Category CRUD Operations (Phase 6.3)
     // ========================================================================
     // NOTE: Tag and Category database helpers are pending schema implementation
     // See RESTRUCTURE_PLAN.md for database schema requirements
