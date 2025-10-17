@@ -1,3 +1,4 @@
+// src/application/dto/mod.rs
 //! Data Transfer Objects (DTOs)
 //!
 //! HTTPリクエスト/レスポンスとドメインエンティティの変換を担います。
@@ -7,5 +8,12 @@
 //! - シリアライズ/デシリアライズの責務を担う
 //! - バリデーションはValue Objectsで実施済み
 
-// Phase 3 で実装予定
-// pub mod pagination;
+pub mod common;
+pub mod user;
+pub mod post;
+pub mod comment;
+
+pub use common::*;
+pub use user::*;
+pub use post::*;
+pub use comment::*;

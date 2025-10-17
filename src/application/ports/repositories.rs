@@ -10,17 +10,22 @@
 
 use async_trait::async_trait;
 
-// Domain entities - imported from consolidated entities module
-// CommentRepository uses Comment, CommentId, UserId, PostId (always enabled)
-use crate::domain::entities::{Comment, CommentId, PostId, UserId};
+// Domain entities imported from flattened modules
+use crate::domain::comment::{Comment, CommentId};
+use crate::domain::post::PostId;
+use crate::domain::user::UserId;
 
 // Note: Phase 2 complete - behind restructure_domain feature flag
 #[cfg(feature = "restructure_domain")]
-use crate::domain::entities::{Email, Post, User};
+use crate::domain::post::Post;
+#[cfg(feature = "restructure_domain")]
+use crate::domain::user::{Email, User};
 
 // Additional imports needed for Tag and Category repositories
 #[cfg(feature = "restructure_domain")]
-use crate::domain::entities::{Category, CategoryId, CategorySlug, Tag, TagId, TagName};
+use crate::domain::category::{Category, CategoryId, CategorySlug};
+#[cfg(feature = "restructure_domain")]
+use crate::domain::tag::{Tag, TagId, TagName};
 
 // ============================================================================
 // User Repository Port
@@ -31,6 +36,7 @@ use crate::domain::entities::{Category, CategoryId, CategorySlug, Tag, TagId, Ta
 /// データベースへのアクセスを抽象化します。
 /// Infrastructure層で具体的な実装（DieselUserRepository等）を提供します。
 #[cfg(feature = "restructure_domain")]
+#[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait UserRepository: Send + Sync {
     /// ユーザーを保存（作成または更新）
@@ -74,6 +80,7 @@ pub trait UserRepository: Send + Sync {
 // ============================================================================
 
 #[cfg(feature = "restructure_domain")]
+#[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait PostRepository: Send + Sync {
     /// 投稿を保存（作成または更新）
@@ -301,7 +308,7 @@ pub trait CategoryRepository: Send + Sync {
 /// リポジトリエラー
 ///
 /// データベース操作で発生するエラーを表現します。
-#[derive(Debug, thiserror::Error, PartialEq)]
+#[derive(Debug, thiserror::Error)]
 pub enum RepositoryError {
     #[error("Entity not found: {0}")]
     NotFound(String),
@@ -315,8 +322,43 @@ pub enum RepositoryError {
     #[error("Validation error: {0}")]
     ValidationError(String),
 
+    #[error("Conversion error: {0}")]
+    ConversionError(String),
+
     #[error("Unknown error: {0}")]
     Unknown(String),
+}
+
+// Diesel Error からの変換（Unit of Work で必要）
+#[cfg(feature = "database")]
+impl From<diesel::result::Error> for RepositoryError {
+    fn from(err: diesel::result::Error) -> Self {
+        use diesel::result::Error as DieselError;
+        match err {
+            DieselError::NotFound => RepositoryError::NotFound("Record not found".to_string()),
+            DieselError::DatabaseError(kind, info) => {
+                RepositoryError::DatabaseError(format!("{kind:?}: {info}"))
+            }
+            DieselError::QueryBuilderError(msg) => {
+                RepositoryError::DatabaseError(format!("Query builder error: {msg}"))
+            }
+            DieselError::DeserializationError(e) => {
+                RepositoryError::ConversionError(format!("Deserialization error: {e}"))
+            }
+            DieselError::SerializationError(e) => {
+                RepositoryError::ConversionError(format!("Serialization error: {e}"))
+            }
+            _ => RepositoryError::Unknown(format!("Diesel error: {err}")),
+        }
+    }
+}
+
+// r2d2::Error からの変換（コネクションプールエラー）
+#[cfg(feature = "database")]
+impl From<diesel::r2d2::PoolError> for RepositoryError {
+    fn from(err: diesel::r2d2::PoolError) -> Self {
+        RepositoryError::DatabaseError(format!("Connection pool error: {err}"))
+    }
 }
 
 // ============================================================================
@@ -511,7 +553,8 @@ mod tests {
             Err(RepositoryError::NotFound("Item".to_string()));
 
         let recovered: Result<i32, RepositoryError> = result.or(Ok(0));
-        assert_eq!(recovered, Ok(0));
+        assert!(recovered.is_ok());
+        assert_eq!(recovered.unwrap(), 0);
     }
 
     // =========================================================================

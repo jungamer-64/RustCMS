@@ -75,6 +75,9 @@ pub enum ApplicationError {
     #[error("Use case validation failed: {0}")]
     ValidationError(String),
 
+    #[error("Invalid UUID: {0}")]
+    InvalidUuid(String),
+
     #[error("Conflict: {0}")]
     Conflict(String),
 
@@ -117,6 +120,25 @@ pub enum InfrastructureError {
 
     #[error("Unknown infrastructure error: {0}")]
     Unknown(String),
+}
+
+// ============================================================================
+// Error Conversions (ApplicationError)
+// ============================================================================
+
+/// Convert RepositoryError from ports module to ApplicationError
+#[cfg(feature = "restructure_domain")]
+impl From<crate::application::ports::repositories::RepositoryError> for ApplicationError {
+    fn from(err: crate::application::ports::repositories::RepositoryError) -> Self {
+        use crate::application::ports::repositories::RepositoryError as RE;
+        match err {
+            RE::NotFound(msg) => ApplicationError::NotFound(msg),
+            RE::Duplicate(msg) => ApplicationError::Conflict(msg),
+            RE::ValidationError(msg) => ApplicationError::ValidationError(msg),
+            RE::ConversionError(msg) => ApplicationError::ValidationError(format!("Conversion error: {}", msg)),
+            RE::DatabaseError(msg) | RE::Unknown(msg) => ApplicationError::RepositoryError(msg),
+        }
+    }
 }
 
 // ============================================================================
