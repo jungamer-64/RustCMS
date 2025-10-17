@@ -8,11 +8,20 @@
 // Re-export from the new location
 pub use crate::infrastructure::events::bus::*;
 
-#[deprecated(since = "3.0.0", note = "Use crate::infrastructure::events::bus instead")]
+#[deprecated(
+    since = "3.0.0",
+    note = "Use crate::infrastructure::events::bus instead"
+)]
 pub use crate::infrastructure::events::bus::AppEvent;
 
-#[deprecated(since = "3.0.0", note = "Use crate::infrastructure::events::bus instead")]
+#[deprecated(
+    since = "3.0.0",
+    note = "Use crate::infrastructure::events::bus instead"
+)]
 pub use crate::infrastructure::events::bus::EventBus;
 
-#[deprecated(since = "3.0.0", note = "Use crate::infrastructure::events::bus instead")]
+#[deprecated(
+    since = "3.0.0",
+    note = "Use crate::infrastructure::events::bus instead"
+)]
 pub use crate::infrastructure::events::bus::create_event_bus;

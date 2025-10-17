@@ -11,10 +11,10 @@
 #![cfg(feature = "database")]
 
 use cms_backend::application::ports::user_repository::RepositoryError;
-use cms_backend::domain::entities::user::{UserId, Email, Username};
+use cms_backend::domain::entities::user::{Email, UserId, Username};
 use cms_backend::infrastructure::repositories::{
-    DieselUserRepository, DieselPostRepository, DieselCommentRepository,
-    DieselCategoryRepository, DieselTagRepository,
+    DieselCategoryRepository, DieselCommentRepository, DieselPostRepository, DieselTagRepository,
+    DieselUserRepository,
 };
 
 // ============================================================================
@@ -25,7 +25,7 @@ use cms_backend::infrastructure::repositories::{
 #[test]
 fn test_repositories_are_clone() {
     fn assert_clone<T: Clone>() {}
-    
+
     assert_clone::<DieselUserRepository>();
     assert_clone::<DieselPostRepository>();
     assert_clone::<DieselCommentRepository>();
@@ -37,7 +37,7 @@ fn test_repositories_are_clone() {
 #[test]
 fn test_repositories_are_send_sync() {
     fn assert_send_sync<T: Send + Sync>() {}
-    
+
     assert_send_sync::<DieselUserRepository>();
     assert_send_sync::<DieselPostRepository>();
     assert_send_sync::<DieselCommentRepository>();
@@ -73,7 +73,7 @@ fn test_repository_error_debug() {
 fn test_user_id_type_safety() {
     let id1 = UserId::new();
     let id2 = UserId::new();
-    
+
     assert_ne!(id1, id2, "UserId::new() should generate unique IDs");
 }
 
@@ -82,7 +82,7 @@ fn test_user_id_type_safety() {
 fn test_user_id_is_copy() {
     let id1 = UserId::new();
     let id2 = id1; // Copy should work
-    
+
     assert_eq!(id1, id2, "UserId must be Copy");
 }
 
@@ -91,19 +91,28 @@ fn test_user_id_is_copy() {
 fn test_email_value_object() {
     let valid_email = Email::new("user@example.com".to_string());
     assert!(valid_email.is_ok(), "Valid email should parse successfully");
-    
+
     let invalid_email = Email::new("not-an-email".to_string());
-    assert!(invalid_email.is_err(), "Invalid email should fail validation");
+    assert!(
+        invalid_email.is_err(),
+        "Invalid email should fail validation"
+    );
 }
 
 /// Test Username value object validation
 #[test]
 fn test_username_value_object() {
     let valid_username = Username::new("valid_user".to_string());
-    assert!(valid_username.is_ok(), "Valid username should parse successfully");
-    
+    assert!(
+        valid_username.is_ok(),
+        "Valid username should parse successfully"
+    );
+
     let too_short = Username::new("a".to_string());
-    assert!(too_short.is_err(), "Username too short should fail validation");
+    assert!(
+        too_short.is_err(),
+        "Username too short should fail validation"
+    );
 }
 
 // ============================================================================
@@ -115,14 +124,17 @@ fn test_username_value_object() {
 #[test]
 fn test_restructure_domain_repositories_available() {
     use cms_backend::infrastructure::repositories::{
-        DieselTagRepository, DieselCategoryRepository,
+        DieselCategoryRepository, DieselTagRepository,
     };
-    
+
     fn assert_clone<T: Clone>() {}
     assert_clone::<DieselTagRepository>();
     assert_clone::<DieselCategoryRepository>();
-    
-    assert!(true, "Tag/Category repositories must be available with restructure_domain");
+
+    assert!(
+        true,
+        "Tag/Category repositories must be available with restructure_domain"
+    );
 }
 
 /// Test default feature configuration
@@ -132,7 +144,7 @@ fn test_default_repositories_available() {
     assert_clone::<DieselUserRepository>();
     assert_clone::<DieselPostRepository>();
     assert_clone::<DieselCommentRepository>();
-    
+
     assert!(true, "Default repositories must always be available");
 }
 
@@ -148,12 +160,15 @@ fn test_phase5_adapter_pattern() {
     // 2. Implement Clone
     // 3. Implement Send + Sync
     // 4. Implement target repository trait
-    
+
     assert!(true, "Phase 5 adapter pattern must be followed");
 }
 
 /// Test Phase 5 module compilation
 #[test]
 fn test_phase5_integration_module_compiles() {
-    assert!(true, "Phase 5 integration test module must compile successfully");
+    assert!(
+        true,
+        "Phase 5 integration test module must compile successfully"
+    );
 }

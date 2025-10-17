@@ -153,12 +153,7 @@ fn perform_versioned_operations(params: PerformVersionedParams) -> std::io::Resu
     }
 
     if !params.no_manifest {
-        update_manifest(
-            params.path,
-            params.v,
-            params.priv_fp,
-            params.pub_fp,
-        )?;
+        update_manifest(params.path, params.v, params.priv_fp, params.pub_fp)?;
     }
 
     if let Some(keep) = params.prune {

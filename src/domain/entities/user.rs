@@ -484,7 +484,7 @@ mod tests {
             #[test]
             fn test_boundary_email_length() {
                 // 最大長（254文字）の有効なメール
-                let long_local = "a".repeat(242);  // 242 + @ + example.com (11) = 254
+                let long_local = "a".repeat(242); // 242 + @ + example.com (11) = 254
                 let email_str = format!("{}@example.com", long_local);
                 assert_eq!(email_str.len(), 254);
                 let email = Email::new(email_str).unwrap();
@@ -541,11 +541,11 @@ mod tests {
                 assert!(user.is_active());
                 user.deactivate();
                 assert!(!user.is_active());
-                user.deactivate();  // 二重無効化
+                user.deactivate(); // 二重無効化
                 assert!(!user.is_active());
                 user.activate();
                 assert!(user.is_active());
-                user.activate();  // 二重有効化
+                user.activate(); // 二重有効化
                 assert!(user.is_active());
             }
 

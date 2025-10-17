@@ -9,16 +9,15 @@
 //! - Tag Entity + Value Objects
 //! - Category Entity + Value Objects
 
-pub mod user;
-pub mod post;
-pub mod comment;
-pub mod tag;
 pub mod category;
+pub mod comment;
+pub mod post;
+pub mod tag;
+pub mod user;
 
 // Re-export primary types for convenience
-pub use user::{Email, User, UserId, Username};
-pub use post::{Post, PostId};
-pub use comment::{Comment, CommentId};
-pub use tag::{Tag, TagId, TagName};
 pub use category::{Category, CategoryId, CategorySlug};
-
+pub use comment::{Comment, CommentId};
+pub use post::{Post, PostId};
+pub use tag::{Tag, TagId, TagName};
+pub use user::{Email, User, UserId, Username};

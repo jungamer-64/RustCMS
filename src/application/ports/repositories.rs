@@ -460,7 +460,7 @@ mod tests {
     fn test_repository_port_trait_bounds() {
         // Verify that repository traits would have expected bounds
         // This is a compile-time check via trait signature
-        
+
         // Traits should be Send + Sync
         #[allow(dead_code)]
         fn assert_send_sync<T: Send + Sync>() {}
@@ -492,8 +492,9 @@ mod tests {
 
     #[test]
     fn test_repository_error_result_mapping() {
-        let result: Result<i32, RepositoryError> =
-            Err(RepositoryError::DatabaseError("Connection failed".to_string()));
+        let result: Result<i32, RepositoryError> = Err(RepositoryError::DatabaseError(
+            "Connection failed".to_string(),
+        ));
 
         let mapped = result.map_err(|_| RepositoryError::Unknown("Mapped".to_string()));
         assert!(mapped.is_err());

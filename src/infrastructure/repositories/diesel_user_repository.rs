@@ -225,14 +225,14 @@ mod phase5_tests {
     #[test]
     fn test_find_by_id_returns_future() {
         // find_by_id should return an async result
-        let method_exists = true;  // Verified by trait definition
+        let method_exists = true; // Verified by trait definition
         assert!(method_exists, "find_by_id method exists in trait");
     }
 
     #[test]
     fn test_find_by_email_returns_future() {
         // find_by_email should return an async result
-        let method_exists = true;  // Verified by trait definition
+        let method_exists = true; // Verified by trait definition
         assert!(method_exists, "find_by_email method exists in trait");
     }
 
@@ -255,22 +255,30 @@ mod phase5_tests {
     fn test_repository_error_not_found_display() {
         let error = RepositoryError::NotFound;
         let display_msg = format!("{}", error);
-        assert!(!display_msg.is_empty(), "NotFound error should have display message");
+        assert!(
+            !display_msg.is_empty(),
+            "NotFound error should have display message"
+        );
     }
 
     #[test]
     fn test_repository_error_conflict_display() {
         let error = RepositoryError::Conflict("Test conflict".to_string());
         let display_msg = format!("{}", error);
-        assert!(display_msg.contains("conflict") || display_msg.contains("Conflict"),
-                "Conflict error message should mention conflict");
+        assert!(
+            display_msg.contains("conflict") || display_msg.contains("Conflict"),
+            "Conflict error message should mention conflict"
+        );
     }
 
     #[test]
     fn test_repository_error_unexpected_display() {
         let error = RepositoryError::Unexpected("Unexpected error".to_string());
         let display_msg = format!("{}", error);
-        assert!(!display_msg.is_empty(), "Unexpected error should have display message");
+        assert!(
+            !display_msg.is_empty(),
+            "Unexpected error should have display message"
+        );
     }
 
     // ========================================================================
@@ -293,7 +301,10 @@ mod phase5_tests {
 
         for error in errors {
             let debug_msg = format!("{:?}", error);
-            assert!(!debug_msg.is_empty(), "All RepositoryError variants should have debug output");
+            assert!(
+                !debug_msg.is_empty(),
+                "All RepositoryError variants should have debug output"
+            );
         }
     }
 
@@ -305,7 +316,7 @@ mod phase5_tests {
     fn test_userid_from_uuid() {
         let test_uuid = Uuid::new_v4();
         let user_id = UserId::from_uuid(test_uuid);
-        
+
         // Verify type construction (fields are private, so we just verify it constructs)
         let _ = user_id;
     }
@@ -314,7 +325,7 @@ mod phase5_tests {
     fn test_userid_clone_independence() {
         let test_uuid = Uuid::new_v4();
         let user_id1 = UserId::from_uuid(test_uuid);
-        let user_id2 = user_id1;  // Copy trait
+        let user_id2 = user_id1; // Copy trait
 
         // Should be equivalent instances
         assert_eq!(user_id1, user_id2, "UserId Copy should preserve value");
@@ -327,19 +338,24 @@ mod phase5_tests {
     #[test]
     fn test_email_construction_valid() {
         let email_result = Email::new("test@example.com".to_string());
-        assert!(email_result.is_ok(), "Valid email should construct successfully");
+        assert!(
+            email_result.is_ok(),
+            "Valid email should construct successfully"
+        );
     }
 
     #[test]
     fn test_email_construction_invalid() {
         let email_result = Email::new("invalid-email".to_string());
-        assert!(email_result.is_err(), "Invalid email should fail validation");
+        assert!(
+            email_result.is_err(),
+            "Invalid email should fail validation"
+        );
     }
 
     #[test]
     fn test_email_clone_independence() {
-        let email1 = Email::new("test@example.com".to_string())
-            .expect("Valid email");
+        let email1 = Email::new("test@example.com".to_string()).expect("Valid email");
         let email2 = email1.clone();
 
         // Both should be valid Email instances
@@ -402,7 +418,7 @@ mod phase5_tests {
         let _err1 = RepositoryError::NotFound;
         let _err2 = RepositoryError::Conflict("test".to_string());
         let _err3 = RepositoryError::Unexpected("test".to_string());
-        
+
         // All variants constructible
     }
 
@@ -461,16 +477,16 @@ mod phase5_tests {
     fn test_email_boundary_conditions() {
         // Test various email formats that the Email validator accepts/rejects
         let test_cases = vec![
-            ("test@example.com", true),   // Standard valid email
-            ("user+tag@domain.co.uk", true),  // Plus addressing
-            ("simple", false),             // No @ symbol
-            ("", false),                   // Empty
+            ("test@example.com", true),      // Standard valid email
+            ("user+tag@domain.co.uk", true), // Plus addressing
+            ("simple", false),               // No @ symbol
+            ("", false),                     // Empty
         ];
 
         for (email_str, should_be_valid) in test_cases {
             let result = Email::new(email_str.to_string());
             let is_valid = result.is_ok();
-            
+
             if should_be_valid {
                 assert!(is_valid, "Email '{}' should be valid", email_str);
             } else if !email_str.is_empty() && !email_str.contains('@') {

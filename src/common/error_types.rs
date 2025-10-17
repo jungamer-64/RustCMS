@@ -235,7 +235,10 @@ mod tests {
 
         for variant in variants {
             let display = format!("{variant}");
-            assert!(!display.is_empty(), "DomainError display should not be empty");
+            assert!(
+                !display.is_empty(),
+                "DomainError display should not be empty"
+            );
         }
     }
 
@@ -370,11 +373,26 @@ mod tests {
                 AppError::Infrastructure(InfrastructureError::DatabaseError("".to_string())),
                 "Infrastructure error:",
             ),
-            (AppError::Internal("Internal server error".to_string()), "Internal error:"),
-            (AppError::NotFound("Resource not found".to_string()), "Not found:"),
-            (AppError::Conflict("Duplicate entry".to_string()), "Conflict:"),
-            (AppError::BadRequest("Invalid data".to_string()), "Bad request:"),
-            (AppError::Unauthorized("No auth".to_string()), "Unauthorized:"),
+            (
+                AppError::Internal("Internal server error".to_string()),
+                "Internal error:",
+            ),
+            (
+                AppError::NotFound("Resource not found".to_string()),
+                "Not found:",
+            ),
+            (
+                AppError::Conflict("Duplicate entry".to_string()),
+                "Conflict:",
+            ),
+            (
+                AppError::BadRequest("Invalid data".to_string()),
+                "Bad request:",
+            ),
+            (
+                AppError::Unauthorized("No auth".to_string()),
+                "Unauthorized:",
+            ),
         ];
 
         for (error, expected_prefix) in variants {
@@ -434,8 +452,9 @@ mod tests {
 
     #[test]
     fn test_infrastructure_result_error() {
-        let result: InfrastructureResult<bool> =
-            Err(InfrastructureError::DatabaseError("Connection failed".to_string()));
+        let result: InfrastructureResult<bool> = Err(InfrastructureError::DatabaseError(
+            "Connection failed".to_string(),
+        ));
         assert!(result.is_err());
     }
 

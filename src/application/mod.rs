@@ -29,9 +29,9 @@ pub use handlers::*;
 
 // Ports - intentionally after handlers to avoid search module conflict
 // Only re-export specific items to avoid glob conflicts
-pub use ports::{cache, events, repositories};
 #[allow(unused_imports)] // Used conditionally
 pub use ports::{CacheService, EventPublisher, PostRepository, UserRepository};
+pub use ports::{cache, events, repositories};
 
 pub mod use_cases;
 pub use use_cases::*;
@@ -104,8 +104,9 @@ impl AppContainer {
             crate::infrastructure::repositories::DieselUserRepository,
         >,
     > {
-        let repo =
-            crate::infrastructure::repositories::DieselUserRepository::new(self.state.database.clone());
+        let repo = crate::infrastructure::repositories::DieselUserRepository::new(
+            self.state.database.clone(),
+        );
         Arc::new(crate::application::use_cases::CreateUserUseCase::new(
             Arc::new(repo),
         ))
@@ -120,8 +121,9 @@ impl AppContainer {
             crate::infrastructure::repositories::DieselUserRepository,
         >,
     > {
-        let repo =
-            crate::infrastructure::repositories::DieselUserRepository::new(self.state.database.clone());
+        let repo = crate::infrastructure::repositories::DieselUserRepository::new(
+            self.state.database.clone(),
+        );
         Arc::new(crate::application::use_cases::GetUserByIdUseCase::new(
             Arc::new(repo),
         ))
@@ -136,8 +138,9 @@ impl AppContainer {
             crate::infrastructure::repositories::DieselUserRepository,
         >,
     > {
-        let repo =
-            crate::infrastructure::repositories::DieselUserRepository::new(self.state.database.clone());
+        let repo = crate::infrastructure::repositories::DieselUserRepository::new(
+            self.state.database.clone(),
+        );
         Arc::new(crate::application::use_cases::UpdateUserUseCase::new(
             Arc::new(repo),
         ))

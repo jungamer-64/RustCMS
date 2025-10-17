@@ -2,7 +2,7 @@
 //! Diesel ベースの Category Repository 実装（Phase 5）
 
 #[cfg(feature = "restructure_domain")]
-use crate::application::ports::repositories::{RepositoryError, CategoryRepository};
+use crate::application::ports::repositories::{CategoryRepository, RepositoryError};
 #[cfg(feature = "restructure_domain")]
 use crate::domain::entities::category::CategoryId;
 
@@ -39,7 +39,10 @@ impl DieselCategoryRepository {
 #[cfg(feature = "restructure_domain")]
 #[async_trait::async_trait]
 impl CategoryRepository for DieselCategoryRepository {
-    async fn save(&self, category: crate::domain::entities::category::Category) -> Result<(), RepositoryError> {
+    async fn save(
+        &self,
+        category: crate::domain::entities::category::Category,
+    ) -> Result<(), RepositoryError> {
         // Phase 6.1: Placeholder for database insertion
         let _ = category;
         Ok(())
@@ -66,12 +69,20 @@ impl CategoryRepository for DieselCategoryRepository {
         Ok(())
     }
 
-    async fn list_all(&self, _limit: i64, _offset: i64) -> Result<Vec<crate::domain::entities::category::Category>, RepositoryError> {
+    async fn list_all(
+        &self,
+        _limit: i64,
+        _offset: i64,
+    ) -> Result<Vec<crate::domain::entities::category::Category>, RepositoryError> {
         // Phase 6.1: Placeholder for database query
         Ok(vec![])
     }
 
-    async fn list_active(&self, _limit: i64, _offset: i64) -> Result<Vec<crate::domain::entities::category::Category>, RepositoryError> {
+    async fn list_active(
+        &self,
+        _limit: i64,
+        _offset: i64,
+    ) -> Result<Vec<crate::domain::entities::category::Category>, RepositoryError> {
         // Phase 6.1: Placeholder for database query
         Ok(vec![])
     }
@@ -95,7 +106,9 @@ mod phase5_tests {
     fn test_repository_error_display() {
         let err = RepositoryError::NotFound("Category not found".to_string());
         let display_msg = err.to_string();
-        assert!(display_msg.contains("Entity not found") || display_msg.contains("Category not found"));
+        assert!(
+            display_msg.contains("Entity not found") || display_msg.contains("Category not found")
+        );
     }
 
     #[test]

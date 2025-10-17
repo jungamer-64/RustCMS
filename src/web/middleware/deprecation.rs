@@ -18,22 +18,17 @@ use axum::{
 /// v1 API 削除予定日 (RFC 2616 形式)
 const SUNSET_DATE: &str = "Sun, 17 Mar 2025 00:00:00 GMT";
 
-
-
 /// Axum middleware function (Phase 5-4)
-/// 
+///
 /// v1 エンドポイントに RFC 8594 準拠の Deprecation ヘッダーを追加します。
 /// routes/mod.rs から `middleware::from_fn(add_deprecation_headers)` で使用。
-/// 
+///
 /// # 追加されるヘッダー
 /// - `Deprecation: true`
 /// - `Sunset: Sun, 17 Mar 2025 00:00:00 GMT`
 /// - `Link: </api/v2/...>; rel="successor-version"`
 /// - `Warning: 299 - "Deprecation: ..."`
-pub async fn add_deprecation_headers(
-    req: Request<Body>,
-    next: Next,
-) -> impl IntoResponse {
+pub async fn add_deprecation_headers(req: Request<Body>, next: Next) -> impl IntoResponse {
     let path = req.uri().path().to_string();
     let mut response = next.run(req).await;
 

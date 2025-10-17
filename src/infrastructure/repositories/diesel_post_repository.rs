@@ -246,7 +246,11 @@ mod phase5_tests {
         // Edge case: per_page = 0 defaults to page 1
         let per_page: u32 = 0;
         let offset: u32 = 5;
-        let page = if per_page == 0 { 1 } else { (offset / per_page) + 1 };
+        let page = if per_page == 0 {
+            1
+        } else {
+            (offset / per_page) + 1
+        };
         assert_eq!(page, 1, "Zero per_page should default to page 1");
     }
 
@@ -258,7 +262,10 @@ mod phase5_tests {
     fn test_repository_error_not_found_display() {
         let error = RepositoryError::NotFound;
         let display_msg = format!("{}", error);
-        assert!(!display_msg.is_empty(), "NotFound error should have display message");
+        assert!(
+            !display_msg.is_empty(),
+            "NotFound error should have display message"
+        );
     }
 
     #[test]
@@ -337,7 +344,10 @@ mod phase5_tests {
         let post_id2 = PostId::new();
 
         // Should generate different UUIDs
-        assert_ne!(post_id1, post_id2, "PostId::new() should generate unique IDs");
+        assert_ne!(
+            post_id1, post_id2,
+            "PostId::new() should generate unique IDs"
+        );
     }
 
     // ========================================================================

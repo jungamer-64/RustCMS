@@ -10,15 +10,15 @@
 #[cfg(all(feature = "database", feature = "auth"))]
 mod integration_tests {
     use axum::{
+        Router,
         body::Body,
         http::{Request, StatusCode},
-        Router,
     };
     use tower::ServiceExt; // for `oneshot`
 
     /// テスト用の最小限の Router を構築（deprecation middleware 含む）
     fn create_test_router() -> Router {
-        use axum::{middleware, routing::get, Router};
+        use axum::{Router, middleware, routing::get};
         use cms_backend::middleware::deprecation::add_deprecation_headers;
 
         // v1 routes with deprecation middleware
@@ -131,17 +131,17 @@ mod integration_tests {
 
         // Then: 全4つの RFC 8594 ヘッダーが存在
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         // 1. Deprecation: true
         assert!(response.headers().contains_key("deprecation"));
         assert_eq!(response.headers()["deprecation"], "true");
-        
+
         // 2. Sunset: date
         assert!(response.headers().contains_key("sunset"));
-        
+
         // 3. Link: successor-version
         assert!(response.headers().contains_key("link"));
-        
+
         // 4. Warning: 299
         assert!(response.headers().contains_key("warning"));
     }

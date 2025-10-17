@@ -1165,7 +1165,7 @@ impl AppState {
                         }
                         Err(RepoErr::Unexpected(s)) => Err(crate::AppError::Internal(s)),
                     }
-                })
+                });
             }
 
             use crate::application::use_cases::CreateUserUseCase;
@@ -2600,28 +2600,28 @@ mod tests {
     #[test]
     fn test_app_metrics_default_initialization() {
         let metrics = AppMetrics::default();
-        
+
         // All request counters should be 0
         assert_eq!(metrics.total_requests, 0);
         assert_eq!(metrics.active_connections, 0);
-        
+
         // Cache metrics should be 0
         assert_eq!(metrics.cache_hits, 0);
         assert_eq!(metrics.cache_misses, 0);
-        
+
         // Search metrics should be 0
         assert_eq!(metrics.search_queries, 0);
         assert_eq!(metrics.search_avg_response_time_ms, 0.0);
-        
+
         // Auth metrics should be 0
         assert_eq!(metrics.auth_attempts, 0);
         assert_eq!(metrics.auth_successes, 0);
         assert_eq!(metrics.auth_failures, 0);
-        
+
         // DB metrics should be 0
         assert_eq!(metrics.db_queries, 0);
         assert_eq!(metrics.db_avg_response_time_ms, 0.0);
-        
+
         // Error counts should be 0
         assert_eq!(metrics.errors_total, 0);
         assert_eq!(metrics.errors_auth, 0);
@@ -2676,10 +2676,7 @@ mod tests {
 
         assert_eq!(health.status, "down");
         assert!(health.error.is_some());
-        assert_eq!(
-            health.error.unwrap(),
-            "Connection timeout".to_string()
-        );
+        assert_eq!(health.error.unwrap(), "Connection timeout".to_string());
     }
 
     #[test]
@@ -2780,7 +2777,7 @@ mod tests {
     fn test_failure_mode_down() {
         let mode = FailureMode::Down;
         match mode {
-            FailureMode::Down => {},
+            FailureMode::Down => {}
             FailureMode::Degraded => panic!("Expected Down"),
         }
     }
@@ -2790,7 +2787,7 @@ mod tests {
         let mode = FailureMode::Degraded;
         match mode {
             FailureMode::Down => panic!("Expected Degraded"),
-            FailureMode::Degraded => {},
+            FailureMode::Degraded => {}
         }
     }
 
@@ -2801,14 +2798,11 @@ mod tests {
     #[test]
     fn test_service_not_configured() {
         let health = service_not_configured("Feature not enabled");
-        
+
         assert_eq!(health.status, "not_configured");
         assert_eq!(health.response_time_ms, 0.0);
         assert!(health.error.is_none());
-        assert_eq!(
-            health.details["message"],
-            "Feature not enabled"
-        );
+        assert_eq!(health.details["message"], "Feature not enabled");
     }
 
     #[tokio::test]
@@ -2839,7 +2833,9 @@ mod tests {
     #[tokio::test]
     async fn test_to_service_health_degraded_on_error() {
         let fut = async {
-            Err::<(), _>(crate::error::AppError::Internal("Partial failure".to_string()))
+            Err::<(), _>(crate::error::AppError::Internal(
+                "Partial failure".to_string(),
+            ))
         };
 
         let health = to_service_health(fut, FailureMode::Degraded).await;
@@ -2855,7 +2851,7 @@ mod tests {
     fn test_metrics_increment_total_requests() {
         let mut metrics = AppMetrics::default();
         assert_eq!(metrics.total_requests, 0);
-        
+
         metrics.total_requests = 100;
         assert_eq!(metrics.total_requests, 100);
     }
@@ -2918,7 +2914,7 @@ mod tests {
     #[test]
     fn test_service_health_response_times_consistency() {
         let times = vec![1.5, 5.0, 10.0, 50.0, 1000.0];
-        
+
         for time in times {
             let health = ServiceHealth {
                 status: "up".to_string(),
@@ -2926,7 +2922,7 @@ mod tests {
                 error: None,
                 details: serde_json::json!({}),
             };
-            
+
             assert_eq!(health.response_time_ms, time);
             assert!(health.response_time_ms > 0.0);
         }

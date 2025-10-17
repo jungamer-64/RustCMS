@@ -16,7 +16,7 @@
 pub mod database;
 
 // Phase 3-4 で実装完了
-pub mod events;    // Event Bus実装 (src/events.rs, src/listeners.rs から移行)
+pub mod events; // Event Bus実装 (src/events.rs, src/listeners.rs から移行)
 
 // Phase 3 で実装予定
 // #[cfg(all(feature = "restructure_application", feature = "cache"))]

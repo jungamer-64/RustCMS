@@ -16,11 +16,11 @@ pub mod bus;
 pub mod listeners;
 
 // Re-exports for convenience
-pub use bus::{create_event_bus, AppEvent, EventBus};
+pub use bus::{AppEvent, EventBus, create_event_bus};
 pub use listeners::spawn_event_listeners;
 
 /// Events prelude
 pub mod prelude {
-    pub use super::bus::{create_event_bus, AppEvent, EventBus};
+    pub use super::bus::{AppEvent, EventBus, create_event_bus};
     pub use super::listeners::spawn_event_listeners;
 }

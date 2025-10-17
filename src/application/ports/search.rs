@@ -118,16 +118,16 @@ pub enum FilterOperator {
 pub enum SearchError {
     #[error("Index error: {0}")]
     IndexError(String),
-    
+
     #[error("Query parse error: {0}")]
     QueryParseError(String),
-    
+
     #[error("Document not found: {0}")]
     DocumentNotFound(String),
-    
+
     #[error("Search operation failed: {0}")]
     OperationFailed(String),
-    
+
     #[error("Unknown search error: {0}")]
     Unknown(String),
 }

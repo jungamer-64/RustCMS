@@ -72,16 +72,16 @@ pub trait CacheService: Send + Sync {
 pub enum CacheError {
     #[error("Connection error: {0}")]
     ConnectionError(String),
-    
+
     #[error("Serialization error: {0}")]
     SerializationError(String),
-    
+
     #[error("Key not found: {0}")]
     KeyNotFound(String),
-    
+
     #[error("Cache operation failed: {0}")]
     OperationFailed(String),
-    
+
     #[error("Unknown cache error: {0}")]
     Unknown(String),
 }

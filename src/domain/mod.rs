@@ -6,17 +6,17 @@ pub mod entities;
 
 // Legacy top-level re-exports for backward compatibility
 // These forward to the new entities module structure
-pub use entities::user;
-pub use entities::post;
-pub use entities::comment;
-pub use entities::tag;
 pub use entities::category;
+pub use entities::comment;
+pub use entities::post;
+pub use entities::tag;
+pub use entities::user;
 
 // Optional new structure for domain services/events behind feature flag
 #[cfg(feature = "restructure_domain")]
-pub mod services;
-#[cfg(feature = "restructure_domain")]
 pub mod events;
+#[cfg(feature = "restructure_domain")]
+pub mod services;
 
 // Database models re-export or placeholder depending on feature
 #[cfg(feature = "database")]

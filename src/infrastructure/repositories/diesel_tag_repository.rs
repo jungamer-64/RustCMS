@@ -59,12 +59,20 @@ impl TagRepository for DieselTagRepository {
         Ok(())
     }
 
-    async fn list_all(&self, _limit: i64, _offset: i64) -> Result<Vec<crate::domain::entities::tag::Tag>, RepositoryError> {
+    async fn list_all(
+        &self,
+        _limit: i64,
+        _offset: i64,
+    ) -> Result<Vec<crate::domain::entities::tag::Tag>, RepositoryError> {
         // Phase 6.1: Placeholder for database query
         Ok(vec![])
     }
 
-    async fn list_in_use(&self, _limit: i64, _offset: i64) -> Result<Vec<crate::domain::entities::tag::Tag>, RepositoryError> {
+    async fn list_in_use(
+        &self,
+        _limit: i64,
+        _offset: i64,
+    ) -> Result<Vec<crate::domain::entities::tag::Tag>, RepositoryError> {
         // Phase 6.1: Placeholder for database query
         Ok(vec![])
     }
@@ -113,7 +121,10 @@ mod phase5_tests {
     fn test_repository_error_not_found_display() {
         let error = RepositoryError::NotFound("test".to_string());
         let display_msg = format!("{}", error);
-        assert!(!display_msg.is_empty(), "NotFound error should have display message");
+        assert!(
+            !display_msg.is_empty(),
+            "NotFound error should have display message"
+        );
     }
 
     #[test]

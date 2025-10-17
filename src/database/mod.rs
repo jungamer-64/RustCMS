@@ -932,7 +932,17 @@ impl Database {
     pub fn get_comment_by_id(
         &self,
         id: Uuid,
-    ) -> Result<Option<(Uuid, Uuid, Option<Uuid>, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+    ) -> Result<
+        Option<(
+            Uuid,
+            Uuid,
+            Option<Uuid>,
+            String,
+            String,
+            chrono::DateTime<chrono::Utc>,
+            chrono::DateTime<chrono::Utc>,
+        )>,
+    > {
         use crate::database::schema::comments::dsl as comments_dsl;
         use diesel::prelude::*;
 
@@ -949,7 +959,15 @@ impl Database {
                     comments_dsl::created_at,
                     comments_dsl::updated_at,
                 ))
-                .first::<(Uuid, Uuid, Option<Uuid>, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
+                .first::<(
+                    Uuid,
+                    Uuid,
+                    Option<Uuid>,
+                    String,
+                    String,
+                    chrono::DateTime<chrono::Utc>,
+                    chrono::DateTime<chrono::Utc>,
+                )>(conn)
                 .optional()
                 .map_err(|e| crate::AppError::Internal(format!("Failed to fetch comment: {}", e)))
         })
@@ -960,12 +978,7 @@ impl Database {
     ///
     /// # Errors
     /// コメントが見つからない場合にエラーを返します。
-    pub fn update_comment(
-        &self,
-        id: Uuid,
-        content: String,
-        status: &str,
-    ) -> Result<()> {
+    pub fn update_comment(&self, id: Uuid, content: String, status: &str) -> Result<()> {
         use crate::database::schema::comments::dsl as comments_dsl;
         use diesel::prelude::*;
 
@@ -1020,7 +1033,17 @@ impl Database {
         post_id: Uuid,
         page: u32,
         limit: u32,
-    ) -> Result<Vec<(Uuid, Uuid, Option<Uuid>, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+    ) -> Result<
+        Vec<(
+            Uuid,
+            Uuid,
+            Option<Uuid>,
+            String,
+            String,
+            chrono::DateTime<chrono::Utc>,
+            chrono::DateTime<chrono::Utc>,
+        )>,
+    > {
         use crate::database::schema::comments::dsl as comments_dsl;
         use diesel::prelude::*;
 
@@ -1042,7 +1065,15 @@ impl Database {
                     comments_dsl::created_at,
                     comments_dsl::updated_at,
                 ))
-                .load::<(Uuid, Uuid, Option<Uuid>, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
+                .load::<(
+                    Uuid,
+                    Uuid,
+                    Option<Uuid>,
+                    String,
+                    String,
+                    chrono::DateTime<chrono::Utc>,
+                    chrono::DateTime<chrono::Utc>,
+                )>(conn)
                 .map_err(|e| crate::AppError::Internal(format!("Failed to list comments: {}", e)))
         })
     }
@@ -1076,7 +1107,17 @@ impl Database {
         author_id: Uuid,
         page: u32,
         limit: u32,
-    ) -> Result<Vec<(Uuid, Uuid, Option<Uuid>, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+    ) -> Result<
+        Vec<(
+            Uuid,
+            Uuid,
+            Option<Uuid>,
+            String,
+            String,
+            chrono::DateTime<chrono::Utc>,
+            chrono::DateTime<chrono::Utc>,
+        )>,
+    > {
         use crate::database::schema::comments::dsl as comments_dsl;
         use diesel::prelude::*;
 
@@ -1098,8 +1139,18 @@ impl Database {
                     comments_dsl::created_at,
                     comments_dsl::updated_at,
                 ))
-                .load::<(Uuid, Uuid, Option<Uuid>, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
-                .map_err(|e| crate::AppError::Internal(format!("Failed to list comments by author: {}", e)))
+                .load::<(
+                    Uuid,
+                    Uuid,
+                    Option<Uuid>,
+                    String,
+                    String,
+                    chrono::DateTime<chrono::Utc>,
+                    chrono::DateTime<chrono::Utc>,
+                )>(conn)
+                .map_err(|e| {
+                    crate::AppError::Internal(format!("Failed to list comments by author: {}", e))
+                })
         })
     }
 
@@ -1112,7 +1163,17 @@ impl Database {
         &self,
         page: u32,
         limit: u32,
-    ) -> Result<Vec<(Uuid, Uuid, Option<Uuid>, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+    ) -> Result<
+        Vec<(
+            Uuid,
+            Uuid,
+            Option<Uuid>,
+            String,
+            String,
+            chrono::DateTime<chrono::Utc>,
+            chrono::DateTime<chrono::Utc>,
+        )>,
+    > {
         use crate::database::schema::comments::dsl as comments_dsl;
         use diesel::prelude::*;
 
@@ -1133,8 +1194,18 @@ impl Database {
                     comments_dsl::created_at,
                     comments_dsl::updated_at,
                 ))
-                .load::<(Uuid, Uuid, Option<Uuid>, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
-                .map_err(|e| crate::AppError::Internal(format!("Failed to list all comments: {}", e)))
+                .load::<(
+                    Uuid,
+                    Uuid,
+                    Option<Uuid>,
+                    String,
+                    String,
+                    chrono::DateTime<chrono::Utc>,
+                    chrono::DateTime<chrono::Utc>,
+                )>(conn)
+                .map_err(|e| {
+                    crate::AppError::Internal(format!("Failed to list all comments: {}", e))
+                })
         })
     }
 

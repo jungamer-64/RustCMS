@@ -122,4 +122,12 @@ diesel::joinable!(posts -> media_files (featured_image_id));
 diesel::joinable!(comments -> posts (post_id));
 diesel::joinable!(comments -> users (author_id));
 
-diesel::allow_tables_to_appear_in_same_query!(api_keys, posts, users, pages, media_files, settings, comments,);
+diesel::allow_tables_to_appear_in_same_query!(
+    api_keys,
+    posts,
+    users,
+    pages,
+    media_files,
+    settings,
+    comments,
+);

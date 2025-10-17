@@ -55,13 +55,13 @@ pub trait EventPublisher: Send + Sync {
 pub enum EventError {
     #[error("Event bus connection error: {0}")]
     ConnectionError(String),
-    
+
     #[error("Event serialization error: {0}")]
     SerializationError(String),
-    
+
     #[error("Event publish failed: {0}")]
     PublishFailed(String),
-    
+
     #[error("Unknown event error: {0}")]
     Unknown(String),
 }

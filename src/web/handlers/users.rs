@@ -137,7 +137,7 @@ pub async fn get_users(
         cache_key,
     )
     .await?;
-        Ok(ApiOk(resp))
+    Ok(ApiOk(resp))
 }
 
 /// Get user by ID

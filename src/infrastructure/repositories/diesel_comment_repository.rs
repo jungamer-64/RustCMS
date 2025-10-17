@@ -3,7 +3,7 @@
 
 use crate::application::ports::repositories::CommentRepository;
 use crate::application::ports::repositories::RepositoryError;
-use crate::domain::entities::comment::{CommentId, CommentText, CommentStatus, Comment};
+use crate::domain::entities::comment::{Comment, CommentId, CommentStatus, CommentText};
 
 /// Diesel-backed CommentRepository implementation
 #[derive(Clone)]
@@ -48,38 +48,54 @@ impl DieselCommentRepository {
         // Get IDs from database values
         let _comment_id = CommentId::from_uuid(id);
         let post_id = crate::domain::entities::post::PostId::from_uuid(post_id);
-        
+
         // Author might be anonymous or missing
-        let author_id = author_id.map(crate::domain::entities::user::UserId::from_uuid)
+        let author_id = author_id
+            .map(crate::domain::entities::user::UserId::from_uuid)
             .ok_or_else(|| RepositoryError::DatabaseError("Missing author_id".to_string()))?;
 
         // Create new comment with validated data
-        let mut comment = Comment::new(post_id, author_id, comment_text)
-            .map_err(|e| RepositoryError::DatabaseError(format!("Failed to create comment: {}", e)))?;
+        let mut comment = Comment::new(post_id, author_id, comment_text).map_err(|e| {
+            RepositoryError::DatabaseError(format!("Failed to create comment: {}", e))
+        })?;
 
         // Manually set fields that came from database (internal fields)
         // Since these are private, we need to use domain transitions to match state
         match status {
             CommentStatus::Published | CommentStatus::Edited => {
                 // Transition to published if needed
-                comment.publish()
-                    .map_err(|e| RepositoryError::DatabaseError(format!("Failed to transition to published: {}", e)))?;
-                
+                comment.publish().map_err(|e| {
+                    RepositoryError::DatabaseError(format!(
+                        "Failed to transition to published: {}",
+                        e
+                    ))
+                })?;
+
                 // Further transition to edited if needed
                 if status == CommentStatus::Edited {
                     // Reuse same text to transition to edited state
-                    let edited_text = CommentText::new(content)
-                        .map_err(|e| RepositoryError::DatabaseError(format!("Invalid comment text: {}", e)))?;
-                    comment.edit(edited_text)
-                        .map_err(|e| RepositoryError::DatabaseError(format!("Failed to transition to edited: {}", e)))?;
+                    let edited_text = CommentText::new(content).map_err(|e| {
+                        RepositoryError::DatabaseError(format!("Invalid comment text: {}", e))
+                    })?;
+                    comment.edit(edited_text).map_err(|e| {
+                        RepositoryError::DatabaseError(format!(
+                            "Failed to transition to edited: {}",
+                            e
+                        ))
+                    })?;
                 }
             }
             CommentStatus::Deleted => {
                 // Transition to published first, then delete
-                comment.publish()
-                    .map_err(|e| RepositoryError::DatabaseError(format!("Failed to transition to published: {}", e)))?;
-                comment.delete()
-                    .map_err(|e| RepositoryError::DatabaseError(format!("Failed to delete: {}", e)))?;
+                comment.publish().map_err(|e| {
+                    RepositoryError::DatabaseError(format!(
+                        "Failed to transition to published: {}",
+                        e
+                    ))
+                })?;
+                comment.delete().map_err(|e| {
+                    RepositoryError::DatabaseError(format!("Failed to delete: {}", e))
+                })?;
             }
             CommentStatus::Pending => {
                 // Already in pending state by default
@@ -92,16 +108,13 @@ impl DieselCommentRepository {
 
 #[async_trait::async_trait]
 impl CommentRepository for DieselCommentRepository {
-    async fn save(
-        &self,
-        comment: Comment,
-    ) -> Result<(), RepositoryError> {
+    async fn save(&self, comment: Comment) -> Result<(), RepositoryError> {
         // Phase 6.2: Delegate to database layer
         // Extract comment data and persist
         let content = comment.text().as_str().to_string();
         let post_id = comment.post_id().into_uuid();
         let author_id = Some(comment.author_id().into_uuid());
-        
+
         // Map status to string for database
         let status_str = match comment.status() {
             CommentStatus::Pending => "pending",
@@ -109,26 +122,24 @@ impl CommentRepository for DieselCommentRepository {
             CommentStatus::Edited => "edited",
             CommentStatus::Deleted => "deleted",
         };
-        
+
         self.db
             .create_comment(post_id, author_id, content, status_str)
             .map_err(|e| RepositoryError::DatabaseError(e.to_string()))
     }
 
-    async fn find_by_id(
-        &self,
-        id: CommentId,
-    ) -> Result<Option<Comment>, RepositoryError> {
+    async fn find_by_id(&self, id: CommentId) -> Result<Option<Comment>, RepositoryError> {
         // Phase 6.2: Delegate to database layer
-        let result = self.db
+        let result = self
+            .db
             .get_comment_by_id(*id.as_uuid())
             .map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
-        
+
         // Reconstruct Comment entity from database tuple
         match result {
             Some((id, post_id, author_id, content, status, created_at, updated_at)) => {
                 let comment = Self::reconstruct_comment(
-                    id, post_id, author_id, content, status, created_at, updated_at
+                    id, post_id, author_id, content, status, created_at, updated_at,
                 )?;
                 Ok(Some(comment))
             }
@@ -143,20 +154,25 @@ impl CommentRepository for DieselCommentRepository {
         _offset: i64,
     ) -> Result<Vec<Comment>, RepositoryError> {
         // Phase 6.2: Delegate to database layer
-        let page = if _offset > 0 { (_offset / limit) + 1 } else { 1 };
-        let results = self.db
+        let page = if _offset > 0 {
+            (_offset / limit) + 1
+        } else {
+            1
+        };
+        let results = self
+            .db
             .list_comments_by_post(post_id.into_uuid(), page as u32, limit as u32)
             .map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
-        
+
         // Reconstruct Comment entities from database tuples
         let mut comments = Vec::new();
         for (id, post_id, author_id, content, status, created_at, updated_at) in results {
             let comment = Self::reconstruct_comment(
-                id, post_id, author_id, content, status, created_at, updated_at
+                id, post_id, author_id, content, status, created_at, updated_at,
             )?;
             comments.push(comment);
         }
-        
+
         Ok(comments)
     }
 
@@ -167,20 +183,25 @@ impl CommentRepository for DieselCommentRepository {
         _offset: i64,
     ) -> Result<Vec<Comment>, RepositoryError> {
         // Phase 6.2b: Delegate to database layer
-        let page = if _offset > 0 { (_offset / limit) + 1 } else { 1 };
-        let results = self.db
+        let page = if _offset > 0 {
+            (_offset / limit) + 1
+        } else {
+            1
+        };
+        let results = self
+            .db
             .list_comments_by_author(author_id.into_uuid(), page as u32, limit as u32)
             .map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
-        
+
         // Reconstruct Comment entities from database tuples
         let mut comments = Vec::new();
         for (id, post_id, author_id, content, status, created_at, updated_at) in results {
             let comment = Self::reconstruct_comment(
-                id, post_id, author_id, content, status, created_at, updated_at
+                id, post_id, author_id, content, status, created_at, updated_at,
             )?;
             comments.push(comment);
         }
-        
+
         Ok(comments)
     }
 
@@ -191,26 +212,27 @@ impl CommentRepository for DieselCommentRepository {
             .map_err(|e| RepositoryError::DatabaseError(e.to_string()))
     }
 
-    async fn list_all(
-        &self,
-        limit: i64,
-        _offset: i64,
-    ) -> Result<Vec<Comment>, RepositoryError> {
+    async fn list_all(&self, limit: i64, _offset: i64) -> Result<Vec<Comment>, RepositoryError> {
         // Phase 6.2b: Delegate to database layer
-        let page = if _offset > 0 { (_offset / limit) + 1 } else { 1 };
-        let results = self.db
+        let page = if _offset > 0 {
+            (_offset / limit) + 1
+        } else {
+            1
+        };
+        let results = self
+            .db
             .list_all_comments(page as u32, limit as u32)
             .map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
-        
+
         // Reconstruct Comment entities from database tuples
         let mut comments = Vec::new();
         for (id, post_id, author_id, content, status, created_at, updated_at) in results {
             let comment = Self::reconstruct_comment(
-                id, post_id, author_id, content, status, created_at, updated_at
+                id, post_id, author_id, content, status, created_at, updated_at,
             )?;
             comments.push(comment);
         }
-        
+
         Ok(comments)
     }
 }
@@ -261,7 +283,7 @@ mod phase5_tests {
     fn test_find_by_post_pagination() {
         let limit: i64 = 10;
         let offset: i64 = 20;
-        
+
         // Verify pagination parameters are valid
         assert!(limit > 0, "Limit must be positive");
         assert!(offset >= 0, "Offset must be non-negative");
@@ -275,7 +297,7 @@ mod phase5_tests {
     fn test_find_by_author_pagination() {
         let limit: i64 = 5;
         let offset: i64 = 10;
-        
+
         // Verify pagination parameters are valid
         assert!(limit > 0, "Limit must be positive");
         assert!(offset >= 0, "Offset must be non-negative");
@@ -299,7 +321,10 @@ mod phase5_tests {
     fn test_repository_error_not_found_display() {
         let error = RepositoryError::NotFound("test".to_string());
         let display_msg = format!("{}", error);
-        assert!(!display_msg.is_empty(), "NotFound error should have display message");
+        assert!(
+            !display_msg.is_empty(),
+            "NotFound error should have display message"
+        );
     }
 
     #[test]
@@ -369,7 +394,10 @@ mod phase5_tests {
         let comment_id2 = comment_id1;
 
         // Should be equivalent instances
-        assert_eq!(comment_id1, comment_id2, "CommentId Copy should preserve value");
+        assert_eq!(
+            comment_id1, comment_id2,
+            "CommentId Copy should preserve value"
+        );
     }
 
     #[test]
@@ -378,7 +406,10 @@ mod phase5_tests {
         let comment_id2 = CommentId::new();
 
         // Should generate different UUIDs
-        assert_ne!(comment_id1, comment_id2, "CommentId::new() should generate unique IDs");
+        assert_ne!(
+            comment_id1, comment_id2,
+            "CommentId::new() should generate unique IDs"
+        );
     }
 
     // ========================================================================

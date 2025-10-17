@@ -25,11 +25,17 @@ pub mod middleware;
 // Re-exports for convenience
 // Note: Specific re-exports to avoid ambiguous glob conflicts (auth module in both)
 pub use handlers::{admin, api_keys, health, metrics, posts, search, users};
-pub use middleware::{api_key, common, compression, csrf, deprecation, logging, permission, rate_limiting, request_id, security};
+pub use middleware::{
+    api_key, common, compression, csrf, deprecation, logging, permission, rate_limiting,
+    request_id, security,
+};
 
 /// Web layer prelude
 pub mod prelude {
     // Specific re-exports to avoid ambiguous glob conflicts
     pub use super::handlers::{admin, api_keys, health, metrics, posts, search, users};
-    pub use super::middleware::{api_key, common, compression, csrf, deprecation, logging, permission, rate_limiting, request_id, security};
+    pub use super::middleware::{
+        api_key, common, compression, csrf, deprecation, logging, permission, rate_limiting,
+        request_id, security,
+    };
 }
