@@ -56,14 +56,12 @@ impl DieselCategoryRepository {
         _updated_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<Category, RepositoryError> {
         // Validate and create CategoryName from database value
-        let cat_name = CategoryName::new(name).map_err(|e| {
-            RepositoryError::DatabaseError(format!("Invalid category name: {}", e))
-        })?;
+        let cat_name = CategoryName::new(name)
+            .map_err(|e| RepositoryError::DatabaseError(format!("Invalid category name: {}", e)))?;
 
         // Validate and create CategorySlug from database value
-        let cat_slug = CategorySlug::new(slug).map_err(|e| {
-            RepositoryError::DatabaseError(format!("Invalid category slug: {}", e))
-        })?;
+        let cat_slug = CategorySlug::new(slug)
+            .map_err(|e| RepositoryError::DatabaseError(format!("Invalid category slug: {}", e)))?;
 
         // Validate and create CategoryDescription from database value (if present)
         let cat_description = if let Some(desc) = description {
@@ -89,10 +87,7 @@ impl DieselCategoryRepository {
 #[cfg(feature = "restructure_domain")]
 #[async_trait::async_trait]
 impl CategoryRepository for DieselCategoryRepository {
-    async fn save(
-        &self,
-        category: Category,
-    ) -> Result<(), RepositoryError> {
+    async fn save(&self, category: Category) -> Result<(), RepositoryError> {
         // Extract category data and persist to database
         let name = category.name().as_str().to_string();
         let slug = category.slug().as_str().to_string();
@@ -114,7 +109,14 @@ impl CategoryRepository for DieselCategoryRepository {
         match result {
             Some((id, name, slug, description, parent_id, post_count, created_at, updated_at)) => {
                 let category = Self::reconstruct_category(
-                    id, name, slug, description, parent_id, post_count, created_at, updated_at,
+                    id,
+                    name,
+                    slug,
+                    description,
+                    parent_id,
+                    post_count,
+                    created_at,
+                    updated_at,
                 )?;
                 Ok(Some(category))
             }
@@ -122,10 +124,7 @@ impl CategoryRepository for DieselCategoryRepository {
         }
     }
 
-    async fn find_by_slug(
-        &self,
-        slug: &CategorySlug,
-    ) -> Result<Option<Category>, RepositoryError> {
+    async fn find_by_slug(&self, slug: &CategorySlug) -> Result<Option<Category>, RepositoryError> {
         // Query database by category slug
         let result = self
             .db
@@ -136,7 +135,14 @@ impl CategoryRepository for DieselCategoryRepository {
         match result {
             Some((id, name, slug, description, parent_id, post_count, created_at, updated_at)) => {
                 let category = Self::reconstruct_category(
-                    id, name, slug, description, parent_id, post_count, created_at, updated_at,
+                    id,
+                    name,
+                    slug,
+                    description,
+                    parent_id,
+                    post_count,
+                    created_at,
+                    updated_at,
                 )?;
                 Ok(Some(category))
             }
@@ -153,11 +159,7 @@ impl CategoryRepository for DieselCategoryRepository {
 
     async fn list_all(&self, limit: i64, offset: i64) -> Result<Vec<Category>, RepositoryError> {
         // Convert offset to page number (limit-based pagination)
-        let page = if offset > 0 {
-            (offset / limit) + 1
-        } else {
-            1
-        };
+        let page = if offset > 0 { (offset / limit) + 1 } else { 1 };
 
         let results = self
             .db
@@ -166,9 +168,17 @@ impl CategoryRepository for DieselCategoryRepository {
 
         // Reconstruct Category entities from database tuples
         let mut categories = Vec::new();
-        for (id, name, slug, description, parent_id, post_count, created_at, updated_at) in results {
+        for (id, name, slug, description, parent_id, post_count, created_at, updated_at) in results
+        {
             let category = Self::reconstruct_category(
-                id, name, slug, description, parent_id, post_count, created_at, updated_at,
+                id,
+                name,
+                slug,
+                description,
+                parent_id,
+                post_count,
+                created_at,
+                updated_at,
             )?;
             categories.push(category);
         }
@@ -182,7 +192,6 @@ impl CategoryRepository for DieselCategoryRepository {
         self.list_all(limit, offset).await
     }
 }
-
 
 // ============================================================================
 // Phase 5 Tests: DieselCategoryRepository Comprehensive Test Suite

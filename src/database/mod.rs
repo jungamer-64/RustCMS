@@ -1381,7 +1381,16 @@ impl Database {
     pub fn get_tag_by_id(
         &self,
         tag_id: Uuid,
-    ) -> Result<Option<(Uuid, String, String, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+    ) -> Result<
+        Option<(
+            Uuid,
+            String,
+            String,
+            i32,
+            chrono::DateTime<chrono::Utc>,
+            chrono::DateTime<chrono::Utc>,
+        )>,
+    > {
         use crate::database::schema::tags::dsl as tags_dsl;
         use diesel::prelude::*;
 
@@ -1396,9 +1405,18 @@ impl Database {
                     tags_dsl::created_at,
                     tags_dsl::updated_at,
                 ))
-                .first::<(Uuid, String, String, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
+                .first::<(
+                    Uuid,
+                    String,
+                    String,
+                    i32,
+                    chrono::DateTime<chrono::Utc>,
+                    chrono::DateTime<chrono::Utc>,
+                )>(conn)
                 .optional()
-                .map_err(|e| crate::error::AppError::NotFound(format!("Failed to get tag by id: {}", e)))
+                .map_err(|e| {
+                    crate::error::AppError::NotFound(format!("Failed to get tag by id: {}", e))
+                })
         })
     }
 
@@ -1407,7 +1425,16 @@ impl Database {
     pub fn get_tag_by_name(
         &self,
         name: &str,
-    ) -> Result<Option<(Uuid, String, String, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+    ) -> Result<
+        Option<(
+            Uuid,
+            String,
+            String,
+            i32,
+            chrono::DateTime<chrono::Utc>,
+            chrono::DateTime<chrono::Utc>,
+        )>,
+    > {
         use crate::database::schema::tags::dsl as tags_dsl;
         use diesel::prelude::*;
 
@@ -1422,9 +1449,18 @@ impl Database {
                     tags_dsl::created_at,
                     tags_dsl::updated_at,
                 ))
-                .first::<(Uuid, String, String, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
+                .first::<(
+                    Uuid,
+                    String,
+                    String,
+                    i32,
+                    chrono::DateTime<chrono::Utc>,
+                    chrono::DateTime<chrono::Utc>,
+                )>(conn)
                 .optional()
-                .map_err(|e| crate::error::AppError::NotFound(format!("Failed to get tag by name: {}", e)))
+                .map_err(|e| {
+                    crate::error::AppError::NotFound(format!("Failed to get tag by name: {}", e))
+                })
         })
     }
 
@@ -1481,7 +1517,16 @@ impl Database {
         &self,
         page: u32,
         limit: u32,
-    ) -> Result<Vec<(Uuid, String, String, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+    ) -> Result<
+        Vec<(
+            Uuid,
+            String,
+            String,
+            i32,
+            chrono::DateTime<chrono::Utc>,
+            chrono::DateTime<chrono::Utc>,
+        )>,
+    > {
         use crate::database::schema::tags::dsl as tags_dsl;
         use diesel::prelude::*;
 
@@ -1500,8 +1545,17 @@ impl Database {
                     tags_dsl::created_at,
                     tags_dsl::updated_at,
                 ))
-                .load::<(Uuid, String, String, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
-                .map_err(|e| crate::error::AppError::Internal(format!("Failed to list all tags: {}", e)))
+                .load::<(
+                    Uuid,
+                    String,
+                    String,
+                    i32,
+                    chrono::DateTime<chrono::Utc>,
+                    chrono::DateTime<chrono::Utc>,
+                )>(conn)
+                .map_err(|e| {
+                    crate::error::AppError::Internal(format!("Failed to list all tags: {}", e))
+                })
         })
     }
 
@@ -1511,7 +1565,16 @@ impl Database {
         &self,
         page: u32,
         limit: u32,
-    ) -> Result<Vec<(Uuid, String, String, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+    ) -> Result<
+        Vec<(
+            Uuid,
+            String,
+            String,
+            i32,
+            chrono::DateTime<chrono::Utc>,
+            chrono::DateTime<chrono::Utc>,
+        )>,
+    > {
         use crate::database::schema::tags::dsl as tags_dsl;
         use diesel::prelude::*;
 
@@ -1531,8 +1594,17 @@ impl Database {
                     tags_dsl::created_at,
                     tags_dsl::updated_at,
                 ))
-                .load::<(Uuid, String, String, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
-                .map_err(|e| crate::error::AppError::Internal(format!("Failed to list tags in use: {}", e)))
+                .load::<(
+                    Uuid,
+                    String,
+                    String,
+                    i32,
+                    chrono::DateTime<chrono::Utc>,
+                    chrono::DateTime<chrono::Utc>,
+                )>(conn)
+                .map_err(|e| {
+                    crate::error::AppError::Internal(format!("Failed to list tags in use: {}", e))
+                })
         })
     }
 
@@ -1616,7 +1688,18 @@ impl Database {
     pub fn get_category_by_id(
         &self,
         category_id: Uuid,
-    ) -> Result<Option<(Uuid, String, String, Option<String>, Option<Uuid>, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+    ) -> Result<
+        Option<(
+            Uuid,
+            String,
+            String,
+            Option<String>,
+            Option<Uuid>,
+            i32,
+            chrono::DateTime<chrono::Utc>,
+            chrono::DateTime<chrono::Utc>,
+        )>,
+    > {
         self.with_conn(|conn| {
             use crate::database::schema::categories;
             use crate::database::schema::categories::dsl::*;
@@ -1624,10 +1707,30 @@ impl Database {
 
             categories::table
                 .filter(id.eq(category_id))
-                .select((id, name, slug, description, parent_id, post_count, created_at, updated_at))
-                .first::<(Uuid, String, String, Option<String>, Option<Uuid>, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
+                .select((
+                    id,
+                    name,
+                    slug,
+                    description,
+                    parent_id,
+                    post_count,
+                    created_at,
+                    updated_at,
+                ))
+                .first::<(
+                    Uuid,
+                    String,
+                    String,
+                    Option<String>,
+                    Option<Uuid>,
+                    i32,
+                    chrono::DateTime<chrono::Utc>,
+                    chrono::DateTime<chrono::Utc>,
+                )>(conn)
                 .optional()
-                .map_err(|e| crate::error::AppError::Internal(format!("Failed to fetch category: {}", e)))
+                .map_err(|e| {
+                    crate::error::AppError::Internal(format!("Failed to fetch category: {}", e))
+                })
         })
     }
 
@@ -1637,7 +1740,18 @@ impl Database {
     pub fn get_category_by_slug(
         &self,
         category_slug: &str,
-    ) -> Result<Option<(Uuid, String, String, Option<String>, Option<Uuid>, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+    ) -> Result<
+        Option<(
+            Uuid,
+            String,
+            String,
+            Option<String>,
+            Option<Uuid>,
+            i32,
+            chrono::DateTime<chrono::Utc>,
+            chrono::DateTime<chrono::Utc>,
+        )>,
+    > {
         self.with_conn(|conn| {
             use crate::database::schema::categories;
             use crate::database::schema::categories::dsl::*;
@@ -1645,10 +1759,30 @@ impl Database {
 
             categories::table
                 .filter(slug.eq(category_slug))
-                .select((id, name, slug, description, parent_id, post_count, created_at, updated_at))
-                .first::<(Uuid, String, String, Option<String>, Option<Uuid>, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
+                .select((
+                    id,
+                    name,
+                    slug,
+                    description,
+                    parent_id,
+                    post_count,
+                    created_at,
+                    updated_at,
+                ))
+                .first::<(
+                    Uuid,
+                    String,
+                    String,
+                    Option<String>,
+                    Option<Uuid>,
+                    i32,
+                    chrono::DateTime<chrono::Utc>,
+                    chrono::DateTime<chrono::Utc>,
+                )>(conn)
                 .optional()
-                .map_err(|e| crate::error::AppError::Internal(format!("Failed to fetch category: {}", e)))
+                .map_err(|e| {
+                    crate::error::AppError::Internal(format!("Failed to fetch category: {}", e))
+                })
         })
     }
 
@@ -1694,10 +1828,7 @@ impl Database {
             use diesel::prelude::*;
 
             Self::execute_and_ensure(
-                || {
-                    diesel::delete(categories::table.filter(id.eq(category_id)))
-                        .execute(conn)
-                },
+                || diesel::delete(categories::table.filter(id.eq(category_id))).execute(conn),
                 "Failed to delete category",
                 "Category not found",
             )
@@ -1711,7 +1842,18 @@ impl Database {
         &self,
         page: u32,
         limit: u32,
-    ) -> Result<Vec<(Uuid, String, String, Option<String>, Option<Uuid>, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+    ) -> Result<
+        Vec<(
+            Uuid,
+            String,
+            String,
+            Option<String>,
+            Option<Uuid>,
+            i32,
+            chrono::DateTime<chrono::Utc>,
+            chrono::DateTime<chrono::Utc>,
+        )>,
+    > {
         self.with_conn(|conn| {
             use crate::database::schema::categories;
             use crate::database::schema::categories::dsl::*;
@@ -1723,9 +1865,29 @@ impl Database {
                 .order(post_count.desc())
                 .limit(limit)
                 .offset(offset)
-                .select((id, name, slug, description, parent_id, post_count, created_at, updated_at))
-                .load::<(Uuid, String, String, Option<String>, Option<Uuid>, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
-                .map_err(|e| crate::error::AppError::Internal(format!("Failed to fetch categories: {}", e)))
+                .select((
+                    id,
+                    name,
+                    slug,
+                    description,
+                    parent_id,
+                    post_count,
+                    created_at,
+                    updated_at,
+                ))
+                .load::<(
+                    Uuid,
+                    String,
+                    String,
+                    Option<String>,
+                    Option<Uuid>,
+                    i32,
+                    chrono::DateTime<chrono::Utc>,
+                    chrono::DateTime<chrono::Utc>,
+                )>(conn)
+                .map_err(|e| {
+                    crate::error::AppError::Internal(format!("Failed to fetch categories: {}", e))
+                })
         })
     }
 
@@ -1737,7 +1899,18 @@ impl Database {
         parent_category_id: Option<Uuid>,
         page: u32,
         limit: u32,
-    ) -> Result<Vec<(Uuid, String, String, Option<String>, Option<Uuid>, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+    ) -> Result<
+        Vec<(
+            Uuid,
+            String,
+            String,
+            Option<String>,
+            Option<Uuid>,
+            i32,
+            chrono::DateTime<chrono::Utc>,
+            chrono::DateTime<chrono::Utc>,
+        )>,
+    > {
         self.with_conn(|conn| {
             use crate::database::schema::categories;
             use crate::database::schema::categories::dsl::*;
@@ -1750,9 +1923,29 @@ impl Database {
                 .order(post_count.desc())
                 .limit(limit)
                 .offset(offset)
-                .select((id, name, slug, description, parent_id, post_count, created_at, updated_at))
-                .load::<(Uuid, String, String, Option<String>, Option<Uuid>, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
-                .map_err(|e| crate::error::AppError::Internal(format!("Failed to fetch categories: {}", e)))
+                .select((
+                    id,
+                    name,
+                    slug,
+                    description,
+                    parent_id,
+                    post_count,
+                    created_at,
+                    updated_at,
+                ))
+                .load::<(
+                    Uuid,
+                    String,
+                    String,
+                    Option<String>,
+                    Option<Uuid>,
+                    i32,
+                    chrono::DateTime<chrono::Utc>,
+                    chrono::DateTime<chrono::Utc>,
+                )>(conn)
+                .map_err(|e| {
+                    crate::error::AppError::Internal(format!("Failed to fetch categories: {}", e))
+                })
         })
     }
 
@@ -1769,7 +1962,9 @@ impl Database {
                 .filter(id.eq(category_id))
                 .select(post_count)
                 .first(conn)
-                .map_err(|e| crate::error::AppError::NotFound(format!("Category not found: {}", e)))?;
+                .map_err(|e| {
+                    crate::error::AppError::NotFound(format!("Category not found: {}", e))
+                })?;
 
             let new_count = current_count + count;
             let now = chrono::Utc::now();
@@ -1778,10 +1973,7 @@ impl Database {
             Self::execute_and_ensure(
                 || {
                     diesel::update(categories::table.filter(id.eq(category_id)))
-                        .set((
-                            post_count.eq(new_count),
-                            updated_at.eq(now),
-                        ))
+                        .set((post_count.eq(new_count), updated_at.eq(now)))
                         .execute(conn)
                 },
                 "Failed to increment post count",

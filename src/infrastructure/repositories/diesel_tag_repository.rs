@@ -48,9 +48,8 @@ impl DieselTagRepository {
         _updated_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<Tag, RepositoryError> {
         // Validate and create TagName from database value
-        let tag_name = TagName::new(name).map_err(|e| {
-            RepositoryError::DatabaseError(format!("Invalid tag name: {}", e))
-        })?;
+        let tag_name = TagName::new(name)
+            .map_err(|e| RepositoryError::DatabaseError(format!("Invalid tag name: {}", e)))?;
 
         // Validate and create TagDescription from database value
         let tag_description = TagDescription::new(description).map_err(|e| {
@@ -60,9 +59,8 @@ impl DieselTagRepository {
         // Create Tag entity from validated values
         // Tag::new() creates a new ID automatically
         // TODO: Add method to Tag to restore from database with existing ID
-        let tag = Tag::new(tag_name, tag_description).map_err(|e| {
-            RepositoryError::DatabaseError(format!("Failed to create tag: {}", e))
-        })?;
+        let tag = Tag::new(tag_name, tag_description)
+            .map_err(|e| RepositoryError::DatabaseError(format!("Failed to create tag: {}", e)))?;
 
         Ok(tag)
     }
@@ -91,18 +89,21 @@ impl TagRepository for DieselTagRepository {
         // Reconstruct Tag entity from database tuple
         match result {
             Some((id, name, description, usage_count, created_at, updated_at)) => {
-                let tag =
-                    Self::reconstruct_tag(id, name, description, usage_count, created_at, updated_at)?;
+                let tag = Self::reconstruct_tag(
+                    id,
+                    name,
+                    description,
+                    usage_count,
+                    created_at,
+                    updated_at,
+                )?;
                 Ok(Some(tag))
             }
             None => Ok(None),
         }
     }
 
-    async fn find_by_name(
-        &self,
-        name: &TagName,
-    ) -> Result<Option<Tag>, RepositoryError> {
+    async fn find_by_name(&self, name: &TagName) -> Result<Option<Tag>, RepositoryError> {
         // Query database by tag name
         let result = self
             .db
@@ -112,8 +113,14 @@ impl TagRepository for DieselTagRepository {
         // Reconstruct Tag entity from database tuple
         match result {
             Some((id, name, description, usage_count, created_at, updated_at)) => {
-                let tag =
-                    Self::reconstruct_tag(id, name, description, usage_count, created_at, updated_at)?;
+                let tag = Self::reconstruct_tag(
+                    id,
+                    name,
+                    description,
+                    usage_count,
+                    created_at,
+                    updated_at,
+                )?;
                 Ok(Some(tag))
             }
             None => Ok(None),
@@ -129,11 +136,7 @@ impl TagRepository for DieselTagRepository {
 
     async fn list_all(&self, limit: i64, offset: i64) -> Result<Vec<Tag>, RepositoryError> {
         // Convert offset to page number (limit-based pagination)
-        let page = if offset > 0 {
-            (offset / limit) + 1
-        } else {
-            1
-        };
+        let page = if offset > 0 { (offset / limit) + 1 } else { 1 };
 
         let results = self
             .db
@@ -153,11 +156,7 @@ impl TagRepository for DieselTagRepository {
 
     async fn list_in_use(&self, limit: i64, offset: i64) -> Result<Vec<Tag>, RepositoryError> {
         // Convert offset to page number
-        let page = if offset > 0 {
-            (offset / limit) + 1
-        } else {
-            1
-        };
+        let page = if offset > 0 { (offset / limit) + 1 } else { 1 };
 
         let results = self
             .db
