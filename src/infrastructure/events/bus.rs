@@ -69,11 +69,26 @@ pub enum AppEvent {
     /// A post was published (status changed to published)
     PostPublished(PostEventData),
 
+    /// A post was archived
+    PostArchived(PostEventData),
+
     // ============================================================================
-    // Comment Events (Placeholder - using Uuid until Comment model is ready)
+    // Comment Events
     // ============================================================================
     /// A new comment was created
-    CommentCreated(Uuid),
+    CommentCreated {
+        comment_id: String,
+        post_id: String,
+        author_id: String,
+        text: String,
+    },
+
+    /// A comment was published (status changed to published)
+    CommentPublished {
+        comment_id: String,
+        post_id: String,
+        author_id: String,
+    },
 
     /// An existing comment was updated
     CommentUpdated(Uuid),
@@ -143,6 +158,15 @@ pub struct PostEventData {
     pub slug: String,
     pub author_id: Uuid,
     pub published: bool,
+}
+
+/// Event data for comment-related events
+#[derive(Debug, Clone)]
+pub struct CommentEventData {
+    pub comment_id: String,
+    pub post_id: String,
+    pub author_id: String,
+    pub text: String,
 }
 
 impl PostEventData {
@@ -415,12 +439,28 @@ mod tests {
 
     #[test]
     fn test_app_event_comment_operations() {
-        let id = Uuid::new_v4();
-        let created_event = AppEvent::CommentCreated(id);
-        let updated_event = AppEvent::CommentUpdated(id);
-        let deleted_event = AppEvent::CommentDeleted(id);
+        let comment_id = Uuid::new_v4();
+        let post_id = Uuid::new_v4();
+        let author_id = Uuid::new_v4();
+        
+        let created_event = AppEvent::CommentCreated {
+            comment_id: comment_id.to_string(),
+            post_id: post_id.to_string(),
+            author_id: author_id.to_string(),
+            text: "Test comment".to_string(),
+        };
+        
+        let published_event = AppEvent::CommentPublished {
+            comment_id: comment_id.to_string(),
+            post_id: post_id.to_string(),
+            author_id: author_id.to_string(),
+        };
+        
+        let updated_event = AppEvent::CommentUpdated(comment_id);
+        let deleted_event = AppEvent::CommentDeleted(comment_id);
 
-        assert!(matches!(created_event, AppEvent::CommentCreated(_)));
+        assert!(matches!(created_event, AppEvent::CommentCreated { .. }));
+        assert!(matches!(published_event, AppEvent::CommentPublished { .. }));
         assert!(matches!(updated_event, AppEvent::CommentUpdated(_)));
         assert!(matches!(deleted_event, AppEvent::CommentDeleted(_)));
     }

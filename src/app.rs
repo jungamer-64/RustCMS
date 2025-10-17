@@ -2230,10 +2230,11 @@ impl AppState {
     }
 
     /// Emit a CommentCreated event (placeholder)
-    pub fn emit_comment_created(&self, comment_id: uuid::Uuid) {
-        let _ = self
-            .event_bus
-            .send(crate::events::AppEvent::CommentCreated(comment_id));
+    /// DEPRECATED: Phase 5 で削除予定。新しい Use Case は構造体形式を使用
+    #[deprecated(note = "Use structured AppEvent::CommentCreated { .. } instead")]
+    pub fn emit_comment_created(&self, _comment_id: uuid::Uuid) {
+        // このメソッドは Phase 5 で削除予定
+        // 新しい Use Case は AppEvent::CommentCreated { comment_id, post_id, author_id, text } を使用
     }
 
     /// Emit a CommentUpdated event (placeholder)
