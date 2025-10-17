@@ -70,6 +70,7 @@ secrets/
 *.secret
 secrets.json
 credentials.yml
+!src/common/security
 
 # Cloud/local credentials
 .aws/
