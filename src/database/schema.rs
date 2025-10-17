@@ -114,6 +114,30 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    tags (id) {
+        id -> Uuid,
+        name -> Varchar,
+        description -> Text,
+        usage_count -> Int4,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    categories (id) {
+        id -> Uuid,
+        name -> Varchar,
+        slug -> Varchar,
+        description -> Nullable<Text>,
+        parent_id -> Nullable<Uuid>,
+        post_count -> Int4,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
 diesel::joinable!(api_keys -> users (user_id));
 diesel::joinable!(posts -> users (author_id));
 diesel::joinable!(pages -> users (author_id));
@@ -130,4 +154,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     media_files,
     settings,
     comments,
+    tags,
+    categories,
 );

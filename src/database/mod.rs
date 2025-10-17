@@ -1341,3 +1341,452 @@ mod tests {
         assert!(changed.published_at.is_some());
     }
 }
+
+// ============================================================================
+// Phase 6.3: Tag Database Helper Methods (CRUD operations)
+// ============================================================================
+
+impl Database {
+    /// Create a new tag with validation
+    /// 新しいタグを作成します（一意性検証付き）。
+    pub fn create_tag(&self, name: String, description: String) -> Result<()> {
+        use crate::database::schema::tags::dsl as tags_dsl;
+        use diesel::prelude::*;
+
+        let tag_id = Uuid::new_v4();
+        let now = chrono::Utc::now();
+
+        self.with_conn(|conn| {
+            Self::execute_and_ensure(
+                || {
+                    diesel::insert_into(tags_dsl::tags)
+                        .values((
+                            tags_dsl::id.eq(tag_id),
+                            tags_dsl::name.eq(&name),
+                            tags_dsl::description.eq(&description),
+                            tags_dsl::usage_count.eq(0),
+                            tags_dsl::created_at.eq(now),
+                            tags_dsl::updated_at.eq(now),
+                        ))
+                        .execute(conn)
+                },
+                "Failed to create tag",
+                "Tag name already exists or invalid data",
+            )
+        })
+    }
+
+    /// Get tag by ID
+    /// タグをIDで取得します。
+    pub fn get_tag_by_id(
+        &self,
+        tag_id: Uuid,
+    ) -> Result<Option<(Uuid, String, String, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+        use crate::database::schema::tags::dsl as tags_dsl;
+        use diesel::prelude::*;
+
+        self.with_conn(|conn| {
+            tags_dsl::tags
+                .filter(tags_dsl::id.eq(tag_id))
+                .select((
+                    tags_dsl::id,
+                    tags_dsl::name,
+                    tags_dsl::description,
+                    tags_dsl::usage_count,
+                    tags_dsl::created_at,
+                    tags_dsl::updated_at,
+                ))
+                .first::<(Uuid, String, String, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
+                .optional()
+                .map_err(|e| crate::error::AppError::NotFound(format!("Failed to get tag by id: {}", e)))
+        })
+    }
+
+    /// Get tag by name
+    /// タグを名前で取得します。
+    pub fn get_tag_by_name(
+        &self,
+        name: &str,
+    ) -> Result<Option<(Uuid, String, String, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+        use crate::database::schema::tags::dsl as tags_dsl;
+        use diesel::prelude::*;
+
+        self.with_conn(|conn| {
+            tags_dsl::tags
+                .filter(tags_dsl::name.eq(name))
+                .select((
+                    tags_dsl::id,
+                    tags_dsl::name,
+                    tags_dsl::description,
+                    tags_dsl::usage_count,
+                    tags_dsl::created_at,
+                    tags_dsl::updated_at,
+                ))
+                .first::<(Uuid, String, String, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
+                .optional()
+                .map_err(|e| crate::error::AppError::NotFound(format!("Failed to get tag by name: {}", e)))
+        })
+    }
+
+    /// Update tag
+    /// タグを更新します。
+    pub fn update_tag(
+        &self,
+        tag_id: Uuid,
+        name: String,
+        description: String,
+        usage_count: i32,
+    ) -> Result<()> {
+        use crate::database::schema::tags::dsl as tags_dsl;
+        use diesel::prelude::*;
+
+        let now = chrono::Utc::now();
+
+        self.with_conn(|conn| {
+            Self::execute_and_ensure(
+                || {
+                    diesel::update(tags_dsl::tags.filter(tags_dsl::id.eq(tag_id)))
+                        .set((
+                            tags_dsl::name.eq(&name),
+                            tags_dsl::description.eq(&description),
+                            tags_dsl::usage_count.eq(usage_count),
+                            tags_dsl::updated_at.eq(now),
+                        ))
+                        .execute(conn)
+                },
+                "Failed to update tag",
+                "Tag not found or invalid data",
+            )
+        })
+    }
+
+    /// Delete tag (physical deletion)
+    /// タグを削除します（物理削除）。
+    pub fn delete_tag(&self, tag_id: Uuid) -> Result<()> {
+        use crate::database::schema::tags::dsl as tags_dsl;
+        use diesel::prelude::*;
+
+        self.with_conn(|conn| {
+            Self::execute_and_ensure(
+                || diesel::delete(tags_dsl::tags.filter(tags_dsl::id.eq(tag_id))).execute(conn),
+                "Failed to delete tag",
+                "Tag not found",
+            )
+        })
+    }
+
+    /// List all tags
+    /// すべてのタグを一覧表示します（使用数で降順）。
+    pub fn list_all_tags(
+        &self,
+        page: u32,
+        limit: u32,
+    ) -> Result<Vec<(Uuid, String, String, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+        use crate::database::schema::tags::dsl as tags_dsl;
+        use diesel::prelude::*;
+
+        let (_page, lim, offset) = Self::paged_params(page, limit);
+
+        self.with_conn(|conn| {
+            tags_dsl::tags
+                .order_by(tags_dsl::usage_count.desc())
+                .limit(lim)
+                .offset(offset)
+                .select((
+                    tags_dsl::id,
+                    tags_dsl::name,
+                    tags_dsl::description,
+                    tags_dsl::usage_count,
+                    tags_dsl::created_at,
+                    tags_dsl::updated_at,
+                ))
+                .load::<(Uuid, String, String, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
+                .map_err(|e| crate::error::AppError::Internal(format!("Failed to list all tags: {}", e)))
+        })
+    }
+
+    /// List tags in use (usage_count >= 1)
+    /// 1回以上使用されているタグを一覧表示します。
+    pub fn list_tags_in_use(
+        &self,
+        page: u32,
+        limit: u32,
+    ) -> Result<Vec<(Uuid, String, String, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+        use crate::database::schema::tags::dsl as tags_dsl;
+        use diesel::prelude::*;
+
+        let (_page, lim, offset) = Self::paged_params(page, limit);
+
+        self.with_conn(|conn| {
+            tags_dsl::tags
+                .filter(tags_dsl::usage_count.ge(1))
+                .order_by(tags_dsl::usage_count.desc())
+                .limit(lim)
+                .offset(offset)
+                .select((
+                    tags_dsl::id,
+                    tags_dsl::name,
+                    tags_dsl::description,
+                    tags_dsl::usage_count,
+                    tags_dsl::created_at,
+                    tags_dsl::updated_at,
+                ))
+                .load::<(Uuid, String, String, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
+                .map_err(|e| crate::error::AppError::Internal(format!("Failed to list tags in use: {}", e)))
+        })
+    }
+
+    /// Increment tag usage count
+    /// タグの使用数をインクリメントします。
+    pub fn increment_tag_usage(&self, tag_id: Uuid, count: i32) -> Result<()> {
+        use crate::database::schema::tags::dsl as tags_dsl;
+        use diesel::prelude::*;
+
+        self.with_conn(|conn| {
+            // First get current count
+            let current_count: i32 = tags_dsl::tags
+                .filter(tags_dsl::id.eq(tag_id))
+                .select(tags_dsl::usage_count)
+                .first(conn)
+                .map_err(|_| crate::error::AppError::NotFound("Tag not found".to_string()))?;
+
+            let new_count = current_count + count;
+            let now = chrono::Utc::now();
+
+            Self::execute_and_ensure(
+                || {
+                    diesel::update(tags_dsl::tags.filter(tags_dsl::id.eq(tag_id)))
+                        .set((
+                            tags_dsl::usage_count.eq(new_count),
+                            tags_dsl::updated_at.eq(now),
+                        ))
+                        .execute(conn)
+                },
+                "Failed to increment tag usage",
+                "Tag not found",
+            )
+        })
+    }
+
+    // ========================================================================
+    // Phase 6.3: Category Database Helpers (8 methods)
+    // カテゴリ用データベースヘルパーメソッド
+    // ========================================================================
+
+    /// Create a new category
+    /// 新しいカテゴリを作成します。
+    pub fn create_category(
+        &self,
+        _name: String,
+        _slug: String,
+        _description: Option<String>,
+        _parent_id: Option<Uuid>,
+    ) -> Result<()> {
+        self.with_conn(|conn| {
+            use crate::database::schema::categories;
+            use diesel::prelude::*;
+
+            let now = chrono::Utc::now();
+            let id = Uuid::new_v4();
+
+            Self::execute_and_ensure(
+                || {
+                    diesel::insert_into(categories::table)
+                        .values((
+                            categories::id.eq(id),
+                            categories::name.eq(&_name),
+                            categories::slug.eq(&_slug),
+                            categories::description.eq(&_description),
+                            categories::parent_id.eq(_parent_id),
+                            categories::post_count.eq(0),
+                            categories::created_at.eq(now),
+                            categories::updated_at.eq(now),
+                        ))
+                        .execute(conn)
+                },
+                "Failed to create category",
+                "Category creation failed",
+            )
+        })
+    }
+
+    /// Get category by ID
+    /// カテゴリをIDで取得します。
+    /// Returns: (id, name, slug, description, parent_id, post_count, created_at, updated_at)
+    pub fn get_category_by_id(
+        &self,
+        category_id: Uuid,
+    ) -> Result<Option<(Uuid, String, String, Option<String>, Option<Uuid>, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+        self.with_conn(|conn| {
+            use crate::database::schema::categories;
+            use crate::database::schema::categories::dsl::*;
+            use diesel::prelude::*;
+
+            categories::table
+                .filter(id.eq(category_id))
+                .select((id, name, slug, description, parent_id, post_count, created_at, updated_at))
+                .first::<(Uuid, String, String, Option<String>, Option<Uuid>, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
+                .optional()
+                .map_err(|e| crate::error::AppError::Internal(format!("Failed to fetch category: {}", e)))
+        })
+    }
+
+    /// Get category by slug
+    /// カテゴリをslugで取得します。
+    /// Returns: (id, name, slug, description, parent_id, post_count, created_at, updated_at)
+    pub fn get_category_by_slug(
+        &self,
+        category_slug: &str,
+    ) -> Result<Option<(Uuid, String, String, Option<String>, Option<Uuid>, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+        self.with_conn(|conn| {
+            use crate::database::schema::categories;
+            use crate::database::schema::categories::dsl::*;
+            use diesel::prelude::*;
+
+            categories::table
+                .filter(slug.eq(category_slug))
+                .select((id, name, slug, description, parent_id, post_count, created_at, updated_at))
+                .first::<(Uuid, String, String, Option<String>, Option<Uuid>, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
+                .optional()
+                .map_err(|e| crate::error::AppError::Internal(format!("Failed to fetch category: {}", e)))
+        })
+    }
+
+    /// Update category
+    /// カテゴリを更新します。
+    pub fn update_category(
+        &self,
+        category_id: Uuid,
+        _name: String,
+        _slug: String,
+        _description: Option<String>,
+    ) -> Result<()> {
+        self.with_conn(|conn| {
+            use crate::database::schema::categories;
+            use crate::database::schema::categories::dsl::*;
+            use diesel::prelude::*;
+
+            let now = chrono::Utc::now();
+
+            Self::execute_and_ensure(
+                || {
+                    diesel::update(categories::table.filter(id.eq(category_id)))
+                        .set((
+                            categories::name.eq(&_name),
+                            categories::slug.eq(&_slug),
+                            categories::description.eq(&_description),
+                            updated_at.eq(now),
+                        ))
+                        .execute(conn)
+                },
+                "Failed to update category",
+                "Category not found",
+            )
+        })
+    }
+
+    /// Delete category
+    /// カテゴリを削除します。
+    pub fn delete_category(&self, category_id: Uuid) -> Result<()> {
+        self.with_conn(|conn| {
+            use crate::database::schema::categories;
+            use crate::database::schema::categories::dsl::*;
+            use diesel::prelude::*;
+
+            Self::execute_and_ensure(
+                || {
+                    diesel::delete(categories::table.filter(id.eq(category_id)))
+                        .execute(conn)
+                },
+                "Failed to delete category",
+                "Category not found",
+            )
+        })
+    }
+
+    /// List all categories with pagination
+    /// すべてのカテゴリをページネーション付きで一覧取得します。
+    /// Returns: Vec<(id, name, slug, description, parent_id, post_count, created_at, updated_at)>
+    pub fn list_all_categories(
+        &self,
+        page: u32,
+        limit: u32,
+    ) -> Result<Vec<(Uuid, String, String, Option<String>, Option<Uuid>, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+        self.with_conn(|conn| {
+            use crate::database::schema::categories;
+            use crate::database::schema::categories::dsl::*;
+            use diesel::prelude::*;
+
+            let (_page, limit, offset) = Self::paged_params(page, limit);
+
+            categories::table
+                .order(post_count.desc())
+                .limit(limit)
+                .offset(offset)
+                .select((id, name, slug, description, parent_id, post_count, created_at, updated_at))
+                .load::<(Uuid, String, String, Option<String>, Option<Uuid>, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
+                .map_err(|e| crate::error::AppError::Internal(format!("Failed to fetch categories: {}", e)))
+        })
+    }
+
+    /// List categories by parent ID
+    /// 親カテゴリIDでカテゴリ一覧を取得します。
+    /// Returns: Vec<(id, name, slug, description, parent_id, post_count, created_at, updated_at)>
+    pub fn list_categories_by_parent(
+        &self,
+        parent_category_id: Option<Uuid>,
+        page: u32,
+        limit: u32,
+    ) -> Result<Vec<(Uuid, String, String, Option<String>, Option<Uuid>, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
+        self.with_conn(|conn| {
+            use crate::database::schema::categories;
+            use crate::database::schema::categories::dsl::*;
+            use diesel::prelude::*;
+
+            let (_page, limit, offset) = Self::paged_params(page, limit);
+
+            categories::table
+                .filter(parent_id.eq(parent_category_id))
+                .order(post_count.desc())
+                .limit(limit)
+                .offset(offset)
+                .select((id, name, slug, description, parent_id, post_count, created_at, updated_at))
+                .load::<(Uuid, String, String, Option<String>, Option<Uuid>, i32, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
+                .map_err(|e| crate::error::AppError::Internal(format!("Failed to fetch categories: {}", e)))
+        })
+    }
+
+    /// Increment post count for a category
+    /// カテゴリのポスト数をインクリメントします。
+    pub fn increment_post_count(&self, category_id: Uuid, count: i32) -> Result<()> {
+        self.with_conn(|conn| {
+            use crate::database::schema::categories;
+            use crate::database::schema::categories::dsl::*;
+            use diesel::prelude::*;
+
+            // First, get current post_count
+            let current_count: i32 = categories::table
+                .filter(id.eq(category_id))
+                .select(post_count)
+                .first(conn)
+                .map_err(|e| crate::error::AppError::NotFound(format!("Category not found: {}", e)))?;
+
+            let new_count = current_count + count;
+            let now = chrono::Utc::now();
+
+            // Update with new count
+            Self::execute_and_ensure(
+                || {
+                    diesel::update(categories::table.filter(id.eq(category_id)))
+                        .set((
+                            post_count.eq(new_count),
+                            updated_at.eq(now),
+                        ))
+                        .execute(conn)
+                },
+                "Failed to increment post count",
+                "Category not found",
+            )
+        })
+    }
+}
