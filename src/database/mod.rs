@@ -921,12 +921,18 @@ impl Database {
         })
     }
 
-    /// Get comment by ID
-    /// コメントを取得します。
+    /// Get comment by ID with all fields needed for domain entity reconstruction
+    /// コメントを取得します（ドメインエンティティ復元用の全フィールド）。
+    ///
+    /// Returns a tuple: (id, post_id, author_id, content, status, created_at, updated_at)
+    /// (Note: edited_at is currently not stored separately, set to None during reconstruction)
     ///
     /// # Errors
     /// コメントが見つからない場合にエラーを返します。
-    pub fn get_comment_by_id(&self, id: Uuid) -> Result<Option<(Uuid, Uuid, String, String)>> {
+    pub fn get_comment_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<(Uuid, Uuid, Option<Uuid>, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
         use crate::database::schema::comments::dsl as comments_dsl;
         use diesel::prelude::*;
 
@@ -937,10 +943,13 @@ impl Database {
                 .select((
                     comments_dsl::id,
                     comments_dsl::post_id,
+                    comments_dsl::author_id,
                     comments_dsl::content,
                     comments_dsl::status,
+                    comments_dsl::created_at,
+                    comments_dsl::updated_at,
                 ))
-                .first::<(Uuid, Uuid, String, String)>(conn)
+                .first::<(Uuid, Uuid, Option<Uuid>, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
                 .optional()
                 .map_err(|e| crate::AppError::Internal(format!("Failed to fetch comment: {}", e)))
         })
@@ -1001,8 +1010,8 @@ impl Database {
         })
     }
 
-    /// List comments by post
-    /// 投稿のコメントを取得します。
+    /// List comments by post with all fields needed for domain entity reconstruction
+    /// 投稿のコメントを取得します（ドメインエンティティ復元用の全フィールド）。
     ///
     /// # Errors
     /// クエリが失敗した場合にエラーを返します。
@@ -1011,7 +1020,7 @@ impl Database {
         post_id: Uuid,
         page: u32,
         limit: u32,
-    ) -> Result<Vec<(Uuid, Uuid, String, String)>> {
+    ) -> Result<Vec<(Uuid, Uuid, Option<Uuid>, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>> {
         use crate::database::schema::comments::dsl as comments_dsl;
         use diesel::prelude::*;
 
@@ -1027,10 +1036,13 @@ impl Database {
                 .select((
                     comments_dsl::id,
                     comments_dsl::post_id,
+                    comments_dsl::author_id,
                     comments_dsl::content,
                     comments_dsl::status,
+                    comments_dsl::created_at,
+                    comments_dsl::updated_at,
                 ))
-                .load::<(Uuid, Uuid, String, String)>(conn)
+                .load::<(Uuid, Uuid, Option<Uuid>, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(conn)
                 .map_err(|e| crate::AppError::Internal(format!("Failed to list comments: {}", e)))
         })
     }

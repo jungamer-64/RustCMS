@@ -1,9 +1,9 @@
 // src/infrastructure/database/repositories/diesel_comment_repository.rs
-//! Diesel ベースの Comment Repository 実装（Phase 5）
+//! Diesel ベースの Comment Repository 実装（Phase 6.2）
 
 use crate::application::ports::repositories::CommentRepository;
 use crate::application::ports::repositories::RepositoryError;
-use crate::domain::entities::comment::CommentId;
+use crate::domain::entities::comment::{CommentId, CommentText, CommentStatus, Comment};
 
 /// Diesel-backed CommentRepository implementation
 #[derive(Clone)]
@@ -16,13 +16,85 @@ impl DieselCommentRepository {
     pub fn new(db: crate::database::Database) -> Self {
         Self { db }
     }
+
+    /// Helper method to reconstruct Comment entity from database tuple
+    /// データベースタプルから Comment エンティティを復元する
+    ///
+    /// Tuple: (id, post_id, author_id, content, status, created_at, updated_at)
+    fn reconstruct_comment(
+        id: uuid::Uuid,
+        post_id: uuid::Uuid,
+        author_id: Option<uuid::Uuid>,
+        content: String,
+        status_str: String,
+        _created_at: chrono::DateTime<chrono::Utc>,
+        _updated_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Comment, RepositoryError> {
+        // Parse status from string
+        let status = match status_str.as_str() {
+            "pending" => CommentStatus::Pending,
+            "published" => CommentStatus::Published,
+            "edited" => CommentStatus::Edited,
+            "deleted" => CommentStatus::Deleted,
+            _ => CommentStatus::Pending, // Default fallback
+        };
+
+        // Reconstruct Comment entity
+        // Note: We need to construct from individual fields since we have them from DB
+        // Create a temporary Comment via domain methods
+        let comment_text = CommentText::new(content.clone())
+            .map_err(|e| RepositoryError::DatabaseError(format!("Invalid comment text: {}", e)))?;
+
+        // Get IDs from database values
+        let _comment_id = CommentId::from_uuid(id);
+        let post_id = crate::domain::entities::post::PostId::from_uuid(post_id);
+        
+        // Author might be anonymous or missing
+        let author_id = author_id.map(crate::domain::entities::user::UserId::from_uuid)
+            .ok_or_else(|| RepositoryError::DatabaseError("Missing author_id".to_string()))?;
+
+        // Create new comment with validated data
+        let mut comment = Comment::new(post_id, author_id, comment_text)
+            .map_err(|e| RepositoryError::DatabaseError(format!("Failed to create comment: {}", e)))?;
+
+        // Manually set fields that came from database (internal fields)
+        // Since these are private, we need to use domain transitions to match state
+        match status {
+            CommentStatus::Published | CommentStatus::Edited => {
+                // Transition to published if needed
+                comment.publish()
+                    .map_err(|e| RepositoryError::DatabaseError(format!("Failed to transition to published: {}", e)))?;
+                
+                // Further transition to edited if needed
+                if status == CommentStatus::Edited {
+                    // Reuse same text to transition to edited state
+                    let edited_text = CommentText::new(content)
+                        .map_err(|e| RepositoryError::DatabaseError(format!("Invalid comment text: {}", e)))?;
+                    comment.edit(edited_text)
+                        .map_err(|e| RepositoryError::DatabaseError(format!("Failed to transition to edited: {}", e)))?;
+                }
+            }
+            CommentStatus::Deleted => {
+                // Transition to published first, then delete
+                comment.publish()
+                    .map_err(|e| RepositoryError::DatabaseError(format!("Failed to transition to published: {}", e)))?;
+                comment.delete()
+                    .map_err(|e| RepositoryError::DatabaseError(format!("Failed to delete: {}", e)))?;
+            }
+            CommentStatus::Pending => {
+                // Already in pending state by default
+            }
+        }
+
+        Ok(comment)
+    }
 }
 
 #[async_trait::async_trait]
 impl CommentRepository for DieselCommentRepository {
     async fn save(
         &self,
-        comment: crate::domain::entities::comment::Comment,
+        comment: Comment,
     ) -> Result<(), RepositoryError> {
         // Phase 6.2: Delegate to database layer
         // Extract comment data and persist
@@ -30,23 +102,38 @@ impl CommentRepository for DieselCommentRepository {
         let post_id = comment.post_id().into_uuid();
         let author_id = Some(comment.author_id().into_uuid());
         
+        // Map status to string for database
+        let status_str = match comment.status() {
+            CommentStatus::Pending => "pending",
+            CommentStatus::Published => "published",
+            CommentStatus::Edited => "edited",
+            CommentStatus::Deleted => "deleted",
+        };
+        
         self.db
-            .create_comment(post_id, author_id, content, "pending")
+            .create_comment(post_id, author_id, content, status_str)
             .map_err(|e| RepositoryError::DatabaseError(e.to_string()))
     }
 
     async fn find_by_id(
         &self,
         id: CommentId,
-    ) -> Result<Option<crate::domain::entities::comment::Comment>, RepositoryError> {
+    ) -> Result<Option<Comment>, RepositoryError> {
         // Phase 6.2: Delegate to database layer
-        // Note: Returns raw data from DB, need to reconstruct Comment entity
-        let _result = self.db
+        let result = self.db
             .get_comment_by_id(*id.as_uuid())
             .map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
         
-        // TODO: Reconstruct Comment entity from DB data
-        Ok(None)
+        // Reconstruct Comment entity from database tuple
+        match result {
+            Some((id, post_id, author_id, content, status, created_at, updated_at)) => {
+                let comment = Self::reconstruct_comment(
+                    id, post_id, author_id, content, status, created_at, updated_at
+                )?;
+                Ok(Some(comment))
+            }
+            None => Ok(None),
+        }
     }
 
     async fn find_by_post(
@@ -54,15 +141,23 @@ impl CommentRepository for DieselCommentRepository {
         post_id: crate::domain::entities::post::PostId,
         limit: i64,
         _offset: i64,
-    ) -> Result<Vec<crate::domain::entities::comment::Comment>, RepositoryError> {
+    ) -> Result<Vec<Comment>, RepositoryError> {
         // Phase 6.2: Delegate to database layer
         let page = if _offset > 0 { (_offset / limit) + 1 } else { 1 };
-        let _results = self.db
+        let results = self.db
             .list_comments_by_post(post_id.into_uuid(), page as u32, limit as u32)
             .map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
         
-        // TODO: Reconstruct Comment entities from DB data
-        Ok(vec![])
+        // Reconstruct Comment entities from database tuples
+        let mut comments = Vec::new();
+        for (id, post_id, author_id, content, status, created_at, updated_at) in results {
+            let comment = Self::reconstruct_comment(
+                id, post_id, author_id, content, status, created_at, updated_at
+            )?;
+            comments.push(comment);
+        }
+        
+        Ok(comments)
     }
 
     async fn find_by_author(
@@ -70,8 +165,8 @@ impl CommentRepository for DieselCommentRepository {
         _author_id: crate::domain::entities::user::UserId,
         _limit: i64,
         _offset: i64,
-    ) -> Result<Vec<crate::domain::entities::comment::Comment>, RepositoryError> {
-        // Phase 6.2: Placeholder - database helper needed
+    ) -> Result<Vec<Comment>, RepositoryError> {
+        // Phase 6.2b: Placeholder - database helper needed
         // TODO: Implement actual database retrieval by author_id
         Ok(vec![])
     }
@@ -79,18 +174,17 @@ impl CommentRepository for DieselCommentRepository {
     async fn delete(&self, id: CommentId) -> Result<(), RepositoryError> {
         // Phase 6.2: Delegate to database layer
         self.db
-            .delete_comment(id.into_uuid())
+            .delete_comment(*id.as_uuid())
             .map_err(|e| RepositoryError::DatabaseError(e.to_string()))
     }
 
     async fn list_all(
         &self,
-        limit: i64,
+        _limit: i64,
         _offset: i64,
-    ) -> Result<Vec<crate::domain::entities::comment::Comment>, RepositoryError> {
-        // Phase 6.2: Placeholder - database helper needed
+    ) -> Result<Vec<Comment>, RepositoryError> {
+        // Phase 6.2b: Placeholder - database helper needed
         // TODO: Implement actual database retrieval for all comments
-        let _ = limit;
         Ok(vec![])
     }
 }
