@@ -96,10 +96,30 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    comments (id) {
+        id -> Uuid,
+        post_id -> Uuid,
+        author_id -> Nullable<Uuid>,
+        author_name -> Nullable<Varchar>,
+        author_email -> Nullable<Varchar>,
+        content -> Text,
+        status -> Varchar,
+        ip_address -> Nullable<Inet>,
+        user_agent -> Nullable<Text>,
+        parent_id -> Nullable<Uuid>,
+        like_count -> Int4,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
 diesel::joinable!(api_keys -> users (user_id));
 diesel::joinable!(posts -> users (author_id));
 diesel::joinable!(pages -> users (author_id));
 diesel::joinable!(media_files -> users (uploaded_by));
 diesel::joinable!(posts -> media_files (featured_image_id));
+diesel::joinable!(comments -> posts (post_id));
+diesel::joinable!(comments -> users (author_id));
 
-diesel::allow_tables_to_appear_in_same_query!(api_keys, posts, users, pages, media_files, settings,);
+diesel::allow_tables_to_appear_in_same_query!(api_keys, posts, users, pages, media_files, settings, comments,);
