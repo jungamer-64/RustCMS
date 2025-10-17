@@ -1066,6 +1066,13 @@ impl Database {
         })
     }
 
+    // ========================================================================
+    // Tag & Category CRUD Operations (Phase 6.2b - Phase 6.3)
+    // ========================================================================
+    // NOTE: Tag and Category database helpers are pending schema implementation
+    // See RESTRUCTURE_PLAN.md for database schema requirements
+    // TODO: Database helpers for tags and categories after schema finalization
+
     #[cfg(all(feature = "database", not(test)))]
     fn run_migrations(pool: &DatabasePool) -> Result<()> {
         let mut conn = pool.get()?;
