@@ -3,7 +3,7 @@
 
 use crate::application::ports::repositories::CommentRepository;
 use crate::application::ports::repositories::RepositoryError;
-use crate::domain::entities::comment::{Comment, CommentId, CommentStatus, CommentText};
+use crate::domain::comment::{Comment, CommentId, CommentStatus, CommentText};
 
 /// Diesel-backed CommentRepository implementation
 #[derive(Clone)]
@@ -47,11 +47,11 @@ impl DieselCommentRepository {
 
         // Get IDs from database values
         let _comment_id = CommentId::from_uuid(id);
-        let post_id = crate::domain::entities::post::PostId::from_uuid(post_id);
+        let post_id = crate::domain::post::PostId::from_uuid(post_id);
 
         // Author might be anonymous or missing
         let author_id = author_id
-            .map(crate::domain::entities::user::UserId::from_uuid)
+            .map(crate::domain::user::UserId::from_uuid)
             .ok_or_else(|| RepositoryError::DatabaseError("Missing author_id".to_string()))?;
 
         // Create new comment with validated data
@@ -149,7 +149,7 @@ impl CommentRepository for DieselCommentRepository {
 
     async fn find_by_post(
         &self,
-        post_id: crate::domain::entities::post::PostId,
+        post_id: crate::domain::post::PostId,
         limit: i64,
         _offset: i64,
     ) -> Result<Vec<Comment>, RepositoryError> {
@@ -178,7 +178,7 @@ impl CommentRepository for DieselCommentRepository {
 
     async fn find_by_author(
         &self,
-        author_id: crate::domain::entities::user::UserId,
+        author_id: crate::domain::user::UserId,
         limit: i64,
         _offset: i64,
     ) -> Result<Vec<Comment>, RepositoryError> {

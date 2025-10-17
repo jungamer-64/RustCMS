@@ -4,7 +4,7 @@
 #[cfg(feature = "restructure_domain")]
 use crate::application::ports::repositories::{CategoryRepository, RepositoryError};
 #[cfg(feature = "restructure_domain")]
-use crate::domain::entities::category::{
+use crate::domain::category::{
     Category, CategoryDescription, CategoryId, CategoryName, CategorySlug,
 };
 

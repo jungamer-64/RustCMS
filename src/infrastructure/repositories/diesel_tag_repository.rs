@@ -6,7 +6,7 @@ use crate::application::ports::repositories::RepositoryError;
 #[cfg(feature = "restructure_domain")]
 use crate::application::ports::repositories::TagRepository;
 #[cfg(feature = "restructure_domain")]
-use crate::domain::entities::tag::{Tag, TagDescription, TagId, TagName};
+use crate::domain::tag::{Tag, TagDescription, TagId, TagName};
 
 /// Diesel-backed TagRepository implementation（Phase 6.3）
 #[derive(Clone)]
@@ -178,7 +178,7 @@ impl TagRepository for DieselTagRepository {
 #[cfg(feature = "restructure_domain")]
 #[async_trait::async_trait]
 impl TagRepository for DieselTagRepository {
-    async fn save(&self, tag: crate::domain::entities::tag::Tag) -> Result<(), RepositoryError> {
+    async fn save(&self, tag: crate::domain::tag::Tag) -> Result<(), RepositoryError> {
         // Phase 6.1: Placeholder for database insertion
         let _ = tag;
         Ok(())
@@ -187,15 +187,15 @@ impl TagRepository for DieselTagRepository {
     async fn find_by_id(
         &self,
         _id: TagId,
-    ) -> Result<Option<crate::domain::entities::tag::Tag>, RepositoryError> {
+    ) -> Result<Option<crate::domain::tag::Tag>, RepositoryError> {
         // Phase 6.1: Placeholder for database query
         Ok(None)
     }
 
     async fn find_by_name(
         &self,
-        _name: &crate::domain::entities::tag::TagName,
-    ) -> Result<Option<crate::domain::entities::tag::Tag>, RepositoryError> {
+        _name: &crate::domain::tag::TagName,
+    ) -> Result<Option<crate::domain::tag::Tag>, RepositoryError> {
         // Phase 6.1: Placeholder for database query
         Ok(None)
     }
@@ -209,7 +209,7 @@ impl TagRepository for DieselTagRepository {
         &self,
         _limit: i64,
         _offset: i64,
-    ) -> Result<Vec<crate::domain::entities::tag::Tag>, RepositoryError> {
+    ) -> Result<Vec<crate::domain::tag::Tag>, RepositoryError> {
         // Phase 6.1: Placeholder for database query
         Ok(vec![])
     }
@@ -218,7 +218,7 @@ impl TagRepository for DieselTagRepository {
         &self,
         _limit: i64,
         _offset: i64,
-    ) -> Result<Vec<crate::domain::entities::tag::Tag>, RepositoryError> {
+    ) -> Result<Vec<crate::domain::tag::Tag>, RepositoryError> {
         // Phase 6.1: Placeholder for database query
         Ok(vec![])
     }
