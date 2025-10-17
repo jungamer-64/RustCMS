@@ -1,16 +1,13 @@
-// Top-level domain module facade for restructure
-// Re-export existing domain modules or provide placeholders for phased migration
+//! Domain layer module aggregator aligned with the flattened Phase 2 structure.
+//!
+//! This module exposes the domain entities and value objects as top-level
+//! modules, matching the architecture plan documented in `RESTRUCTURE_PLAN.md`.
 
-// Entities module (Phase 2 migration: consolidating entity structures)
-pub mod entities;
-
-// Legacy top-level re-exports for backward compatibility
-// These forward to the new entities module structure
-pub use entities::category;
-pub use entities::comment;
-pub use entities::post;
-pub use entities::tag;
-pub use entities::user;
+pub mod category;
+pub mod comment;
+pub mod post;
+pub mod tag;
+pub mod user;
 
 // Optional new structure for domain services/events behind feature flag
 #[cfg(feature = "restructure_domain")]
@@ -25,14 +22,16 @@ pub mod models {
 }
 
 #[cfg(not(feature = "database"))]
-pub mod models {
-    // placeholder when database feature disabled
-}
+pub mod models {}
 
 // Value objects facade (may be expanded during migration)
 pub mod value_objects;
 
 // Domain prelude: ease imports during migration
 pub mod prelude {
-    pub use super::value_objects::*;
+    pub use super::category::*;
+    pub use super::comment::*;
+    pub use super::post::*;
+    pub use super::tag::*;
+    pub use super::user::*;
 }
