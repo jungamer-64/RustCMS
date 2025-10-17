@@ -476,5 +476,114 @@ mod tests {
             assert_eq!(user.id(), id);
             assert!(!user.is_active());
         }
+
+        /// ⚠️ 追加エッジケーステスト
+        mod edge_cases {
+            use super::*;
+
+            #[test]
+            fn test_boundary_email_length() {
+                // 最大長（254文字）の有効なメール
+                let long_local = "a".repeat(242);  // 242 + @ + example.com (11) = 254
+                let email_str = format!("{}@example.com", long_local);
+                assert_eq!(email_str.len(), 254);
+                let email = Email::new(email_str).unwrap();
+                assert_eq!(email.as_str().len(), 254);
+            }
+
+            #[test]
+            fn test_boundary_username_length() {
+                // 最小（3）と最大（30）
+                let min_username = Username::new("abc".to_string()).unwrap();
+                assert_eq!(min_username.as_str().len(), 3);
+
+                let max_username = Username::new("a".repeat(30).to_string()).unwrap();
+                assert_eq!(max_username.as_str().len(), 30);
+            }
+
+            #[test]
+            fn test_multiple_email_changes() {
+                let username = Username::new("testuser".to_string()).unwrap();
+                let email1 = Email::new("email1@example.com".to_string()).unwrap();
+                let mut user = User::new(username, email1);
+
+                let email2 = Email::new("email2@example.com".to_string()).unwrap();
+                user.change_email(email2);
+                assert_eq!(user.email().as_str(), "email2@example.com");
+
+                let email3 = Email::new("email3@example.com".to_string()).unwrap();
+                user.change_email(email3);
+                assert_eq!(user.email().as_str(), "email3@example.com");
+            }
+
+            #[test]
+            fn test_multiple_username_changes() {
+                let username1 = Username::new("user1".to_string()).unwrap();
+                let email = Email::new("test@example.com".to_string()).unwrap();
+                let mut user = User::new(username1, email);
+
+                let username2 = Username::new("user2".to_string()).unwrap();
+                user.change_username(username2);
+                assert_eq!(user.username().as_str(), "user2");
+
+                let username3 = Username::new("user3".to_string()).unwrap();
+                user.change_username(username3);
+                assert_eq!(user.username().as_str(), "user3");
+            }
+
+            #[test]
+            fn test_activation_state_persistence() {
+                let username = Username::new("testuser".to_string()).unwrap();
+                let email = Email::new("test@example.com".to_string()).unwrap();
+                let mut user = User::new(username, email);
+
+                // 複数の状態遷移
+                assert!(user.is_active());
+                user.deactivate();
+                assert!(!user.is_active());
+                user.deactivate();  // 二重無効化
+                assert!(!user.is_active());
+                user.activate();
+                assert!(user.is_active());
+                user.activate();  // 二重有効化
+                assert!(user.is_active());
+            }
+
+            #[test]
+            fn test_user_id_uniqueness_across_multiple_creations() {
+                let ids: Vec<_> = (0..100).map(|_| UserId::new()).collect();
+                let unique_ids: std::collections::HashSet<_> = ids.iter().copied().collect();
+                assert_eq!(unique_ids.len(), 100, "All 100 user IDs should be unique");
+            }
+        }
+
+        /// Value Objects の相互運用性テスト
+        mod interoperability {
+            use super::*;
+
+            #[test]
+            fn test_email_serialization_roundtrip() {
+                let original = Email::new("test@example.com".to_string()).unwrap();
+                let json = serde_json::to_string(&original).unwrap();
+                let restored: Email = serde_json::from_str(&json).unwrap();
+                assert_eq!(original, restored);
+            }
+
+            #[test]
+            fn test_username_serialization_roundtrip() {
+                let original = Username::new("testuser".to_string()).unwrap();
+                let json = serde_json::to_string(&original).unwrap();
+                let restored: Username = serde_json::from_str(&json).unwrap();
+                assert_eq!(original, restored);
+            }
+
+            #[test]
+            fn test_user_id_serialization_roundtrip() {
+                let original = UserId::new();
+                let json = serde_json::to_string(&original).unwrap();
+                let restored: UserId = serde_json::from_str(&json).unwrap();
+                assert_eq!(original, restored);
+            }
+        }
     }
 }

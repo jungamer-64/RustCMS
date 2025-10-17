@@ -43,6 +43,10 @@ pub mod infrastructure;
 #[cfg(feature = "restructure_presentation")]
 pub mod presentation;
 
+// Phase 4: Web Layer (監査推奨命名)
+// Note: `web` は `presentation` の別名として監査で推奨されています
+pub mod web;
+
 pub mod common;
 
 // Conditional feature modules for scalability

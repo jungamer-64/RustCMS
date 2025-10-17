@@ -9,6 +9,8 @@
     feature = "restructure_presentation",
     feature = "restructure_application"
 ))]
+#[allow(clippy::module_inception)]
+#[allow(clippy::unnecessary_cast)]
 pub mod handlers {
     use crate::application::category::CategoryDto;
     use crate::application::comment::CommentDto;
@@ -70,7 +72,7 @@ pub mod handlers {
     /// ユーザー更新
     pub async fn update_user(
         Path(user_id): Path<Uuid>,
-        Json(request): Json<UpdateUserRequest>,
+    Json(_request): Json<UpdateUserRequest>,
     ) -> Result<(StatusCode, Json<UserDto>), Response> {
         // Phase 4.9+1: ユーザー更新ロジック
         Err(error_to_response(ApplicationError::NotFound(format!(

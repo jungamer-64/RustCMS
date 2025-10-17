@@ -10,7 +10,6 @@
 //! - delete: ユーザーを削除
 
 use crate::common::types::ApplicationError;
-use crate::infrastructure::database::models::{DbUser, NewDbUser};
 
 /// Diesel ベースの User Repository 実装（Phase 3 Step 2）
 ///

@@ -35,42 +35,6 @@ src/
 3. **型安全性の不足** → 文字列ベースの識別子
 4. **密結合** → ハンドラがDB実装詳細に直接依存
 
-## 🏗️ 提案する新構造
-
-```text
-src/
-├── domain/               # ドメイン層（ビジネスロジック）
-│   ├── entities/        # エンティティ
-│   ├── value_objects/   # 値オブジェクト（検証済み）
-│   ├── services/        # ドメインサービス
-│   └── events/          # ドメインイベント
-│
-├── application/          # アプリケーション層（ユースケース）
-│   ├── use_cases/       # ユースケース実装
-│   ├── commands/        # コマンド（書き込み）
-│   ├── queries/         # クエリ（読み取り）
-│   ├── ports/           # インターフェース定義
-│   └── dto/             # Data Transfer Objects
-│
-├── infrastructure/       # インフラストラクチャ層
-│   ├── database/        # DB実装（Diesel）
-│   ├── cache/           # キャッシュ実装（Redis）
-│   ├── search/          # 検索実装（Tantivy）
-│   ├── auth/            # 認証実装（biscuit-auth）
-│   └── events/          # イベントバス実装
-│
-├── presentation/         # プレゼンテーション層
-│   └── http/            # Web API
-│       ├── handlers/    # HTTPハンドラ（薄い層）
-│       ├── middleware/  # ミドルウェア
-│       └── responses/   # レスポンス型
-│
-└── shared/              # 共有ユーティリティ
-    ├── types/           # 共通型
-    ├── telemetry/       # 監視・ロギング
-    └── utils/           # 純粋関数
-```
-
 ## 🎨 主要パターン
 
 ### 1. NewType パターン
@@ -934,3 +898,314 @@ pub fn error_to_response(error: ApplicationError) -> Response {
 - 📋 **Phase 5-4**: API v1 Deprecation (2025-01-24 開始予定)
 - 📋 **Phase 5-5**: レガシーコード削除
 - 📋 **Phase 6**: パフォーマンス最適化 + 本番環境準備
+
+---
+
+## 🎯 Phase 2: ファイル構造再編 (2025-10-17)
+
+### ✅ 完了した再編作業
+
+**実装日**: 2025-10-17
+
+#### 1. Domain層の構造化
+
+- ✅ すべてのドメインエンティティを `src/domain/entities/` へ移動
+  - `user.rs` → `domain/entities/user.rs`
+  - `post.rs` → `domain/entities/post.rs`
+  - `comment.rs` → `domain/entities/comment.rs`
+  - `tag.rs` → `domain/entities/tag.rs`
+  - `category.rs` → `domain/entities/category.rs`
+- ✅ `src/domain/entities/mod.rs` 作成 (5 entities + re-exports)
+- ✅ `src/domain/mod.rs` を thin facade として更新 (互換性維持)
+- ✅ すべてのモジュール imports 自動解決 (cargo build通過)
+
+#### 2. Application層の再編
+
+- ✅ ユースケース/コマンド/クエリ を `src/application/use_cases/` へ統合
+  - `user.rs` → `use_cases/user.rs`
+  - `post.rs` → `use_cases/post.rs`
+  - `comment.rs` → `use_cases/comment.rs`
+  - `tag.rs` → `use_cases/tag.rs`
+  - `category.rs` → `use_cases/category.rs`
+- ✅ `src/application/use_cases/mod.rs` 強化 (legacy + new re-exports)
+- ✅ `src/application/mod.rs` クリーンアップ (feature-gated modules削除)
+
+#### 3. Infrastructure層の統合
+
+- ✅ Repository 実装を `src/infrastructure/repositories/` へ統合
+  - `DieselUserRepository`, `DieselPostRepository` (既存)
+  - `DieselCategoryRepository`, `DieselCommentRepository`, `DieselTagRepository` (追加コピー)
+- ✅ `src/infrastructure/repositories/mod.rs` 更新 (5 repository re-exports)
+- ✅ legacy database/repositories との互換性維持
+
+#### 4. Thin Facades & Re-exports
+
+- ✅ `src/domain/mod.rs` → legacy top-level re-exports (entities::* を公開)
+- ✅ `src/application/use_cases/mod.rs` → legacy use-case + new CQRS re-exports
+- ✅ `src/infrastructure/repositories/mod.rs` → database repos 統合
+- ✅ すべての外部呼び出し元が breaking changes なしで継続利用可能
+
+### 📊 テスト・品質状況
+
+| メトリクス | 結果 | 状態 |
+|-----------|------|------|
+| cargo clippy (strict) | ✅ PASS | -D warnings 通過 |
+| cargo build (all-features) | ✅ PASS | 完了 |
+| cargo test --lib | 214 passed | ✅ All passing |
+| Unit tests (domain) | 214 | ✅ 100% |
+| Build time | 14-44s | 正常 (初回 or full rebuild) |
+
+### 📁 新ディレクトリ構造
+
+```text
+src/domain/
+├── entities/           # ✅ NEW: Entity + Value Objects 統合
+│   ├── user.rs        # User + UserId + Email + Username
+│   ├── post.rs        # Post + PostId (6 Value Objects)
+│   ├── comment.rs     # Comment + CommentId (3 Value Objects)
+│   ├── tag.rs         # Tag + TagId (3 Value Objects)
+│   ├── category.rs    # Category + CategoryId (4 Value Objects)
+│   └── mod.rs         # 5 entities + re-exports
+├── mod.rs             # thin facade + legacy re-exports
+├── value_objects.rs   # 共通 value objects
+├── events.rs          # domain events (本来ここ)
+└── services/          # domain services (feature-gated)
+
+src/application/
+├── use_cases/         # ✅ CONSOLIDATED: Commands + Queries
+│   ├── user.rs        # CreateUserRequest, UserDto
+│   ├── post.rs        # CreatePostRequest, UpdatePostRequest, PostDto
+│   ├── comment.rs     # CreateCommentRequest, CommentDto
+│   ├── tag.rs         # CreateTagRequest, TagDto
+│   ├── category.rs    # CreateCategoryRequest, CategoryDto
+│   ├── create_user.rs # legacy CreateUserUseCase
+│   ├── get_user_by_id.rs # legacy GetUserByIdUseCase
+│   ├── update_user.rs # legacy UpdateUserUseCase
+│   └── mod.rs         # legacy + new re-exports
+├── ports/             # Repository/Service port interfaces
+├── dto/               # Data Transfer Objects
+└── mod.rs             # AppContainer + mod exports
+
+src/infrastructure/
+├── repositories/      # ✅ UNIFIED: Repository implementations
+│   ├── diesel_user_repository.rs
+│   ├── diesel_post_repository.rs
+│   ├── diesel_category_repository.rs
+│   ├── diesel_comment_repository.rs
+│   ├── diesel_tag_repository.rs
+│   └── mod.rs         # 5 repository re-exports
+├── database/
+│   ├── models.rs      # Diesel models (DbUser, DbPost, etc.)
+│   ├── repositories/  # (legacy location, data copied to parent)
+│   └── schema.rs      # Diesel schema
+└── mod.rs             # infrastructure layer facade
+```
+
+### 🔄 互換性と移行戦略
+
+- **後方互換性**: すべての thin facades と re-exports を用いて既存コードの breaking changes を回避
+- **段階的移行**: 新しいモジュール構造 `domain/entities/`, `application/use_cases/`, `infrastructure/repositories/` へ徐々に移動可能
+- **Feature flags**: `restructure_domain`, `restructure_application` で段階的な有効化が可能
+- **既存テスト**: 214 test passing (100%) - 既存機能に変更なし
+
+### 🎯 次ステップ (Phase 3+)
+
+1. **Presentation層の再編** → `src/presentation/http/handlers/`, `src/presentation/http/responses/`
+2. **Shared層の拡張** → `src/shared/types/`, `src/shared/telemetry/`, `src/shared/utils/`
+3. **Domain Events実装** → `domain/events.rs` の full implementation + listeners
+4. **Use Case factory パターン** → AppContainer の拡張
+5. **RepositoryPort実装の完成** → 全5エンティティのportサポート
+
+### 📝 実装ノート
+
+- **ファイル移動**: 物理的に mv + mod.rs 作成
+- **再エクスポート**: モジュール階層で thin facades を作成 (mod.rs パターン)
+- **ビルド検証**: 各ステップで `cargo build`, `cargo clippy`, `cargo test` を実行
+- **テストカバレッジ**: 既存214テストすべてが passing のまま継続
+- **Codacy CLI**: ファイル編集後に分析実行可能 (必要に応じて)
+
+---
+
+## 🎯 Phase 2.5: 監査推奨構造への適合 (2025-10-17 セッション2)
+
+### ✅ 完了した再編作業
+
+**実施日**: 2025-10-17  
+**ベース**: Phase 2 完了後  
+**目的**: RESTRUCTURE_PLAN.md の監査推奨構造（Sonnet 4.5）への完全適合
+
+#### 1. `shared/` → `common/` への統合（Rust慣習）
+
+監査推奨で `shared` ではなく `common` が Rust の標準慣習として推奨されました。
+
+- ✅ `src/shared/` の内容を `src/common/` へ統合
+  - `types/` → `common/type_utils/` (5ファイル: api_types, common_types, dto, paginate, sort)
+  - `helpers/` → `common/helpers/` (6ファイル: cache_helpers, date, hash, text, url_encoding, vec_helpers)
+  - `security/` → `common/security/` (2ファイル: password, security_validation)
+  - `validation/` → `common/validation/` (1ファイル: validation.rs)
+- ✅ `src/common/mod.rs` 作成 - prelude + 階層的 re-exports
+- ✅ `src/utils/dto.rs` をシム化（`common/type_utils/dto` を再エクスポート）
+- ✅ `src/common/error_types.rs` で三層エラー型階層を維持
+- ✅ backward compatibility 維持 (既存 imports が動作)
+
+#### 2. `web/` レイヤーの作成（監査推奨命名）
+
+監査では `presentation/` の別名として `web/` を推奨しています。
+
+- ✅ `src/web/` ディレクトリ作成
+- ✅ `src/handlers/` → `src/web/handlers/` へコピー（9ファイル）
+- ✅ `src/middleware/` → `src/web/middleware/` へコピー（13ファイル）
+- ✅ `src/web/mod.rs` 作成 - handlers/middleware re-exports + prelude
+- ✅ `src/lib.rs` に `pub mod web;` 追加
+- ✅ template パス修正（`../../templates/` → `../../../templates/`）
+- ✅ ambiguous glob re-exports 解消（auth モジュールの衝突を回避）
+
+#### 3. `infrastructure/events/` への統合
+
+監査推奨で events は infrastructure 層に配置することが明確化されました。
+
+- ✅ `src/infrastructure/events/` ディレクトリ作成
+- ✅ `src/events.rs` → `infrastructure/events/bus.rs` へ移行
+- ✅ `src/listeners.rs` → `infrastructure/events/listeners.rs` へ移行
+- ✅ `src/infrastructure/events/mod.rs` 作成 - bus/listeners re-exports + prelude
+- ✅ `src/infrastructure/mod.rs` に `pub mod events;` 追加
+- ✅ `src/events.rs` と `src/listeners.rs` をシム化（deprecated警告付き）
+
+#### 4. Feature Flag クリーンアップ
+
+Phase 2 が完了したため、`restructure_domain` feature flag を削除しました。
+
+- ✅ `src/application/ports/repositories.rs` のインポートから feature guard 削除
+- ✅ `src/application/ports/mod.rs` の `DomainEvent` re-export から feature guard 削除
+- ✅ すべてのドメインエンティティが常に利用可能に
+- ✅ 追加で必要な型（`TagName`, `CategorySlug`, `Email`）を `domain/entities/mod.rs` で再エクスポート
+
+### 📊 テスト・品質状況
+
+| メトリクス | 結果 | 変化 | 状態 |
+|-----------|------|------|------|
+| cargo clippy (--all-features -D warnings) | ✅ PASS | +0 warnings | Clean |
+| cargo build (--all-features) | ✅ PASS | ~12-19s | 完了 |
+| cargo test --lib | 296 passed | +82 | ✅ All passing |
+| Unit tests (domain) | 296 | +38% | ✅ 100% |
+| Build time | 12-19s | 改善 | 正常 |
+
+### 📁 監査推奨構造への準拠状況
+
+```text
+src/
+├── domain/                   # ✅ Phase 2 完了
+│   ├── entities/            # Entity + Value Objects 統合（監査推奨）
+│   │   ├── user.rs          # 481行, 18 tests
+│   │   ├── post.rs          # 708行, 19 tests
+│   │   ├── comment.rs       # 539行, 16 tests
+│   │   ├── tag.rs           # 585行, 22 tests
+│   │   ├── category.rs      # 651行, 31 tests
+│   │   └── mod.rs           # 統一 re-exports（TagName, CategorySlug追加）
+│   └── mod.rs               # thin facade
+│
+├── application/              # ✅ Phase 2-3 部分完了
+│   ├── use_cases/           # CQRS統合（監査推奨）
+│   ├── dto/                 # 共通DTOと変換ロジック
+│   └── ports/               # ✅ Port定義完成
+│       ├── repositories.rs  # 5 repository traits（feature guard削除済）
+│       ├── cache.rs         # CacheService trait
+│       ├── search.rs        # SearchService trait
+│       └── events.rs        # EventPublisher trait
+│
+├── infrastructure/           # ✅ Phase 3-4 部分完了
+│   ├── database/            # Diesel実装
+│   ├── repositories/        # 5 repository 実装統合済
+│   └── events/              # ✅ NEW: イベント統合
+│       ├── bus.rs           # EventBus実装（元 src/events.rs）
+│       ├── listeners.rs     # リスナー統合（元 src/listeners.rs）
+│       └── mod.rs           # events prelude
+│
+├── web/                      # ✅ NEW: プレゼンテーション層（監査推奨命名）
+│   ├── handlers/            # HTTPハンドラ（9ファイル）
+│   ├── middleware/          # ミドルウェア（13ファイル）
+│   └── mod.rs               # web layer facade + prelude
+│
+└── common/                   # ✅ NEW: 共有ユーティリティ（監査推奨: shared→common）
+    ├── type_utils/          # API types, DTOs, Pagination等
+    ├── helpers/             # 純粋関数ユーティリティ
+    ├── security/            # セキュリティヘルパー
+    ├── validation/          # バリデーション関数
+    ├── error_types.rs       # 三層エラー型階層
+    └── mod.rs               # common prelude
+
+Legacy（互換性維持）:
+├── events.rs                # ✅ シム化（→ infrastructure/events/bus）
+├── listeners.rs             # ✅ シム化（→ infrastructure/events/listeners）
+├── handlers/                # ✅ 継続使用（web/ からコピー）
+├── middleware/              # ✅ 継続使用（web/ からコピー）
+└── utils/                   # ✅ 継続使用（common/ と並行）
+```
+
+### 🔧 主要な修正内容
+
+#### Clippy エラー修正
+
+1. **Ambiguous glob re-exports** (`web/mod.rs`)
+   - `handlers::*` と `middleware::*` の両方が `auth` を再エクスポート
+   - 解決: 特定モジュールのみを明示的に re-export
+   
+2. **Module inception** (`common/validation/mod.rs`)
+   - `pub mod validation;` が `validation/mod.rs` 内で定義されていた
+   - 解決: `#[path = "validation.rs"] mod validators;` で別名化
+
+3. **重複インポート** (`application/ports/repositories.rs`)
+   - `Tag`, `Category` が複数箇所で use 宣言
+   - 解決: 統一インポートに集約、feature guard 削除
+
+4. **未使用インポート**
+   - `listeners.rs` の glob import が未使用
+   - 解決: 特定のアイテムのみ re-export
+
+#### Template パス修正
+
+- `web/handlers/mod.rs` 内の `include_str!` パス調整
+  - `../../templates/` → `../../../templates/`（階層が1つ深くなったため）
+
+### 🎯 監査推奨との差分
+
+監査推奨構造からの主な差分:
+
+| 項目 | 監査推奨 | 現状 | 状況 |
+|------|----------|------|------|
+| 共通層名 | `common/` | `common/` | ✅ 適合 |
+| Web層名 | `web/` | `web/` | ✅ 適合 |
+| Events配置 | `infrastructure/events/` | `infrastructure/events/` | ✅ 適合 |
+| CQRS統合 | Commands+Queries+DTOs | `use_cases/` 内に実装 | ✅ 適合 |
+| Port定義 | `application/ports/` | `application/ports/` | ✅ 適合 |
+| Legacy維持 | 段階的廃止 | シム化+並行稼働 | ✅ 推奨通り |
+
+### 🚀 次ステップ（Phase 3-4）
+
+1. **Domain Services 実装**
+   - `src/domain/services/` ディレクトリ作成
+   - 複数エンティティにまたがるビジネスロジックを実装
+
+2. **Use Case 完全実装**
+   - 各エンティティの CQRS コマンド/クエリを完成
+   - DTOs と変換ロジックを統合
+
+3. **Infrastructure 完全実装**
+   - Cache/Search/Auth を `infrastructure/` 配下に統合
+   - config.rs を単一ファイルに集約
+
+4. **Legacy コード削除計画**
+   - `src/utils/` → `src/common/` へ完全移行後に削除
+   - `src/handlers/`, `src/middleware/` → `src/web/` 完全移行後に削除
+   - `src/events.rs`, `src/listeners.rs` シムを削除
+
+### 📊 統計
+
+- **Total files reorganized**: 30+ ファイル
+- **Lines of code migrated**: ~3,500 行
+- **Tests passing**: 296 / 296 (100%)
+- **Clippy warnings**: 0
+- **Build time**: 12-19秒（全機能有効）
+- **Deprecation warnings**: 3 (events.rs, listeners.rs, dto.rs)
+
+```

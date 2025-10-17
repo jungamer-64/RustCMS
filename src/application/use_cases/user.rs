@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[cfg(feature = "restructure_domain")]
-use crate::domain::user::{Email, User, UserId, Username};
+use crate::domain::user::{User};
 
 use crate::common::types::ApplicationError;
 

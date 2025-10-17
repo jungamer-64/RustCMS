@@ -1,4 +1,5 @@
 //! アプリケーション状態とサービス管理
+#![allow(clippy::empty_line_after_outer_attr)]
 //!
 //! 本モジュールは CMS の中核状態 `AppState` とその周辺(メトリクス/ヘルスチェック/初期化)を提供します。
 //! - データベース接続（接続プール）
@@ -95,6 +96,7 @@ pub struct AppState {
     pub auth: AuthService,
 
     /// Multi-tier caching service
+    #[allow(clippy::empty_line_after_outer_attr)]
     #[cfg(feature = "cache")]
     pub cache: CacheService,
 
@@ -399,14 +401,13 @@ async fn initialize_auth(
 
     #[cfg(feature = "database")]
     {
-        if let Some(_) = database {
+        if let Some(db) = database {
             // Phase 5-4: AppContainer は Use Case を提供するが、
             // 直接的な repository アクセスは AppState 経由で行う
             // （container.state() -> database -> repository）
             if let Some(_c) = container {
                 // 現在の設計では AuthService は database 経由で初期化
                 // （AppContainer の Use Case は別の責務）
-                let db = database.unwrap();
                 let auth = AuthService::new(config, db)?;
                 info!("✅ Authentication service initialized (AppState-backed)");
                 return Ok(auth);
@@ -414,7 +415,6 @@ async fn initialize_auth(
 
             // Fallback to legacy constructor which will construct a short-lived
             // Diesel adapter internally.
-            let db = database.unwrap();
             let auth = AuthService::new(config, db)?;
             info!("✅ Authentication service initialized");
             Ok(auth)
@@ -961,7 +961,6 @@ impl AppState {
         ))
     }
 
-    #[cfg(feature = "database")]
     // Note: Post-related use-cases (CreatePostUseCase, UpdatePostUseCase, etc.) are not currently
     // implemented in the application layer. They remain available through direct database calls
     // via handlers and event listeners until the refactoring is complete.
@@ -1166,7 +1165,7 @@ impl AppState {
                         }
                         Err(RepoErr::Unexpected(s)) => Err(crate::AppError::Internal(s)),
                     }
-                });
+                })
             }
 
             use crate::application::use_cases::CreateUserUseCase;
@@ -1175,7 +1174,7 @@ impl AppState {
 
             let repo = DieselUserRepository::new(self.database.clone());
             let uc = CreateUserUseCase::new(Arc::new(repo));
-            return timed_op!(self, "db", async move {
+            timed_op!(self, "db", async move {
                 match uc.execute(request).await {
                     Ok(u) => Ok(u),
                     Err(RepoErr::Conflict(s)) => Err(crate::AppError::Conflict(s)),
@@ -1184,7 +1183,7 @@ impl AppState {
                     }
                     Err(RepoErr::Unexpected(s)) => Err(crate::AppError::Internal(s)),
                 }
-            });
+            })
         }
 
         // Fallback (or when database feature not present): keep existing direct DB helper
@@ -2555,5 +2554,404 @@ impl AppEnvironment {
             "📊 Logging level: {}",
             std::env::var("RUST_LOG").unwrap_or_else(|_| "default".to_string())
         );
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    // =========================================================================
+    // AppStateBuilder Tests (初期化ロジック)
+    // =========================================================================
+
+    #[test]
+    fn test_app_state_builder_creates_default_metrics() {
+        let config = Arc::new(Config::default());
+        let metrics = Arc::new(RwLock::new(AppMetrics::default()));
+        let _builder = AppStateBuilder {
+            config,
+            metrics: metrics.clone(),
+            start_time: Instant::now(),
+            #[cfg(feature = "database")]
+            database: None,
+            #[cfg(feature = "database")]
+            container: None,
+            event_bus: None,
+            #[cfg(feature = "auth")]
+            auth: None,
+            #[cfg(feature = "cache")]
+            cache: None,
+            #[cfg(feature = "search")]
+            search: None,
+        };
+
+        // Verify builder properties
+        let metrics_guard = metrics.blocking_read();
+        assert_eq!(metrics_guard.total_requests, 0);
+        assert_eq!(metrics_guard.active_connections, 0);
+    }
+
+    #[test]
+    fn test_app_metrics_default_initialization() {
+        let metrics = AppMetrics::default();
+        
+        // All request counters should be 0
+        assert_eq!(metrics.total_requests, 0);
+        assert_eq!(metrics.active_connections, 0);
+        
+        // Cache metrics should be 0
+        assert_eq!(metrics.cache_hits, 0);
+        assert_eq!(metrics.cache_misses, 0);
+        
+        // Search metrics should be 0
+        assert_eq!(metrics.search_queries, 0);
+        assert_eq!(metrics.search_avg_response_time_ms, 0.0);
+        
+        // Auth metrics should be 0
+        assert_eq!(metrics.auth_attempts, 0);
+        assert_eq!(metrics.auth_successes, 0);
+        assert_eq!(metrics.auth_failures, 0);
+        
+        // DB metrics should be 0
+        assert_eq!(metrics.db_queries, 0);
+        assert_eq!(metrics.db_avg_response_time_ms, 0.0);
+        
+        // Error counts should be 0
+        assert_eq!(metrics.errors_total, 0);
+        assert_eq!(metrics.errors_auth, 0);
+        assert_eq!(metrics.errors_db, 0);
+    }
+
+    #[test]
+    fn test_app_metrics_clone() {
+        let metrics = AppMetrics {
+            total_requests: 100,
+            active_connections: 5,
+            cache_hits: 50,
+            cache_misses: 10,
+            ..Default::default()
+        };
+
+        let cloned = metrics.clone();
+        assert_eq!(cloned.total_requests, 100);
+        assert_eq!(cloned.active_connections, 5);
+        assert_eq!(cloned.cache_hits, 50);
+        assert_eq!(cloned.cache_misses, 10);
+    }
+
+    // =========================================================================
+    // ServiceHealth Tests (health check 構造)
+    // =========================================================================
+
+    #[test]
+    fn test_service_health_up_status() {
+        let health = ServiceHealth {
+            status: "up".to_string(),
+            response_time_ms: 10.5,
+            error: None,
+            details: serde_json::json!({}),
+        };
+
+        assert_eq!(health.status, "up");
+        assert_eq!(health.response_time_ms, 10.5);
+        assert!(health.error.is_none());
+    }
+
+    #[test]
+    fn test_service_health_down_status_with_error() {
+        let health = ServiceHealth {
+            status: "down".to_string(),
+            response_time_ms: 5000.0,
+            error: Some("Connection timeout".to_string()),
+            details: serde_json::json!({
+                "reason": "Database unreachable"
+            }),
+        };
+
+        assert_eq!(health.status, "down");
+        assert!(health.error.is_some());
+        assert_eq!(
+            health.error.unwrap(),
+            "Connection timeout".to_string()
+        );
+    }
+
+    #[test]
+    fn test_service_health_degraded_status() {
+        let health = ServiceHealth {
+            status: "degraded".to_string(),
+            response_time_ms: 2000.0,
+            error: None,
+            details: serde_json::json!({
+                "message": "Performance degradation"
+            }),
+        };
+
+        assert_eq!(health.status, "degraded");
+        assert!(health.error.is_none());
+        assert!(!health.response_time_ms.is_infinite());
+    }
+
+    // =========================================================================
+    // HealthStatus Tests (レスポンス構造)
+    // =========================================================================
+
+    #[test]
+    fn test_health_status_basic() {
+        let now = chrono::Utc::now();
+        let response = HealthStatus {
+            status: "healthy".to_string(),
+            database: ServiceHealth {
+                status: "up".to_string(),
+                response_time_ms: 5.0,
+                error: None,
+                details: serde_json::json!({}),
+            },
+            cache: ServiceHealth {
+                status: "up".to_string(),
+                response_time_ms: 2.0,
+                error: None,
+                details: serde_json::json!({}),
+            },
+            search: ServiceHealth {
+                status: "up".to_string(),
+                response_time_ms: 10.0,
+                error: None,
+                details: serde_json::json!({}),
+            },
+            auth: ServiceHealth {
+                status: "up".to_string(),
+                response_time_ms: 1.0,
+                error: None,
+                details: serde_json::json!({}),
+            },
+            timestamp: now,
+        };
+
+        assert_eq!(response.status, "healthy");
+    }
+
+    #[test]
+    fn test_health_status_multiple_services() {
+        let now = chrono::Utc::now();
+        let response = HealthStatus {
+            status: "degraded".to_string(),
+            database: ServiceHealth {
+                status: "up".to_string(),
+                response_time_ms: 5.0,
+                error: None,
+                details: serde_json::json!({}),
+            },
+            cache: ServiceHealth {
+                status: "degraded".to_string(),
+                response_time_ms: 500.0,
+                error: Some("Slow response".to_string()),
+                details: serde_json::json!({}),
+            },
+            search: ServiceHealth {
+                status: "up".to_string(),
+                response_time_ms: 10.0,
+                error: None,
+                details: serde_json::json!({}),
+            },
+            auth: ServiceHealth {
+                status: "up".to_string(),
+                response_time_ms: 1.0,
+                error: None,
+                details: serde_json::json!({}),
+            },
+            timestamp: now,
+        };
+
+        assert_eq!(response.status, "degraded");
+    }
+
+    // =========================================================================
+    // Failure Mode Tests (エラーハンドリング)
+    // =========================================================================
+
+    #[test]
+    fn test_failure_mode_down() {
+        let mode = FailureMode::Down;
+        match mode {
+            FailureMode::Down => {},
+            FailureMode::Degraded => panic!("Expected Down"),
+        }
+    }
+
+    #[test]
+    fn test_failure_mode_degraded() {
+        let mode = FailureMode::Degraded;
+        match mode {
+            FailureMode::Down => panic!("Expected Degraded"),
+            FailureMode::Degraded => {},
+        }
+    }
+
+    // =========================================================================
+    // Service Health Helpers Tests
+    // =========================================================================
+
+    #[test]
+    fn test_service_not_configured() {
+        let health = service_not_configured("Feature not enabled");
+        
+        assert_eq!(health.status, "not_configured");
+        assert_eq!(health.response_time_ms, 0.0);
+        assert!(health.error.is_none());
+        assert_eq!(
+            health.details["message"],
+            "Feature not enabled"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_to_service_health_down_on_error() {
+        let fut = async {
+            // Simulate an error
+            Err::<(), _>(crate::error::AppError::Internal("Test error".to_string()))
+        };
+
+        let health = to_service_health(fut, FailureMode::Down).await;
+        assert_eq!(health.status, "down");
+        assert!(health.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_to_service_health_ok_on_success() {
+        let fut = async {
+            // Simulate a success
+            Ok::<(), crate::error::AppError>(())
+        };
+
+        let health = to_service_health(fut, FailureMode::Down).await;
+        assert_eq!(health.status, "up");
+        assert!(health.error.is_none());
+        assert!(health.response_time_ms > 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_to_service_health_degraded_on_error() {
+        let fut = async {
+            Err::<(), _>(crate::error::AppError::Internal("Partial failure".to_string()))
+        };
+
+        let health = to_service_health(fut, FailureMode::Degraded).await;
+        assert_eq!(health.status, "degraded");
+        assert!(health.error.is_some());
+    }
+
+    // =========================================================================
+    // Metrics State Mutation Tests (ユースケース)
+    // =========================================================================
+
+    #[test]
+    fn test_metrics_increment_total_requests() {
+        let mut metrics = AppMetrics::default();
+        assert_eq!(metrics.total_requests, 0);
+        
+        metrics.total_requests = 100;
+        assert_eq!(metrics.total_requests, 100);
+    }
+
+    #[test]
+    fn test_metrics_increment_cache_operations() {
+        let metrics = AppMetrics {
+            cache_hits: 10,
+            cache_misses: 2,
+            ..Default::default()
+        };
+
+        assert_eq!(metrics.cache_hits, 10);
+        assert_eq!(metrics.cache_misses, 2);
+    }
+
+    #[test]
+    fn test_metrics_error_tracking() {
+        let metrics = AppMetrics {
+            errors_total: 5,
+            errors_auth: 2,
+            errors_db: 3,
+            ..Default::default()
+        };
+
+        assert_eq!(metrics.errors_total, 5);
+        assert_eq!(metrics.errors_auth, 2);
+        assert_eq!(metrics.errors_db, 3);
+    }
+
+    #[test]
+    fn test_metrics_averages_computation() {
+        let metrics = AppMetrics {
+            db_avg_response_time_ms: 15.5,
+            search_avg_response_time_ms: 50.0,
+            ..Default::default()
+        };
+
+        assert!(metrics.db_avg_response_time_ms < metrics.search_avg_response_time_ms);
+    }
+
+    // =========================================================================
+    // Edge Cases & Boundary Tests
+    // =========================================================================
+
+    #[test]
+    fn test_app_metrics_large_values() {
+        let metrics = AppMetrics {
+            total_requests: u64::MAX / 2,
+            cache_hits: u64::MAX / 2,
+            search_avg_response_time_ms: f64::MAX / 2.0,
+            ..Default::default()
+        };
+
+        assert!(metrics.total_requests > 0);
+        assert!(metrics.cache_hits > 0);
+        assert!(metrics.search_avg_response_time_ms > 0.0);
+    }
+
+    #[test]
+    fn test_service_health_response_times_consistency() {
+        let times = vec![1.5, 5.0, 10.0, 50.0, 1000.0];
+        
+        for time in times {
+            let health = ServiceHealth {
+                status: "up".to_string(),
+                response_time_ms: time,
+                error: None,
+                details: serde_json::json!({}),
+            };
+            
+            assert_eq!(health.response_time_ms, time);
+            assert!(health.response_time_ms > 0.0);
+        }
+    }
+
+    #[test]
+    fn test_app_state_builder_event_bus_optional() {
+        let config = Arc::new(Config::default());
+        let builder = AppStateBuilder {
+            config,
+            metrics: Arc::new(RwLock::new(AppMetrics::default())),
+            start_time: Instant::now(),
+            #[cfg(feature = "database")]
+            database: None,
+            #[cfg(feature = "database")]
+            container: None,
+            event_bus: None,
+            #[cfg(feature = "auth")]
+            auth: None,
+            #[cfg(feature = "cache")]
+            cache: None,
+            #[cfg(feature = "search")]
+            search: None,
+        };
+
+        assert!(builder.event_bus.is_none());
     }
 }

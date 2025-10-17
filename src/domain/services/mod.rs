@@ -18,10 +18,10 @@
 /// ```
 use crate::common::types::DomainError;
 use crate::domain::category::{Category, CategoryId};
-use crate::domain::comment::{Comment, CommentId};
-use crate::domain::post::{Post, PostId};
-use crate::domain::tag::{Tag, TagId};
-use crate::domain::user::{User, UserId};
+use crate::domain::comment::Comment;
+use crate::domain::post::Post;
+use crate::domain::tag::TagId;
+use crate::domain::user::User;
 
 // ============================================================================
 // PostPublishingService - 投稿公開の複合ロジック

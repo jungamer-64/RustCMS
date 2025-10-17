@@ -33,7 +33,7 @@
 /// ```
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+// uuid import not directly used here; keep available via UserId type
 
 use crate::domain::category::CategoryId;
 use crate::domain::comment::CommentId;

@@ -5,7 +5,7 @@
 //! 参考: RESTRUCTURE_EXAMPLES.md, TESTING_STRATEGY.md
 
 use crate::common::types::ApplicationError;
-use diesel::connection::Connection;
+// Connection import deferred until UnitOfWork implementation
 use std::sync::Arc;
 
 #[cfg(feature = "restructure_application")]

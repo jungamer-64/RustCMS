@@ -1,10 +1,16 @@
 // Top-level domain module facade for restructure
 // Re-export existing domain modules or provide placeholders for phased migration
-pub mod user;
-pub mod post;
-pub mod comment;
-pub mod tag;
-pub mod category;
+
+// Entities module (Phase 2 migration: consolidating entity structures)
+pub mod entities;
+
+// Legacy top-level re-exports for backward compatibility
+// These forward to the new entities module structure
+pub use entities::user;
+pub use entities::post;
+pub use entities::comment;
+pub use entities::tag;
+pub use entities::category;
 
 // Optional new structure for domain services/events behind feature flag
 #[cfg(feature = "restructure_domain")]

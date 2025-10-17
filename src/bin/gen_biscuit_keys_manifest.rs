@@ -134,27 +134,35 @@ fn display_key_fingerprints(priv_b64: &str, pub_b64: &str) -> (String, String) {
 }
 
 /// Performs post-versioning operations (alias, manifest, pruning)
-fn perform_versioned_operations(
-    path: &Path,
+/// Parameters for perform_versioned_operations to avoid too many function arguments.
+struct PerformVersionedParams<'a> {
+    path: &'a Path,
     v: u32,
-    priv_b64: &str,
-    pub_b64: &str,
-    priv_fp: &str,
-    pub_fp: &str,
+    priv_b64: &'a str,
+    pub_b64: &'a str,
+    priv_fp: &'a str,
+    pub_fp: &'a str,
     latest_alias: bool,
     no_manifest: bool,
     prune: Option<usize>,
-) -> std::io::Result<()> {
-    if latest_alias {
-        write_latest_alias(path, priv_b64, pub_b64)?;
+}
+
+fn perform_versioned_operations(params: PerformVersionedParams) -> std::io::Result<()> {
+    if params.latest_alias {
+        write_latest_alias(params.path, params.priv_b64, params.pub_b64)?;
     }
 
-    if !no_manifest {
-        update_manifest(path, v, priv_fp, pub_fp)?;
+    if !params.no_manifest {
+        update_manifest(
+            params.path,
+            params.v,
+            params.priv_fp,
+            params.pub_fp,
+        )?;
     }
 
-    if let Some(keep) = prune {
-        prune_versions(path, keep)?;
+    if let Some(keep) = params.prune {
+        prune_versions(params.path, keep)?;
     }
 
     Ok(())
@@ -178,18 +186,19 @@ pub fn finalize_versioned(
     // エラーを map_err でアプリケーション固有のエラー型に変換
     let to_app_err = |e: std::io::Error| AppError::Internal(e.to_string());
 
-    perform_versioned_operations(
+    let params = PerformVersionedParams {
         path,
         v,
         priv_b64,
         pub_b64,
-        &priv_fp,
-        &pub_fp,
+        priv_fp: &priv_fp,
+        pub_fp: &pub_fp,
         latest_alias,
         no_manifest,
         prune,
-    )
-    .map_err(to_app_err)?;
+    };
+
+    perform_versioned_operations(params).map_err(to_app_err)?;
 
     Ok(())
 }

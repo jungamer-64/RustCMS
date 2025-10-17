@@ -130,7 +130,7 @@ impl AuthService {
             use crate::infrastructure::repositories::DieselUserRepository;
             let repo: Arc<dyn UserRepository> =
                 Arc::new(DieselUserRepository::new(database.clone())) as Arc<dyn UserRepository>;
-            return Self::new_with_repo(config, repo);
+            Self::new_with_repo(config, repo)
         }
 
         // If database feature is not enabled, this code path should never

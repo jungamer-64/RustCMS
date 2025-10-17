@@ -16,35 +16,22 @@ use std::sync::Arc;
 pub mod dto;
 pub mod ports;
 
-// Phase 3 Step 7-8: CQRS統合（Commands + Queries + DTOs）
-#[cfg(feature = "restructure_application")]
-pub mod user;
-
-#[cfg(feature = "restructure_application")]
-pub mod post;
-
-#[cfg(feature = "restructure_application")]
-pub mod comment;
-
-#[cfg(feature = "restructure_application")]
-pub mod tag;
-
-#[cfg(feature = "restructure_application")]
-pub mod category;
-
 // ============================================================================
 // レガシー構造（既存コードとの並行稼働）
 // ============================================================================
 
-pub use ports::*;
-
-// Re-export surface for application-layer services, handlers and use-cases
-// This file intentionally re-exports existing handlers and services so callers
-// can start referring to `crate::application::...` during the restructure.
-
+// Note: handlers::* is re-exported first to avoid ambiguity with ports::search
 pub mod handlers {
     pub use crate::handlers::*;
 }
+
+pub use handlers::*;
+
+// Ports - intentionally after handlers to avoid search module conflict
+// Only re-export specific items to avoid glob conflicts
+pub use ports::{cache, events, repositories};
+#[allow(unused_imports)] // Used conditionally
+pub use ports::{CacheService, EventPublisher, PostRepository, UserRepository};
 
 pub mod use_cases;
 pub use use_cases::*;
@@ -52,8 +39,6 @@ pub use use_cases::*;
 pub mod services {
     // Re-exports for service-like modules (eg: limiter, auth glue) can go here.
 }
-
-pub use handlers::*;
 
 /// Application prelude: commonly used handler/service types for migrating
 /// call sites to `crate::application`.

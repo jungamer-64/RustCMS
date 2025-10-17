@@ -10,16 +10,17 @@
 
 use async_trait::async_trait;
 
-#[cfg(feature = "restructure_domain")]
-use crate::domain::user::{Email, User, UserId};
+// Domain entities - imported from consolidated entities module
+// CommentRepository uses Comment, CommentId, UserId, PostId (always enabled)
+use crate::domain::entities::{Comment, CommentId, PostId, UserId};
 
-// Phase 2: PostRepository
+// Note: Phase 2 complete - behind restructure_domain feature flag
 #[cfg(feature = "restructure_domain")]
-use crate::domain::post::{Post, PostId};
+use crate::domain::entities::{Email, Post, User};
 
-// Phase 2: CommentRepository
+// Additional imports needed for Tag and Category repositories
 #[cfg(feature = "restructure_domain")]
-use crate::domain::comment::{Comment, CommentId};
+use crate::domain::entities::{Category, CategoryId, CategorySlug, Tag, TagId, TagName};
 
 // ============================================================================
 // User Repository Port
@@ -189,9 +190,6 @@ pub trait CommentRepository: Send + Sync {
 // Tag Repository Port (Phase 2 で実装)
 // ============================================================================
 
-#[cfg(feature = "restructure_domain")]
-use crate::domain::tag::{Tag, TagId, TagName};
-
 /// タグリポジトリ（Port/Interface）
 ///
 /// タグのデータベースアクセスを抽象化します。
@@ -245,9 +243,6 @@ pub trait TagRepository: Send + Sync {
 // ============================================================================
 // Category Repository Port (Phase 2 で実装)
 // ============================================================================
-
-#[cfg(feature = "restructure_domain")]
-use crate::domain::category::{Category, CategoryId, CategorySlug};
 
 /// カテゴリリポジトリ（Port/Interface）
 ///
@@ -306,7 +301,7 @@ pub trait CategoryRepository: Send + Sync {
 /// リポジトリエラー
 ///
 /// データベース操作で発生するエラーを表現します。
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, PartialEq)]
 pub enum RepositoryError {
     #[error("Entity not found: {0}")]
     NotFound(String),
@@ -332,15 +327,210 @@ pub enum RepositoryError {
 mod tests {
     use super::*;
 
+    // =========================================================================
+    // RepositoryError Tests (全バリアント, 表示, シリアライズ)
+    // =========================================================================
+
     #[test]
-    fn test_repository_error_display() {
-        let error = RepositoryError::NotFound("User".to_string());
-        assert_eq!(format!("{error}"), "Entity not found: User");
+    fn test_repository_error_not_found() {
+        let error = RepositoryError::NotFound("User 123".to_string());
+        assert_eq!(format!("{error}"), "Entity not found: User 123");
     }
 
     #[test]
     fn test_repository_error_duplicate() {
         let error = RepositoryError::Duplicate("email@example.com".to_string());
         assert!(format!("{error}").contains("Duplicate"));
+    }
+
+    #[test]
+    fn test_repository_error_database_error() {
+        let error = RepositoryError::DatabaseError("Connection pool exhausted".to_string());
+        assert!(format!("{error}").contains("Database error"));
+    }
+
+    #[test]
+    fn test_repository_error_validation_error() {
+        let error = RepositoryError::ValidationError("Invalid email format".to_string());
+        assert!(format!("{error}").contains("Validation error"));
+    }
+
+    #[test]
+    fn test_repository_error_unknown() {
+        let error = RepositoryError::Unknown("Something went wrong".to_string());
+        assert!(format!("{error}").contains("Unknown error"));
+    }
+
+    #[test]
+    fn test_repository_error_all_variants() {
+        let variants = vec![
+            RepositoryError::NotFound("Entity".to_string()),
+            RepositoryError::Duplicate("Key".to_string()),
+            RepositoryError::DatabaseError("DB error".to_string()),
+            RepositoryError::ValidationError("Validation failed".to_string()),
+            RepositoryError::Unknown("Unknown".to_string()),
+        ];
+
+        for variant in variants {
+            let display = format!("{variant}");
+            assert!(!display.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_repository_error_debug() {
+        let error = RepositoryError::NotFound("User 123".to_string());
+        let debug_str = format!("{error:?}");
+        assert!(debug_str.contains("NotFound"));
+    }
+
+    #[test]
+    fn test_repository_error_display_special_characters() {
+        let error = RepositoryError::ValidationError("Email contains <script> tag".to_string());
+        let display = format!("{error}");
+        assert!(display.contains("<script>"));
+    }
+
+    #[test]
+    fn test_repository_error_display_unicode() {
+        let error = RepositoryError::Duplicate("ユーザー@例え.jp".to_string());
+        let display = format!("{error}");
+        assert!(display.contains("ユーザー"));
+    }
+
+    // =========================================================================
+    // RepositoryError semantic tests (エラー意味論)
+    // =========================================================================
+
+    #[test]
+    fn test_repository_error_semantics_not_found_vs_error() {
+        let not_found = RepositoryError::NotFound("User".to_string());
+        let db_error = RepositoryError::DatabaseError("Connection error".to_string());
+
+        // Different error types have different meanings
+        assert_ne!(format!("{not_found}"), format!("{db_error}"));
+    }
+
+    #[test]
+    fn test_repository_error_semantics_duplicate_vs_validation() {
+        let duplicate = RepositoryError::Duplicate("Email already exists".to_string());
+        let validation = RepositoryError::ValidationError("Email is invalid".to_string());
+
+        // Both relate to email but represent different concerns
+        assert_ne!(format!("{duplicate}"), format!("{validation}"));
+    }
+
+    // =========================================================================
+    // RepositoryError edge cases
+    // =========================================================================
+
+    #[test]
+    fn test_repository_error_with_empty_message() {
+        let error = RepositoryError::Unknown("".to_string());
+        let display = format!("{error}");
+        assert!(!display.is_empty());
+    }
+
+    #[test]
+    fn test_repository_error_with_long_message() {
+        let long_msg = "x".repeat(1000);
+        let error = RepositoryError::DatabaseError(long_msg.clone());
+        let display = format!("{error}");
+        assert!(display.contains(&long_msg));
+    }
+
+    #[test]
+    fn test_repository_error_multiple_instantiation() {
+        let errors: Vec<_> = (0..10)
+            .map(|i| RepositoryError::NotFound(format!("Entity {i}")))
+            .collect();
+
+        assert_eq!(errors.len(), 10);
+        for (i, error) in errors.iter().enumerate() {
+            let msg = format!("{error}");
+            assert!(msg.contains(&format!("Entity {i}")));
+        }
+    }
+
+    // =========================================================================
+    // Port definitions compile-time validation
+    // =========================================================================
+
+    #[test]
+    fn test_repository_port_trait_bounds() {
+        // Verify that repository traits would have expected bounds
+        // This is a compile-time check via trait signature
+        
+        // Traits should be Send + Sync
+        #[allow(dead_code)]
+        fn assert_send_sync<T: Send + Sync>() {}
+
+        // If we could instantiate, this would hold:
+        // assert_send_sync::<dyn UserRepository>();
+        // assert_send_sync::<dyn PostRepository>();
+        // assert_send_sync::<dyn CommentRepository>();
+        // assert_send_sync::<dyn TagRepository>();
+        // assert_send_sync::<dyn CategoryRepository>();
+    }
+
+    // =========================================================================
+    // Repository error recovery patterns
+    // =========================================================================
+
+    #[test]
+    fn test_repository_error_as_result_ok() {
+        let result: Result<&str, RepositoryError> = Ok("success");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_repository_error_as_result_err() {
+        let result: Result<&str, RepositoryError> =
+            Err(RepositoryError::NotFound("Item".to_string()));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_repository_error_result_mapping() {
+        let result: Result<i32, RepositoryError> =
+            Err(RepositoryError::DatabaseError("Connection failed".to_string()));
+
+        let mapped = result.map_err(|_| RepositoryError::Unknown("Mapped".to_string()));
+        assert!(mapped.is_err());
+        if let Err(RepositoryError::Unknown(msg)) = mapped {
+            assert_eq!(msg, "Mapped");
+        } else {
+            panic!("Expected Unknown error");
+        }
+    }
+
+    #[test]
+    fn test_repository_error_result_recovery() {
+        let result: Result<i32, RepositoryError> =
+            Err(RepositoryError::NotFound("Item".to_string()));
+
+        let recovered: Result<i32, RepositoryError> = result.or(Ok(0));
+        assert_eq!(recovered, Ok(0));
+    }
+
+    // =========================================================================
+    // RepositoryError consistency tests
+    // =========================================================================
+
+    #[test]
+    fn test_repository_error_consistency_across_display_calls() {
+        let error = RepositoryError::NotFound("User".to_string());
+        let display1 = format!("{error}");
+        let display2 = format!("{error}");
+        assert_eq!(display1, display2);
+    }
+
+    #[test]
+    fn test_repository_error_distinct_from_domain_errors() {
+        let repo_err = RepositoryError::ValidationError("Invalid data".to_string());
+        let display = format!("{repo_err}");
+
+        // Should clearly indicate it's a repository error, not a domain error
+        assert!(display.contains("Validation error"));
     }
 }

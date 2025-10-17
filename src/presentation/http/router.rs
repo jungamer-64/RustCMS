@@ -7,7 +7,7 @@
 
 use axum::{
     Router,
-    routing::{delete, get, post, put},
+    routing::{get, post},
 };
 
 #[cfg(all(

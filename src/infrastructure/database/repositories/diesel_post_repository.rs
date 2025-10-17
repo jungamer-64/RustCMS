@@ -4,7 +4,6 @@
 //! Domain層の `PostRepository` Port を Diesel ORM で実装するための骨組み。
 
 use crate::common::types::ApplicationError;
-use crate::infrastructure::database::models::{DbPost, NewDbPost};
 
 /// Diesel ベースの Post Repository 実装（Phase 3 Step 3）
 #[derive(Clone)]

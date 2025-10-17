@@ -134,7 +134,6 @@ impl DbPost {
 // ============================================================================
 
 /// Diesel Category モデル
-
 pub struct DbCategory {
     pub id: Uuid,
     pub name: String,
@@ -147,7 +146,6 @@ pub struct DbCategory {
 }
 
 /// Diesel Category のための新規挿入用構造体
-
 pub struct NewDbCategory {
     pub id: Uuid,
     pub name: String,
@@ -176,7 +174,6 @@ impl DbCategory {
 // ============================================================================
 
 /// Diesel Tag モデル
-
 pub struct DbTag {
     pub id: Uuid,
     pub name: String,
@@ -187,7 +184,6 @@ pub struct DbTag {
 }
 
 /// Diesel Tag のための新規挿入用構造体
-
 pub struct NewDbTag {
     pub id: Uuid,
     pub name: String,
@@ -214,7 +210,6 @@ impl DbTag {
 // ============================================================================
 
 /// Diesel Comment モデル
-
 pub struct DbComment {
     pub id: Uuid,
     pub post_id: Uuid,
@@ -227,7 +222,6 @@ pub struct DbComment {
 }
 
 /// Diesel Comment のための新規挿入用構造体
-
 pub struct NewDbComment {
     pub id: Uuid,
     pub post_id: Uuid,

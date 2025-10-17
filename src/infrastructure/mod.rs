@@ -15,6 +15,9 @@
 #[cfg(all(feature = "restructure_application", feature = "database"))]
 pub mod database;
 
+// Phase 3-4 で実装完了
+pub mod events;    // Event Bus実装 (src/events.rs, src/listeners.rs から移行)
+
 // Phase 3 で実装予定
 // #[cfg(all(feature = "restructure_application", feature = "cache"))]
 // pub mod cache;     // Cache実装統合
@@ -22,8 +25,6 @@ pub mod database;
 // pub mod search;    // Search実装統合
 // #[cfg(all(feature = "restructure_application", feature = "auth"))]
 // pub mod auth;      // Auth実装統合
-// #[cfg(feature = "restructure_application")]
-// pub mod events;    // Event Bus実装
 
 // ============================================================================
 // レガシー構造（既存コードとの並行稼働）
