@@ -878,6 +878,182 @@ impl Database {
         })
     }
 
+    // ========================================================================
+    // Comment CRUD Operations (Phase 6.2)
+    // ========================================================================
+
+    /// Create a new comment
+    /// 新しいコメントを作成します。
+    ///
+    /// # Errors
+    /// 作成に失敗した場合にエラーを返します。
+    pub fn create_comment(
+        &self,
+        post_id: Uuid,
+        author_id: Option<Uuid>,
+        content: String,
+        status: &str,
+    ) -> Result<()> {
+        use crate::database::schema::comments::dsl as comments_dsl;
+        use diesel::prelude::*;
+
+        let id = Uuid::new_v4();
+        let now = chrono::Utc::now();
+
+        self.with_conn(|conn| {
+            Self::execute_and_ensure(
+                || {
+                    diesel::insert_into(comments_dsl::comments)
+                        .values((
+                            comments_dsl::id.eq(id),
+                            comments_dsl::post_id.eq(post_id),
+                            comments_dsl::author_id.eq(author_id),
+                            comments_dsl::content.eq(&content),
+                            comments_dsl::status.eq(status),
+                            comments_dsl::created_at.eq(now),
+                            comments_dsl::updated_at.eq(now),
+                        ))
+                        .execute(conn)
+                },
+                "Failed to create comment",
+                "Invalid post or author",
+            )
+        })
+    }
+
+    /// Get comment by ID
+    /// コメントを取得します。
+    ///
+    /// # Errors
+    /// コメントが見つからない場合にエラーを返します。
+    pub fn get_comment_by_id(&self, id: Uuid) -> Result<Option<(Uuid, Uuid, String, String)>> {
+        use crate::database::schema::comments::dsl as comments_dsl;
+        use diesel::prelude::*;
+
+        self.with_conn(|conn| {
+            comments_dsl::comments
+                .filter(comments_dsl::id.eq(id))
+                .filter(comments_dsl::status.ne("deleted"))
+                .select((
+                    comments_dsl::id,
+                    comments_dsl::post_id,
+                    comments_dsl::content,
+                    comments_dsl::status,
+                ))
+                .first::<(Uuid, Uuid, String, String)>(conn)
+                .optional()
+                .map_err(|e| crate::AppError::Internal(format!("Failed to fetch comment: {}", e)))
+        })
+    }
+
+    /// Update comment
+    /// コメントを更新します。
+    ///
+    /// # Errors
+    /// コメントが見つからない場合にエラーを返します。
+    pub fn update_comment(
+        &self,
+        id: Uuid,
+        content: String,
+        status: &str,
+    ) -> Result<()> {
+        use crate::database::schema::comments::dsl as comments_dsl;
+        use diesel::prelude::*;
+
+        let now = chrono::Utc::now();
+
+        self.with_conn(|conn| {
+            Self::execute_and_ensure(
+                || {
+                    diesel::update(comments_dsl::comments.find(id))
+                        .set((
+                            comments_dsl::content.eq(&content),
+                            comments_dsl::status.eq(status),
+                            comments_dsl::updated_at.eq(now),
+                        ))
+                        .execute(conn)
+                },
+                "Failed to update comment",
+                "Comment not found",
+            )
+        })
+    }
+
+    /// Delete comment (soft delete)
+    /// コメントを削除します（ソフトデリート）。
+    ///
+    /// # Errors
+    /// コメントが見つからない場合にエラーを返します。
+    pub fn delete_comment(&self, id: Uuid) -> Result<()> {
+        use crate::database::schema::comments::dsl as comments_dsl;
+        use diesel::prelude::*;
+
+        self.with_conn(|conn| {
+            Self::execute_and_ensure(
+                || {
+                    diesel::update(comments_dsl::comments.find(id))
+                        .set(comments_dsl::status.eq("deleted"))
+                        .execute(conn)
+                },
+                "Failed to delete comment",
+                "Comment not found",
+            )
+        })
+    }
+
+    /// List comments by post
+    /// 投稿のコメントを取得します。
+    ///
+    /// # Errors
+    /// クエリが失敗した場合にエラーを返します。
+    pub fn list_comments_by_post(
+        &self,
+        post_id: Uuid,
+        page: u32,
+        limit: u32,
+    ) -> Result<Vec<(Uuid, Uuid, String, String)>> {
+        use crate::database::schema::comments::dsl as comments_dsl;
+        use diesel::prelude::*;
+
+        let (_page, lim, offset) = Self::paged_params(page, limit);
+
+        self.with_conn(|conn| {
+            comments_dsl::comments
+                .filter(comments_dsl::post_id.eq(post_id))
+                .filter(comments_dsl::status.ne("deleted"))
+                .order_by(comments_dsl::created_at.asc())
+                .limit(lim)
+                .offset(offset)
+                .select((
+                    comments_dsl::id,
+                    comments_dsl::post_id,
+                    comments_dsl::content,
+                    comments_dsl::status,
+                ))
+                .load::<(Uuid, Uuid, String, String)>(conn)
+                .map_err(|e| crate::AppError::Internal(format!("Failed to list comments: {}", e)))
+        })
+    }
+
+    /// Count comments by post
+    /// 投稿のコメント数を取得します。
+    ///
+    /// # Errors
+    /// クエリが失敗した場合にエラーを返します。
+    pub fn count_comments_by_post(&self, post_id: Uuid) -> Result<i64> {
+        use crate::database::schema::comments::dsl as comments_dsl;
+        use diesel::prelude::*;
+
+        self.with_conn(|conn| {
+            comments_dsl::comments
+                .filter(comments_dsl::post_id.eq(post_id))
+                .filter(comments_dsl::status.ne("deleted"))
+                .count()
+                .get_result::<i64>(conn)
+                .map_err(|e| crate::AppError::Internal(format!("Failed to count comments: {}", e)))
+        })
+    }
+
     #[cfg(all(feature = "database", not(test)))]
     fn run_migrations(pool: &DatabasePool) -> Result<()> {
         let mut conn = pool.get()?;

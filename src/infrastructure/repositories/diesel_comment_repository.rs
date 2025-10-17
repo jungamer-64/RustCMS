@@ -24,30 +24,44 @@ impl CommentRepository for DieselCommentRepository {
         &self,
         comment: crate::domain::entities::comment::Comment,
     ) -> Result<(), RepositoryError> {
-        // Phase 6.1: Placeholder for database insertion
-        // For now, store comment in memory to pass tests
-        // TODO: Implement actual database persistence
-        let _ = comment;
-        Ok(())
+        // Phase 6.2: Delegate to database layer
+        // Extract comment data and persist
+        let content = comment.text().as_str().to_string();
+        let post_id = comment.post_id().into_uuid();
+        let author_id = Some(comment.author_id().into_uuid());
+        
+        self.db
+            .create_comment(post_id, author_id, content, "pending")
+            .map_err(|e| RepositoryError::DatabaseError(e.to_string()))
     }
 
     async fn find_by_id(
         &self,
-        _id: CommentId,
+        id: CommentId,
     ) -> Result<Option<crate::domain::entities::comment::Comment>, RepositoryError> {
-        // Phase 6.1: Placeholder for database query
-        // TODO: Implement actual database retrieval
+        // Phase 6.2: Delegate to database layer
+        // Note: Returns raw data from DB, need to reconstruct Comment entity
+        let _result = self.db
+            .get_comment_by_id(*id.as_uuid())
+            .map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+        
+        // TODO: Reconstruct Comment entity from DB data
         Ok(None)
     }
 
     async fn find_by_post(
         &self,
-        _post_id: crate::domain::entities::post::PostId,
-        _limit: i64,
+        post_id: crate::domain::entities::post::PostId,
+        limit: i64,
         _offset: i64,
     ) -> Result<Vec<crate::domain::entities::comment::Comment>, RepositoryError> {
-        // Phase 6.1: Placeholder for database query with pagination
-        // TODO: Implement actual database retrieval
+        // Phase 6.2: Delegate to database layer
+        let page = if _offset > 0 { (_offset / limit) + 1 } else { 1 };
+        let _results = self.db
+            .list_comments_by_post(post_id.into_uuid(), page as u32, limit as u32)
+            .map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+        
+        // TODO: Reconstruct Comment entities from DB data
         Ok(vec![])
     }
 
@@ -57,24 +71,26 @@ impl CommentRepository for DieselCommentRepository {
         _limit: i64,
         _offset: i64,
     ) -> Result<Vec<crate::domain::entities::comment::Comment>, RepositoryError> {
-        // Phase 6.1: Placeholder for database query with pagination
-        // TODO: Implement actual database retrieval
+        // Phase 6.2: Placeholder - database helper needed
+        // TODO: Implement actual database retrieval by author_id
         Ok(vec![])
     }
 
-    async fn delete(&self, _id: CommentId) -> Result<(), RepositoryError> {
-        // Phase 6.1: Placeholder for database deletion (soft delete)
-        // TODO: Implement actual database update
-        Ok(())
+    async fn delete(&self, id: CommentId) -> Result<(), RepositoryError> {
+        // Phase 6.2: Delegate to database layer
+        self.db
+            .delete_comment(id.into_uuid())
+            .map_err(|e| RepositoryError::DatabaseError(e.to_string()))
     }
 
     async fn list_all(
         &self,
-        _limit: i64,
+        limit: i64,
         _offset: i64,
     ) -> Result<Vec<crate::domain::entities::comment::Comment>, RepositoryError> {
-        // Phase 6.1: Placeholder for database query with pagination
-        // TODO: Implement actual database retrieval
+        // Phase 6.2: Placeholder - database helper needed
+        // TODO: Implement actual database retrieval for all comments
+        let _ = limit;
         Ok(vec![])
     }
 }
