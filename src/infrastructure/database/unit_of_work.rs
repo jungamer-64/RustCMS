@@ -1,129 +1,212 @@
-// src/infrastructure/database/unit_of_work.rs
-//! Unit of Work パターン実装（Phase 3 Step 9）
+//! Unit of Work パターン実装
 //!
-//! 複数の Repository のトランザクション管理と一貫性保証
-//! 参考: RESTRUCTURE_EXAMPLES.md, TESTING_STRATEGY.md
+//! ## 責務
+//! - トランザクション境界の管理
+//! - 複数の Repository 操作を単一のトランザクションでラップ
+//! - 自動ロールバック（エラー時）および明示的コミット
+//!
+//! ## 設計方針
+//! - クロージャベースAPI（自動クリーンアップ）
+//! - Diesel の同期 API を tokio::task::spawn_blocking でラップ
+//! - セーブポイント対応（ネストトランザクション）
+//!
+//! ## Phase 3 実装範囲
+//! - 基本的なトランザクション管理
+//! - エラーハンドリングと変換
+//! - Phase 4 でより高度な機能（分散トランザクション等）を追加予定
 
-use crate::common::types::ApplicationError;
-// Connection import deferred until UnitOfWork implementation
+use crate::application::ports::repositories::RepositoryError;
+use diesel::prelude::*;
+use diesel::r2d2::{ConnectionManager, Pool};
 use std::sync::Arc;
 
-#[cfg(feature = "restructure_application")]
-use super::repositories::{
-    DieselCategoryRepository, DieselCommentRepository, DieselPostRepository, DieselTagRepository,
-    DieselUserRepository,
-};
-
-/// Unit of Work: 複数 Repository のトランザクション管理
+/// Diesel ベースの Unit of Work 実装
 ///
-/// # 責務
-/// - 複数 Repository の集約
-/// - トランザクション境界の管理
-/// - Commit/Rollback の一括処理
+/// PostgreSQL のトランザクション管理を提供します。
 ///
-/// # 使用例（Phase 3.9 実装予定）
-/// ```ignore
-/// let uow = UnitOfWork::new(pool);
-/// let user_repo = uow.users();
-/// let post_repo = uow.posts();
+/// # Examples
 ///
-/// // トランザクション開始
-/// user_repo.save(user)?;
-/// post_repo.save(post)?;
+/// ```rust,ignore
+/// let uow = DieselUnitOfWork::new(pool);
 ///
-/// // コミット
-/// uow.commit()?;
+/// uow.execute_in_transaction(|conn| {
+///     user_repo.save_with_connection(conn, user)?;
+///     post_repo.save_with_connection(conn, post)?;
+///     Ok(())
+/// }).await?;
 /// ```
-#[derive(Clone)]
-pub struct UnitOfWork {
-    // TODO: Phase 3.9 - コネクションプール注入
-    // pool: DbPool,
+pub struct DieselUnitOfWork {
+    pool: Arc<Pool<ConnectionManager<PgConnection>>>,
 }
 
-impl UnitOfWork {
+impl DieselUnitOfWork {
     /// 新しい Unit of Work を作成
-    pub fn new() -> Self {
-        Self {}
-    }
-
-    /// User Repository を取得
     ///
-    /// TODO: Phase 3.9 - DieselUserRepository 初期化
-    #[cfg(feature = "restructure_application")]
-    pub fn users(&self) -> Arc<DieselUserRepository> {
-        Arc::new(DieselUserRepository::default())
-    }
-
-    /// Post Repository を取得
+    /// # Arguments
     ///
-    /// TODO: Phase 3.9 - DieselPostRepository 初期化
-    #[cfg(feature = "restructure_application")]
-    pub fn posts(&self) -> Arc<DieselPostRepository> {
-        Arc::new(DieselPostRepository::default())
+    /// * `pool` - Diesel コネクションプール
+    #[must_use]
+    pub fn new(pool: Arc<Pool<ConnectionManager<PgConnection>>>) -> Self {
+        Self { pool }
     }
 
-    /// Comment Repository を取得
+    /// トランザクション内でクロージャを実行
     ///
-    /// TODO: Phase 3.9 - DieselCommentRepository 初期化
-    #[cfg(feature = "restructure_application")]
-    pub fn comments(&self) -> Arc<DieselCommentRepository> {
-        Arc::new(DieselCommentRepository::default())
-    }
-
-    /// Tag Repository を取得
+    /// クロージャが成功（Ok）を返した場合はコミット、
+    /// エラー（Err）を返した場合は自動的にロールバックします。
     ///
-    /// TODO: Phase 3.9 - DieselTagRepository 初期化
-    #[cfg(feature = "restructure_application")]
-    pub fn tags(&self) -> Arc<DieselTagRepository> {
-        Arc::new(DieselTagRepository::default())
-    }
-
-    /// Category Repository を取得
+    /// # Type Parameters
     ///
-    /// TODO: Phase 3.9 - DieselCategoryRepository 初期化
-    #[cfg(feature = "restructure_application")]
-    pub fn categories(&self) -> Arc<DieselCategoryRepository> {
-        Arc::new(DieselCategoryRepository::default())
-    }
-
-    /// トランザクション開始
+    /// * `F` - トランザクション内で実行する関数
+    /// * `R` - 関数の戻り値型
     ///
-    /// TODO: Phase 3.9 - DB コネクションの取得と BEGIN トランザクション
-    /// 処理フロー:
-    /// 1. pool から接続を取得
-    /// 2. BEGIN TRANSACTION 実行
-    /// 3. 接続を保持してメソッド呼び出し元に返す
-    pub fn begin(&self) -> Result<(), ApplicationError> {
-        Err(ApplicationError::RepositoryError(
-            "UnitOfWork.begin() Phase 3.9 で実装予定".to_string(),
-        ))
-    }
-
-    /// トランザクション コミット
+    /// # Arguments
     ///
-    /// TODO: Phase 3.9 - DB コネクションの COMMIT トランザクション
-    /// 処理フロー:
-    /// 1. COMMIT TRANSACTION 実行
-    /// 2. コネクションをプールに返却
-    pub fn commit(&self) -> Result<(), ApplicationError> {
-        Err(ApplicationError::RepositoryError(
-            "UnitOfWork.commit() Phase 3.9 で実装予定".to_string(),
-        ))
-    }
-
-    /// トランザクション ロールバック
+    /// * `f` - PgConnection を受け取る関数
     ///
-    /// TODO: Phase 3.9 - DB コネクションの ROLLBACK トランザクション
-    pub fn rollback(&self) -> Result<(), ApplicationError> {
-        Err(ApplicationError::RepositoryError(
-            "UnitOfWork.rollback() Phase 3.9 で実装予定".to_string(),
-        ))
-    }
-}
+    /// # Errors
+    ///
+    /// - コネクション取得失敗
+    /// - トランザクション開始失敗
+    /// - クロージャ内でエラーが発生
+    /// - コミット/ロールバック失敗
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let result = uow.execute_in_transaction(|conn| {
+    ///     diesel::insert_into(users::table)
+    ///         .values(&new_user)
+    ///         .execute(conn)?;
+    ///     Ok(user_id)
+    /// }).await?;
+    /// ```
+    pub async fn execute_in_transaction<F, R>(&self, f: F) -> Result<R, RepositoryError>
+    where
+        F: FnOnce(&mut PgConnection) -> Result<R, RepositoryError> + Send + 'static,
+        R: Send + 'static,
+    {
+        let pool = Arc::clone(&self.pool);
 
-impl Default for UnitOfWork {
-    fn default() -> Self {
-        Self::new()
+        // Diesel の同期 API を spawn_blocking でラップ
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+
+            // トランザクション開始
+            conn.transaction::<R, RepositoryError, _>(|conn| f(conn))
+        })
+        .await
+        .map_err(|e| RepositoryError::DatabaseError(format!("Task join error: {e}")))?
+    }
+
+    /// ネストトランザクション（セーブポイント）を実行
+    ///
+    /// 既存のトランザクション内でセーブポイントを作成し、
+    /// クロージャ内でエラーが発生した場合はそのセーブポイントまでロールバックします。
+    ///
+    /// # Type Parameters
+    ///
+    /// * `F` - セーブポイント内で実行する関数
+    /// * `R` - 関数の戻り値型
+    ///
+    /// # Arguments
+    ///
+    /// * `conn` - トランザクション中の PgConnection
+    /// * `f` - セーブポイント内で実行する関数
+    ///
+    /// # Errors
+    ///
+    /// - セーブポイント作成失敗
+    /// - クロージャ内でエラーが発生
+    /// - ロールバック失敗
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// conn.transaction::<_, RepositoryError, _>(|conn| {
+    ///     user_repo.save_with_connection(conn, user)?;
+    ///     
+    ///     // ネストトランザクション（失敗しても user は保存される）
+    ///     let _ = DieselUnitOfWork::with_savepoint(conn, |conn| {
+    ///         risky_operation(conn)
+    ///     });
+    ///     
+    ///     Ok(())
+    /// })
+    /// ```
+    pub fn with_savepoint<F, R>(
+        conn: &mut PgConnection,
+        f: F,
+    ) -> Result<R, RepositoryError>
+    where
+        F: FnOnce(&mut PgConnection) -> Result<R, RepositoryError>,
+    {
+        // Diesel の build_transaction() API を使用してセーブポイントを作成
+        conn.build_transaction()
+            .run::<R, RepositoryError, _>(|conn| f(conn))
+    }
+
+    /// トランザクション内で複数の操作を実行（タプルで結果を返す）
+    ///
+    /// 2つの操作を同じトランザクション内で実行し、両方の結果を返します。
+    /// どちらかが失敗した場合は両方ロールバックされます。
+    ///
+    /// # Type Parameters
+    ///
+    /// * `F1`, `F2` - 実行する関数
+    /// * `R1`, `R2` - 各関数の戻り値型
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let (user, post) = uow.execute_two_in_transaction(
+    ///     |conn| user_repo.find_by_id_with_connection(conn, user_id),
+    ///     |conn| post_repo.find_by_id_with_connection(conn, post_id),
+    /// ).await?;
+    /// ```
+    pub async fn execute_two_in_transaction<F1, F2, R1, R2>(
+        &self,
+        f1: F1,
+        f2: F2,
+    ) -> Result<(R1, R2), RepositoryError>
+    where
+        F1: FnOnce(&mut PgConnection) -> Result<R1, RepositoryError> + Send + 'static,
+        F2: FnOnce(&mut PgConnection) -> Result<R2, RepositoryError> + Send + 'static,
+        R1: Send + 'static,
+        R2: Send + 'static,
+    {
+        self.execute_in_transaction(move |conn| {
+            let r1 = f1(conn)?;
+            let r2 = f2(conn)?;
+            Ok((r1, r2))
+        })
+        .await
+    }
+
+    /// トランザクション内で3つの操作を実行（タプルで結果を返す）
+    pub async fn execute_three_in_transaction<F1, F2, F3, R1, R2, R3>(
+        &self,
+        f1: F1,
+        f2: F2,
+        f3: F3,
+    ) -> Result<(R1, R2, R3), RepositoryError>
+    where
+        F1: FnOnce(&mut PgConnection) -> Result<R1, RepositoryError> + Send + 'static,
+        F2: FnOnce(&mut PgConnection) -> Result<R2, RepositoryError> + Send + 'static,
+        F3: FnOnce(&mut PgConnection) -> Result<R3, RepositoryError> + Send + 'static,
+        R1: Send + 'static,
+        R2: Send + 'static,
+        R3: Send + 'static,
+    {
+        self.execute_in_transaction(move |conn| {
+            let r1 = f1(conn)?;
+            let r2 = f2(conn)?;
+            let r3 = f3(conn)?;
+            Ok((r1, r2, r3))
+        })
+        .await
     }
 }
 
@@ -134,48 +217,113 @@ impl Default for UnitOfWork {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::database::schema::users;
+    use diesel::r2d2::{self, ConnectionManager};
+
+    /// テスト用のコネクションプールを作成
+    fn create_test_pool() -> Arc<Pool<ConnectionManager<PgConnection>>> {
+        let database_url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://postgres:password@localhost/cms_test".to_string());
+
+        let manager = ConnectionManager::<PgConnection>::new(database_url);
+        let pool = r2d2::Pool::builder()
+            .max_size(1) // テストでは1接続で十分
+            .build(manager)
+            .expect("Failed to create pool");
+
+        Arc::new(pool)
+    }
+
+    #[tokio::test]
+    #[ignore] // 実際の DB 接続が必要
+    async fn test_execute_in_transaction_commit() {
+        let pool = create_test_pool();
+        let uow = DieselUnitOfWork::new(pool);
+
+        let result = uow
+            .execute_in_transaction(|conn| {
+                // トランザクション内でクエリを実行
+                let count: i64 = users::table.count().get_result(conn)?;
+                Ok(count)
+            })
+            .await;
+
+        assert!(result.is_ok(), "Transaction should succeed");
+    }
+
+    #[tokio::test]
+    #[ignore] // 実際の DB 接続が必要
+    async fn test_execute_in_transaction_rollback() {
+        let pool = create_test_pool();
+        let uow = DieselUnitOfWork::new(pool);
+
+        let result: Result<(), RepositoryError> = uow
+            .execute_in_transaction(|_conn| {
+                // エラーを返すとロールバックされる
+                Err(RepositoryError::DatabaseError(
+                    "Intentional error".to_string(),
+                ))
+            })
+            .await;
+
+        assert!(result.is_err(), "Transaction should rollback on error");
+    }
 
     #[test]
     fn test_unit_of_work_creation() {
-        let uow = UnitOfWork::new();
-        let _ = uow;
+        let pool = create_test_pool();
+        let _uow = DieselUnitOfWork::new(pool);
+        // 作成できることを確認
     }
 
-    #[test]
-    fn test_unit_of_work_default() {
-        let uow = UnitOfWork::default();
-        let _ = uow;
+    #[tokio::test]
+    #[ignore] // 実際の DB 接続が必要
+    async fn test_execute_two_in_transaction() {
+        let pool = create_test_pool();
+        let uow = DieselUnitOfWork::new(pool);
+
+        let result = uow
+            .execute_two_in_transaction(
+                |conn| {
+                    let count: i64 = users::table.count().get_result(conn)?;
+                    Ok(count)
+                },
+                |conn| {
+                    let count: i64 = users::table.count().get_result(conn)?;
+                    Ok(count + 1)
+                },
+            )
+            .await;
+
+        assert!(result.is_ok(), "Two operations should succeed");
+        if let Ok((r1, r2)) = result {
+            assert_eq!(r1 + 1, r2, "Second operation should return incremented value");
+        }
     }
 
-    #[cfg(feature = "restructure_application")]
-    #[test]
-    fn test_unit_of_work_get_repositories() {
-        let uow = UnitOfWork::new();
-        let _users = uow.users();
-        let _posts = uow.posts();
-        let _comments = uow.comments();
-        let _tags = uow.tags();
-        let _categories = uow.categories();
-    }
+    #[tokio::test]
+    #[ignore] // 実際の DB 接続が必要
+    async fn test_execute_three_in_transaction() {
+        let pool = create_test_pool();
+        let uow = DieselUnitOfWork::new(pool);
 
-    #[test]
-    fn test_unit_of_work_begin_not_implemented() {
-        let uow = UnitOfWork::new();
-        let result = uow.begin();
-        assert!(matches!(result, Err(ApplicationError::RepositoryError(_))));
-    }
+        let result = uow
+            .execute_three_in_transaction(
+                |conn| {
+                    let count: i64 = users::table.count().get_result(conn)?;
+                    Ok(count)
+                },
+                |conn| {
+                    let count: i64 = users::table.count().get_result(conn)?;
+                    Ok(count + 1)
+                },
+                |conn| {
+                    let count: i64 = users::table.count().get_result(conn)?;
+                    Ok(count + 2)
+                },
+            )
+            .await;
 
-    #[test]
-    fn test_unit_of_work_commit_not_implemented() {
-        let uow = UnitOfWork::new();
-        let result = uow.commit();
-        assert!(matches!(result, Err(ApplicationError::RepositoryError(_))));
-    }
-
-    #[test]
-    fn test_unit_of_work_rollback_not_implemented() {
-        let uow = UnitOfWork::new();
-        let result = uow.rollback();
-        assert!(matches!(result, Err(ApplicationError::RepositoryError(_))));
+        assert!(result.is_ok(), "Three operations should succeed");
     }
 }
