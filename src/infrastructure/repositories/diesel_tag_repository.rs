@@ -1,29 +1,20 @@
 // src/infrastructure/database/repositories/diesel_tag_repository.rs
 //! Diesel ベースの Tag Repository 実装（Phase 6.3）
+//!
+//! Phase 3 Refactoring: Feature gate をファイルレベルに統一（stub実装削除）
 
-#[cfg(feature = "restructure_domain")]
+#![cfg(feature = "restructure_domain")]
+
 use crate::application::ports::repositories::RepositoryError;
-#[cfg(feature = "restructure_domain")]
 use crate::application::ports::repositories::TagRepository;
-#[cfg(feature = "restructure_domain")]
 use crate::domain::tag::{Tag, TagDescription, TagId, TagName};
 
 /// Diesel-backed TagRepository implementation（Phase 6.3）
 #[derive(Clone)]
 pub struct DieselTagRepository {
-    #[cfg(feature = "restructure_domain")]
     db: crate::database::Database,
 }
 
-#[cfg(not(feature = "restructure_domain"))]
-impl DieselTagRepository {
-    #[must_use]
-    pub fn new(_db: crate::database::Database) -> Self {
-        Self {}
-    }
-}
-
-#[cfg(feature = "restructure_domain")]
 impl DieselTagRepository {
     #[must_use]
     pub fn new(db: crate::database::Database) -> Self {
@@ -35,38 +26,41 @@ impl DieselTagRepository {
     ///
     /// Tuple: (id, name, description, usage_count, created_at, updated_at)
     ///
-    /// Note: Tag::new() creates a new ID, so we reconstruct the tag
-    /// and the ID from the database is noted but Tag owns its own generated ID.
-    /// For proper database synchronization, we would need a way to set ID from database.
-    /// For now, we return a new Tag entity that was created from database values.
+    /// Phase 3 Refactoring: Tag::restore() を使用してDB IDを保持
     fn reconstruct_tag(
-        _id: uuid::Uuid,
+        id: uuid::Uuid,
         name: String,
         description: String,
-        _usage_count: i32,
-        _created_at: chrono::DateTime<chrono::Utc>,
-        _updated_at: chrono::DateTime<chrono::Utc>,
+        usage_count: i32,
+        created_at: chrono::DateTime<chrono::Utc>,
+        updated_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<Tag, RepositoryError> {
+        // Validate and create TagId from database value
+        let tag_id = TagId::from_uuid(id);
+
         // Validate and create TagName from database value
         let tag_name = TagName::new(name)
-            .map_err(|e| RepositoryError::DatabaseError(format!("Invalid tag name: {}", e)))?;
+            .map_err(|e| RepositoryError::ConversionError(format!("Invalid tag name: {}", e)))?;
 
         // Validate and create TagDescription from database value
         let tag_description = TagDescription::new(description).map_err(|e| {
-            RepositoryError::DatabaseError(format!("Invalid tag description: {}", e))
+            RepositoryError::ConversionError(format!("Invalid tag description: {}", e))
         })?;
 
-        // Create Tag entity from validated values
-        // Tag::new() creates a new ID automatically
-        // TODO: Add method to Tag to restore from database with existing ID
-        let tag = Tag::new(tag_name, tag_description)
-            .map_err(|e| RepositoryError::DatabaseError(format!("Failed to create tag: {}", e)))?;
+        // Restore Tag entity with database ID (not generating new ID)
+        let tag = Tag::restore(
+            tag_id,
+            tag_name,
+            tag_description,
+            i64::from(usage_count),
+            created_at,
+            updated_at,
+        );
 
         Ok(tag)
     }
 }
 
-#[cfg(feature = "restructure_domain")]
 #[async_trait::async_trait]
 impl TagRepository for DieselTagRepository {
     async fn save(&self, tag: Tag) -> Result<(), RepositoryError> {
@@ -175,60 +169,14 @@ impl TagRepository for DieselTagRepository {
     }
 }
 
-#[cfg(feature = "restructure_domain")]
-#[async_trait::async_trait]
-impl TagRepository for DieselTagRepository {
-    async fn save(&self, tag: crate::domain::tag::Tag) -> Result<(), RepositoryError> {
-        // Phase 6.1: Placeholder for database insertion
-        let _ = tag;
-        Ok(())
-    }
-
-    async fn find_by_id(
-        &self,
-        _id: TagId,
-    ) -> Result<Option<crate::domain::tag::Tag>, RepositoryError> {
-        // Phase 6.1: Placeholder for database query
-        Ok(None)
-    }
-
-    async fn find_by_name(
-        &self,
-        _name: &crate::domain::tag::TagName,
-    ) -> Result<Option<crate::domain::tag::Tag>, RepositoryError> {
-        // Phase 6.1: Placeholder for database query
-        Ok(None)
-    }
-
-    async fn delete(&self, _id: TagId) -> Result<(), RepositoryError> {
-        // Phase 6.1: Placeholder for database deletion
-        Ok(())
-    }
-
-    async fn list_all(
-        &self,
-        _limit: i64,
-        _offset: i64,
-    ) -> Result<Vec<crate::domain::tag::Tag>, RepositoryError> {
-        // Phase 6.1: Placeholder for database query
-        Ok(vec![])
-    }
-
-    async fn list_in_use(
-        &self,
-        _limit: i64,
-        _offset: i64,
-    ) -> Result<Vec<crate::domain::tag::Tag>, RepositoryError> {
-        // Phase 6.1: Placeholder for database query
-        Ok(vec![])
-    }
-}
-
 // ============================================================================
 // Phase 5 Tests: DieselTagRepository Comprehensive Test Suite
 // ============================================================================
+//
+// Note: File-level #![cfg(feature = "restructure_domain")] ensures these
+// tests only run when the feature is enabled. No need for redundant cfg here.
 
-#[cfg(all(test, feature = "restructure_domain"))]
+#[cfg(test)]
 mod phase5_tests {
     use super::*;
     use uuid::Uuid;

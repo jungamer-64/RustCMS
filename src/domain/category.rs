@@ -334,6 +334,46 @@ impl Category {
         })
     }
 
+    /// データベースから Category を復元（ID保持）
+    ///
+    /// Repository での使用を想定。`new()` はビジネスロジック用に新しいIDを生成するが、
+    /// `restore()` はデータベースから取得した既存のIDを保持する。
+    ///
+    /// # 引数
+    /// - `id`: データベースから取得したカテゴリID
+    /// - `name`: カテゴリ名（検証済み）
+    /// - `slug`: URL用スラッグ（検証済み）
+    /// - `description`: カテゴリ説明（検証済み）
+    /// - `post_count`: 投稿数
+    /// - `is_active`: アクティブ状態
+    /// - `created_at`: 作成日時
+    /// - `updated_at`: 更新日時
+    ///
+    /// # 戻り値
+    /// 復元されたCategoryエンティティ
+    #[must_use]
+    pub fn restore(
+        id: CategoryId,
+        name: CategoryName,
+        slug: CategorySlug,
+        description: CategoryDescription,
+        post_count: i64,
+        is_active: bool,
+        created_at: DateTime<Utc>,
+        updated_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            id,
+            name,
+            slug,
+            description,
+            post_count,
+            is_active,
+            created_at,
+            updated_at,
+        }
+    }
+
     /// カテゴリIDを取得
     #[must_use]
     pub fn id(&self) -> CategoryId {

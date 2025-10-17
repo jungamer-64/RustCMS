@@ -1,9 +1,11 @@
 // src/infrastructure/database/repositories/diesel_category_repository.rs
 //! Diesel ベースの Category Repository 実装（Phase 6.3）
+//!
+//! Phase 3 Refactoring: Feature gate をファイルレベルに統一（stub実装削除）
 
-#[cfg(feature = "restructure_domain")]
+#![cfg(feature = "restructure_domain")]
+
 use crate::application::ports::repositories::{CategoryRepository, RepositoryError};
-#[cfg(feature = "restructure_domain")]
 use crate::domain::category::{
     Category, CategoryDescription, CategoryId, CategoryName, CategorySlug,
 };
@@ -11,26 +13,9 @@ use crate::domain::category::{
 /// Diesel-backed CategoryRepository implementation（Phase 6.3）
 #[derive(Clone)]
 pub struct DieselCategoryRepository {
-    #[cfg(feature = "restructure_domain")]
     db: crate::database::Database,
 }
 
-#[cfg(not(feature = "restructure_domain"))]
-impl DieselCategoryRepository {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-#[cfg(not(feature = "restructure_domain"))]
-impl Default for DieselCategoryRepository {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[cfg(feature = "restructure_domain")]
 impl DieselCategoryRepository {
     #[must_use]
     pub fn new(db: crate::database::Database) -> Self {
@@ -42,49 +27,57 @@ impl DieselCategoryRepository {
     ///
     /// Tuple: (id, name, slug, description, parent_id, post_count, created_at, updated_at)
     ///
-    /// Note: Category::new() creates a new ID, so we reconstruct the category
-    /// and the ID from the database is noted but Category owns its own generated ID.
-    /// For proper database synchronization, we would need a way to set ID from database.
+    /// Note: Now uses Category::restore() to preserve database ID instead of generating new one.
     fn reconstruct_category(
-        _id: uuid::Uuid,
+        id: uuid::Uuid,
         name: String,
         slug: String,
         description: Option<String>,
         _parent_id: Option<uuid::Uuid>,
-        _post_count: i32,
-        _created_at: chrono::DateTime<chrono::Utc>,
-        _updated_at: chrono::DateTime<chrono::Utc>,
+        post_count: i32,
+        created_at: chrono::DateTime<chrono::Utc>,
+        updated_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<Category, RepositoryError> {
+        // Convert database UUID to CategoryId
+        let category_id = CategoryId::from_uuid(id);
+
         // Validate and create CategoryName from database value
-        let cat_name = CategoryName::new(name)
-            .map_err(|e| RepositoryError::DatabaseError(format!("Invalid category name: {}", e)))?;
+        let cat_name = CategoryName::new(name).map_err(|e| {
+            RepositoryError::ConversionError(format!("Invalid category name: {}", e))
+        })?;
 
         // Validate and create CategorySlug from database value
-        let cat_slug = CategorySlug::new(slug)
-            .map_err(|e| RepositoryError::DatabaseError(format!("Invalid category slug: {}", e)))?;
+        let cat_slug = CategorySlug::new(slug).map_err(|e| {
+            RepositoryError::ConversionError(format!("Invalid category slug: {}", e))
+        })?;
 
         // Validate and create CategoryDescription from database value (if present)
         let cat_description = if let Some(desc) = description {
             CategoryDescription::new(desc).map_err(|e| {
-                RepositoryError::DatabaseError(format!("Invalid category description: {}", e))
+                RepositoryError::ConversionError(format!("Invalid category description: {}", e))
             })?
         } else {
             CategoryDescription::new(String::new()).map_err(|e| {
-                RepositoryError::DatabaseError(format!("Invalid category description: {}", e))
+                RepositoryError::ConversionError(format!("Invalid category description: {}", e))
             })?
         };
 
-        // Create Category entity from validated values
-        // Category::new() creates a new ID automatically
-        let category = Category::new(cat_name, cat_slug, cat_description).map_err(|e| {
-            RepositoryError::DatabaseError(format!("Failed to create category: {}", e))
-        })?;
+        // Use Category::restore() to preserve database ID (not Category::new() which generates new ID)
+        let category = Category::restore(
+            category_id,
+            cat_name,
+            cat_slug,
+            cat_description,
+            i64::from(post_count),
+            true, // is_active - TODO: retrieve from database once schema supports it
+            created_at,
+            updated_at,
+        );
 
         Ok(category)
     }
 }
 
-#[cfg(feature = "restructure_domain")]
 #[async_trait::async_trait]
 impl CategoryRepository for DieselCategoryRepository {
     async fn save(&self, category: Category) -> Result<(), RepositoryError> {
@@ -196,8 +189,11 @@ impl CategoryRepository for DieselCategoryRepository {
 // ============================================================================
 // Phase 5 Tests: DieselCategoryRepository Comprehensive Test Suite
 // ============================================================================
+//
+// Note: File-level #![cfg(feature = "restructure_domain")] ensures these
+// tests only run when the feature is enabled. No need for redundant cfg here.
 
-#[cfg(all(test, feature = "restructure_domain"))]
+#[cfg(test)]
 mod phase5_tests {
     use super::*;
 

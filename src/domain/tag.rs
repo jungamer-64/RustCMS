@@ -247,6 +247,40 @@ impl Tag {
         })
     }
 
+    /// データベースから Tag を復元（ID保持）
+    ///
+    /// Repository での使用を想定。`new()` はビジネスロジック用に新しいIDを生成するが、
+    /// `restore()` はデータベースから取得した既存のIDを保持する。
+    ///
+    /// # 引数
+    /// - `id`: データベースから取得したTagId
+    /// - `name`: タグ名（検証済み）
+    /// - `description`: タグ説明（検証済み）
+    /// - `usage_count`: 使用数
+    /// - `created_at`: 作成日時
+    /// - `updated_at`: 更新日時
+    ///
+    /// # 戻り値
+    /// 既存のIDを持つTagエンティティ
+    #[must_use]
+    pub fn restore(
+        id: TagId,
+        name: TagName,
+        description: TagDescription,
+        usage_count: i64,
+        created_at: DateTime<Utc>,
+        updated_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            id,
+            name,
+            description,
+            usage_count,
+            created_at,
+            updated_at,
+        }
+    }
+
     /// タグIDを取得
     #[must_use]
     pub fn id(&self) -> TagId {
