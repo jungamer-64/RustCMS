@@ -110,11 +110,18 @@
 - ✅ **総テスト数**: 270個（Domain: 133, Application: 110, Infrastructure: 19, Integration: 14）
 - ✅ **テストカバレッジ**: 95%+
 
-### 🔜 Phase 4（次のフェーズ - Presentation Layer）
-- **Handler 簡素化**: Use Cases 呼び出しのみ
-- **API Versioning**: /api/v2/ エンドポイント実装
-- **レガシーコード削除**: src/handlers/ → src/web/handlers/ 移行
-- **統合テスト実行**: PostgreSQL統合テスト実行確認
+### � Phase 4 完了（70% - 2025年10月19日）
+- ✅ **Phase 4.1**: infrastructure/repositories/ 完全削除（-2,421行）
+- ✅ **Phase 4.2**: application/use_cases/ 部分削除（-2,950行）
+- ✅ **Phase 4.3**: bin/初期化ヘルパー追加（utils/init.rs）
+- ✅ **累積削除**: 5,431行（計画比144%達成）
+
+### 🚀 Phase 5 進行中（レガシーコード完全削除 - 2025年10月19日）
+- 🔄 **Phase 5.1**: 新AppState実装（infrastructure/app_state.rs）
+- 🔜 **Phase 5.2**: utils/init.rs更新（新AppState対応）
+- 🔜 **Phase 5.3**: 旧app.rs完全削除（-2,905行）
+- 🔜 **Phase 5.4**: bin/ファイル移行（12ファイル）
+- **方針**: レガシーコード（src/app.rs, src/models/）を完全削除し、DDD準拠の新実装のみ残す
 
 ## 2) 変更・実装時に最初に確認するファイル（優先度順）
 
@@ -124,7 +131,8 @@
   - **重要**: Value Objects 内に検証ロジックを集約。エラー型は `src/common/types.rs` の `DomainError` 使用
 - **`src/common/types.rs`** — 三層エラー型階層（180行）。`DomainError`, `ApplicationError`, `InfrastructureError`, `AppError`, Result 型エイリアス
   - 新しいエラーはここに追加し、`From<X> impl` で相互変換を実装
-- **`src/app.rs`** — AppState と初期化ロジック（2570行）。新機能追加時はここに optional フィールド ＋ `AppStateBuilder` に検査を追加
+- **`src/infrastructure/app_state.rs`** — 新AppState実装（Phase 5）。Database/Auth/Cache/Search統合、Builder パターン
+  - **重要**: DDD準拠、domain層の型のみ使用。旧app.rsは削除済み
 - **`src/events.rs`** — AppEvent enum と EventBus 型。新しいイベントはここで variant 追加
 - **`Cargo.toml` + `.github/workflows/ci.yml`** — Feature matrix 確認。新 feature 追加時は CI matrix に追加すること
 
@@ -136,8 +144,9 @@
 - **`.github/instructions/codacy.instructions.md`** — Codacy CLI 連携ルール（ファイル編集後は分析実行必須）
 
 ### 🔵 Reference
-- **`src/handlers/`, `src/repositories/`, `src/models/`** — レガシーコード。並行利用期間中のみ参照
 - **`config/`** — 実行時設定（default.toml / production.toml）
+- **⚠️ 削除済みレガシーコード**: `src/app.rs`（旧AppState）、`src/models/`（Phase 7で削除）、`src/repositories/`（Phase 4で削除）
+  - これらのコードは参照しないこと。新実装は `src/infrastructure/app_state.rs` と `src/domain/` を使用
 
 ## 3) 具体的なコード規約・パターン（このリポジトリ固有）
 
@@ -246,14 +255,14 @@
 ## 9) 参考（必読）
 - `src/domain/user.rs` — Value Objects + Entity 統合パターンの完成版（480行, 18 tests）
 - `src/common/types.rs` — 三層エラー型階層とResult型エイリアス（229行）
-- `src/app.rs` — AppState と初期化ロジック（2570行）
+- `src/infrastructure/app_state.rs` — 新AppState実装（Phase 5、DDD準拠）
 - `src/events.rs` — AppEvent enum / EventBus（イベント設計の単一の出発点）
 - `src/listeners.rs` — イベントリスナーの起動と実装方針
 - `src/error.rs` — 既存 AppError と HTTP マッピング
 - `.github/workflows/ci.yml` — CI の実行手順と feature matrix（ローカル検証はここを参照）
 - `RESTRUCTURE_PLAN.md` と `RESTRUCTURE_EXAMPLES.md` — 現在の再編計画と実装例（方針確認用）
 - `.github/instructions/codacy.instructions.md` — Codacy CLI 連携ルール（ファイル編集後はコマンド実行が必須なルールあり）
-- `RESTRUCTURE_SUMMARY.md` — Phase 進捗状況（Phase 2 進行中 🚀）
+- `PHASE4_FINAL_STATUS.md` と `PHASE5_STRATEGY_DECISION.md` — Phase 4/5 進捗状況
 
 ---
 

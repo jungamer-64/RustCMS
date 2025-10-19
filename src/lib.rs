@@ -29,8 +29,6 @@ use axum::response::{IntoResponse, Json};
 use serde_json::json;
 
 // Core modules
-#[cfg(not(feature = "restructure_domain"))]
-pub mod app; // Phase 6-D: Legacy AppState (disabled with restructure_domain)
 pub mod config;
 pub mod error;
 pub mod telemetry;
@@ -141,9 +139,9 @@ pub mod middleware;
 pub mod utils; // Phase 7: Minimal utility set (legacy removed)
 
 // Re-export core types for API
-// Phase 4: AppState re-export (only when not using restructure_domain)
-#[cfg(not(feature = "restructure_domain"))]
-pub use app::AppState;
+// Phase 5: AppState re-export (new DDD implementation only)
+#[cfg(feature = "restructure_domain")]
+pub use infrastructure::app_state::AppState;
 
 pub use config::Config;
 pub use error::{AppError, Result};

@@ -11,6 +11,9 @@
 // Phase 3: 新しいインフラストラクチャ層構造（監査済み）
 // ============================================================================
 
+// Phase 5: AppState 新実装（DDD準拠、レガシーapp.rs削除に伴う）
+pub mod app_state;
+
 // Phase 3 実装中: restructure_domain フラグで新 database 層を有効化
 #[cfg(all(feature = "restructure_domain", feature = "database"))]
 pub mod database;
