@@ -73,6 +73,20 @@ impl From<UserId> for Uuid {
     }
 }
 
+impl UserId {
+    /// Phase 6-C: Parse UserId from string
+    /// 
+    /// # Errors
+    /// 
+    /// Returns `DomainError::InvalidUserId` if the string is not a valid UUID
+    pub fn from_string(s: &str) -> Result<Self, crate::common::error_types::DomainError> {
+        use crate::common::error_types::DomainError;
+        Uuid::parse_str(s)
+            .map(Self)
+            .map_err(|_| DomainError::InvalidUserId(format!("Invalid UUID string: {}", s)))
+    }
+}
+
 /// Email（検証済み）
 ///
 /// # 不変条件

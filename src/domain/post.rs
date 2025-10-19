@@ -81,6 +81,20 @@ impl From<PostId> for Uuid {
     }
 }
 
+impl PostId {
+    /// Phase 6-C: Parse PostId from string
+    /// 
+    /// # Errors
+    /// 
+    /// Returns `DomainError::InvalidPostId` if the string is not a valid UUID
+    pub fn from_string(s: &str) -> Result<Self, crate::common::error_types::DomainError> {
+        use crate::common::error_types::DomainError;
+        Uuid::parse_str(s)
+            .map(Self)
+            .map_err(|_| DomainError::InvalidPostId(format!("Invalid UUID string: {}", s)))
+    }
+}
+
 /// Slug（URL用スラッグ、検証済み）
 ///
 /// # 不変条件
@@ -615,6 +629,24 @@ impl Post {
     #[must_use]
     pub const fn is_archived(&self) -> bool {
         matches!(self.status, PostStatus::Archived)
+    }
+
+    // Phase 6-C: Handler compatibility aliases
+    
+    /// タイトルを更新する（change_title のエイリアス）
+    pub fn update_title(&mut self, new_title: Title) {
+        self.change_title(new_title);
+    }
+
+    /// コンテンツを更新する（change_content のエイリアス）
+    pub fn update_content(&mut self, new_content: Content) {
+        self.change_content(new_content);
+    }
+
+    /// 抜粋を更新する（未実装のため空実装）
+    pub fn update_excerpt(&mut self, _excerpt: String) {
+        // TODO: Phase 7 で Excerpt value object 実装時に完全実装
+        self.updated_at = Utc::now();
     }
 }
 

@@ -1,31 +1,39 @@
-// src/handlers/mod.rs
-//! API Handlers - Request processing and business logic
+// src/web/handlers/mod.rs
+//! API Handlers - V2 Handlers (New DDD Structure)
 //!
-//! Simplified handlers for compilation testing
+//! Phase 7: Legacy handlers removed, only v2 handlers remain
 
-use crate::{AppError, openapi::ApiDoc};
+use crate::AppError;
 use axum::{
     http::StatusCode,
     response::{Html, IntoResponse, Json},
 };
 use serde_json::{Value as JsonValue, json};
-use utoipa::OpenApi;
 
-pub mod admin;
-pub mod api_keys;
-#[cfg(feature = "auth")]
-pub mod auth;
-#[cfg(not(feature = "auth"))]
-/// Placeholder `handlers::auth` module so OpenAPI derive and other
-/// compile-time references can resolve when `auth` feature is disabled.
-pub mod auth {
-    // intentionally empty - real handlers are compiled only with `auth`
-}
-pub mod health;
-pub mod metrics;
-pub mod posts;
-pub mod search;
-pub mod users;
+// V2 Handlers (New DDD Structure)
+pub mod categories_v2;
+pub mod comments_v2;
+pub mod health_v2;
+pub mod posts_v2;
+pub mod users_v2;
+
+// ============================================================================
+// Phase 4 New Structure - CQRS統合ハンドラ（監査推奨）
+// ============================================================================
+#[cfg(feature = "restructure_domain")]
+pub mod users_v2;
+
+#[cfg(feature = "restructure_domain")]
+pub mod posts_v2;
+
+#[cfg(feature = "restructure_domain")]
+pub mod comments_v2;
+
+#[cfg(feature = "restructure_domain")]
+pub mod categories_v2;
+
+#[cfg(feature = "restructure_domain")]
+pub mod health_v2;
 
 // Public endpoints and HTTP methods used to determine security configuration.
 // NOTE: When adding new unauthenticated endpoints, update this list to keep the

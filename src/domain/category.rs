@@ -219,6 +219,21 @@ impl From<CategorySlug> for String {
     }
 }
 
+impl CategorySlug {
+    /// Phase 6-C: Create CategorySlug from name (auto-slugify)
+    /// 
+    /// Converts a category name to a URL-safe slug
+    pub fn from_name(name: &str) -> Result<Self, DomainError> {
+        let slug = name
+            .to_lowercase()
+            .replace(' ', "-")
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+            .collect::<String>();
+        Self::new(slug)
+    }
+}
+
 /// カテゴリ説明（検証済み）
 ///
 /// # 不変条件

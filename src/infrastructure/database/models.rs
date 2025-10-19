@@ -1,28 +1,9 @@
-//! Diesel データベースモデル ↔ Domain Entity マッピング層（Phase 3 プレースホルダー）
-//!
-//! このモジュールは、データベーススキーマ（Diesel モデル）と Domain層の Entity 型の間の
-//! 型安全な変換インターフェースを提供します。
-//!
-//! # 設計原則
-//!
-//! - **単方向性**: DB層は Domain層に依存するが、Domain層はDB層に依存しない（依存性の逆転）
-//! - **変換の局所化**: すべての変換をこのモジュールに集約
-//! - **エラーハンドリング**: 型変換エラーは `InfrastructureError` でラップ
-//!
-//! # Phase 3 実装状況
-//!
-//! - ✅ Diesel モデル構造体定義（5 entities）
-//! - ⏳ Domain Entity への変換（プレースホルダー）
+//! Diesel database models for infrastructure layer
 
-use crate::common::types::InfrastructureError;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-// ============================================================================
-// User モデルマッピング
-// ============================================================================
-
-/// Diesel User モデル（DB スキーマから自動生成）
+// User model
 #[derive(diesel::Queryable, diesel::Selectable, diesel::Identifiable, Debug, Clone)]
 #[diesel(table_name = crate::database::schema::users)]
 pub struct DbUser {
@@ -40,7 +21,6 @@ pub struct DbUser {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Diesel User のための新規挿入用構造体
 #[derive(diesel::Insertable, Debug, Clone)]
 #[diesel(table_name = crate::database::schema::users)]
 pub struct NewDbUser {
@@ -58,32 +38,7 @@ pub struct NewDbUser {
     pub updated_at: DateTime<Utc>,
 }
 
-impl DbUser {
-    /// Domain層の User Entity に変換
-    ///
-    /// # Note
-    ///
-    /// Phase 3 では、Domain層に `new_from_db()` ファクトリメソッドを追加し、
-    /// DB値から User を再構築するロジックを実装します。
-    /// 現在はプレースホルダー実装です。
-    pub fn into_domain(self) -> Result<(), InfrastructureError> {
-        // TODO: Phase 3 拡張
-        // Step 1: UserId, Email, Username などの値オブジェクトを検証
-        // Step 2: User::new_from_db(...) でエンティティ再構築
-        // Step 3: 既存 User Entity と互換性確認
-        Err(InfrastructureError::DatabaseError(
-            "DbUser::into_domain() not yet implemented (Phase 3)".to_string(),
-        ))
-    }
-}
-
-// TODO: Phase 3 拡張で From<&User> 実装を追加（Domain層の整備後）
-
-// ============================================================================
-// Post モデルマッピング
-// ============================================================================
-
-/// Diesel Post モデル（DB スキーマ）
+// Post model
 #[derive(diesel::Queryable, diesel::Selectable, diesel::Identifiable, Debug, Clone)]
 #[diesel(table_name = crate::database::schema::posts)]
 pub struct DbPost {
@@ -104,7 +59,6 @@ pub struct DbPost {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Diesel Post 挿入モデル
 #[derive(diesel::Insertable, Debug, Clone)]
 #[diesel(table_name = crate::database::schema::posts)]
 pub struct NewDbPost {
@@ -125,99 +79,9 @@ pub struct NewDbPost {
     pub updated_at: DateTime<Utc>,
 }
 
-impl DbPost {
-    /// Diesel モデルを Domain Entity に変換（Phase 3 プレースホルダー）
-    pub fn into_domain(self) -> Result<(), InfrastructureError> {
-        // TODO: Phase 3 拡張で Post::new_from_db() を呼び出し
-        Err(InfrastructureError::DatabaseError(
-            "DbPost::into_domain() - Phase 3 拡張で実装予定".to_string(),
-        ))
-    }
-}
-
-// TODO: Phase 3 拡張で From<&Post> 実装を追加
-
-// ============================================================================
-// Category モデルマッピング
-// ============================================================================
-
-/// Diesel Category モデル
-pub struct DbCategory {
-    pub id: Uuid,
-    pub name: String,
-    pub slug: String,
-    pub description: Option<String>,
-    pub is_active: bool,
-    pub post_count: i32,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-/// Diesel Category のための新規挿入用構造体
-pub struct NewDbCategory {
-    pub id: Uuid,
-    pub name: String,
-    pub slug: String,
-    pub description: Option<String>,
-    pub is_active: bool,
-    pub post_count: i32,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-impl DbCategory {
-    /// Diesel モデルを Domain Entity に変換（Phase 3 プレースホルダー）
-    pub fn into_domain(self) -> Result<(), InfrastructureError> {
-        // TODO: Phase 3 拡張で Category::new_from_db() を呼び出し
-        Err(InfrastructureError::DatabaseError(
-            "DbCategory::into_domain() - Phase 3 拡張で実装予定".to_string(),
-        ))
-    }
-}
-
-// TODO: Phase 3 拡張で From<&Category> 実装を追加
-
-// ============================================================================
-// Tag モデルマッピング
-// ============================================================================
-
-/// Diesel Tag モデル
-pub struct DbTag {
-    pub id: Uuid,
-    pub name: String,
-    pub slug: String,
-    pub usage_count: i32,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-/// Diesel Tag のための新規挿入用構造体
-pub struct NewDbTag {
-    pub id: Uuid,
-    pub name: String,
-    pub slug: String,
-    pub usage_count: i32,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-impl DbTag {
-    /// Diesel モデルを Domain Entity に変換（Phase 3 プレースホルダー）
-    pub fn into_domain(self) -> Result<(), InfrastructureError> {
-        // TODO: Phase 3 拡張で Tag::new_from_db() を呼び出し
-        Err(InfrastructureError::DatabaseError(
-            "DbTag::into_domain() - Phase 3 拡張で実装予定".to_string(),
-        ))
-    }
-}
-
-// TODO: Phase 3 拡張で From<&Tag> 実装を追加
-
-// ============================================================================
-// Comment モデルマッピング
-// ============================================================================
-
-/// Diesel Comment モデル
+// Comment model
+#[derive(diesel::Queryable, diesel::Selectable, diesel::Identifiable, Debug, Clone)]
+#[diesel(table_name = crate::database::schema::comments)]
 pub struct DbComment {
     pub id: Uuid,
     pub post_id: Uuid,
@@ -229,7 +93,8 @@ pub struct DbComment {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Diesel Comment のための新規挿入用構造体
+#[derive(diesel::Insertable, Debug, Clone)]
+#[diesel(table_name = crate::database::schema::comments)]
 pub struct NewDbComment {
     pub id: Uuid,
     pub post_id: Uuid,
@@ -241,109 +106,223 @@ pub struct NewDbComment {
     pub updated_at: DateTime<Utc>,
 }
 
-impl DbComment {
-    /// Diesel モデルを Domain Entity に変換（Phase 3 プレースホルダー）
-    pub fn into_domain(self) -> Result<(), InfrastructureError> {
-        // TODO: Phase 3 拡張で Comment::new_from_db() を呼び出し
-        Err(InfrastructureError::DatabaseError(
-            "DbComment::into_domain() - Phase 3 拡張で実装予定".to_string(),
-        ))
-    }
+// Category model
+#[derive(diesel::Queryable, diesel::Selectable, diesel::Identifiable, Debug, Clone)]
+#[diesel(table_name = crate::database::schema::categories)]
+pub struct DbCategory {
+    pub id: Uuid,
+    pub name: String,
+    pub slug: String,
+    pub description: Option<String>,
+    pub is_active: bool,
+    pub post_count: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
-// TODO: Phase 3 拡張で From<&Comment> 実装を追加
+#[derive(diesel::Insertable, Debug, Clone)]
+#[diesel(table_name = crate::database::schema::categories)]
+pub struct NewDbCategory {
+    pub id: Uuid,
+    pub name: String,
+    pub slug: String,
+    pub description: Option<String>,
+    pub is_active: bool,
+    pub post_count: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// Tag model
+#[derive(diesel::Queryable, diesel::Selectable, diesel::Identifiable, Debug, Clone)]
+#[diesel(table_name = crate::database::schema::tags)]
+pub struct DbTag {
+    pub id: Uuid,
+    pub name: String,
+    pub slug: String,
+    pub usage_count: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(diesel::Insertable, Debug, Clone)]
+#[diesel(table_name = crate::database::schema::tags)]
+pub struct NewDbTag {
+    pub id: Uuid,
+    pub name: String,
+    pub slug: String,
+    pub usage_count: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_db_user_struct_creation() {
-        let db_user = DbUser {
-            id: Uuid::new_v4(),
-            username: "testuser".to_string(),
+    fn test_db_models_creation() {
+        let user_id = Uuid::new_v4();
+        let now = Utc::now();
+        let user = DbUser {
+            id: user_id,
+            username: "test".to_string(),
             email: "test@example.com".to_string(),
             password_hash: Some("hash".to_string()),
-            first_name: Some("Test".to_string()),
-            last_name: Some("User".to_string()),
-            role: "admin".to_string(),
+            first_name: Some("first".to_string()),
+            last_name: Some("last".to_string()),
+            role: "user".to_string(),
             is_active: true,
-            email_verified: true,
-            last_login: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            email_verified: false,
+            last_login: Some(now),
+            created_at: now,
+            updated_at: now,
         };
+        assert_eq!(user.id, user_id);
+        assert_eq!(user.username, "test");
 
-        assert_eq!(db_user.username, "testuser");
-        assert_eq!(db_user.role, "admin");
-    }
-
-    #[test]
-    fn test_db_post_struct_creation() {
-        let db_post = DbPost {
-            id: Uuid::new_v4(),
-            title: "Test Post".to_string(),
-            slug: "test-post".to_string(),
-            content: "Content here".to_string(),
-            excerpt: Some("Short excerpt".to_string()),
-            author_id: Uuid::new_v4(),
-            status: "published".to_string(),
-            featured_image_id: None,
-            published_at: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+        let post_id = Uuid::new_v4();
+        let post = DbPost {
+            id: post_id,
+            title: "Test".to_string(),
+            slug: "test".to_string(),
+            content: "Content".to_string(),
+            excerpt: Some("excerpt".to_string()),
+            author_id: user_id,
+            status: "draft".to_string(),
+            featured_image_id: Some(Uuid::new_v4()),
+            tags: vec!["tag1".to_string()],
+            categories: vec!["cat1".to_string()],
+            meta_title: Some("meta".to_string()),
+            meta_description: Some("desc".to_string()),
+            published_at: Some(now),
+            created_at: now,
+            updated_at: now,
         };
+        assert_eq!(post.id, post_id);
+        assert_eq!(post.title, "Test");
 
-        assert_eq!(db_post.title, "Test Post");
-        assert_eq!(db_post.status, "published");
-    }
-
-    #[test]
-    fn test_db_category_struct_creation() {
-        let db_category = DbCategory {
-            id: Uuid::new_v4(),
-            name: "Technology".to_string(),
-            slug: "technology".to_string(),
-            description: Some("Tech articles".to_string()),
-            is_active: true,
-            post_count: 5,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        };
-
-        assert_eq!(db_category.name, "Technology");
-        assert_eq!(db_category.post_count, 5);
-    }
-
-    #[test]
-    fn test_db_tag_struct_creation() {
-        let db_tag = DbTag {
-            id: Uuid::new_v4(),
-            name: "rust".to_string(),
-            slug: "rust".to_string(),
-            usage_count: 10,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        };
-
-        assert_eq!(db_tag.name, "rust");
-        assert_eq!(db_tag.usage_count, 10);
-    }
-
-    #[test]
-    fn test_db_comment_struct_creation() {
-        let db_comment = DbComment {
-            id: Uuid::new_v4(),
-            post_id: Uuid::new_v4(),
-            author_id: Uuid::new_v4(),
-            content: "Great post!".to_string(),
+        let comment_id = Uuid::new_v4();
+        let comment = DbComment {
+            id: comment_id,
+            post_id,
+            author_id: user_id,
+            content: "comment".to_string(),
             parent_id: None,
             is_approved: true,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: now,
+            updated_at: now,
         };
+        assert_eq!(comment.id, comment_id);
+        assert_eq!(comment.content, "comment");
 
-        assert_eq!(db_comment.content, "Great post!");
-        assert!(db_comment.is_approved);
+        let category_id = Uuid::new_v4();
+        let category = DbCategory {
+            id: category_id,
+            name: "Category".to_string(),
+            slug: "category".to_string(),
+            description: Some("desc".to_string()),
+            is_active: true,
+            post_count: 1,
+            created_at: now,
+            updated_at: now,
+        };
+        assert_eq!(category.id, category_id);
+        assert_eq!(category.name, "Category");
+
+        let tag_id = Uuid::new_v4();
+        let tag = DbTag {
+            id: tag_id,
+            name: "Tag".to_string(),
+            slug: "tag".to_string(),
+            usage_count: 1,
+            created_at: now,
+            updated_at: now,
+        };
+        assert_eq!(tag.id, tag_id);
+        assert_eq!(tag.name, "Tag");
+    }
+
+    #[test]
+    fn test_new_db_models_creation() {
+        let user_id = Uuid::new_v4();
+        let now = Utc::now();
+        let new_user = NewDbUser {
+            id: user_id,
+            username: "new_test".to_string(),
+            email: "new_test@example.com".to_string(),
+            password_hash: Some("new_hash".to_string()),
+            first_name: Some("new_first".to_string()),
+            last_name: Some("new_last".to_string()),
+            role: "admin".to_string(),
+            is_active: false,
+            email_verified: true,
+            last_login: None,
+            created_at: now,
+            updated_at: now,
+        };
+        assert_eq!(new_user.id, user_id);
+        assert_eq!(new_user.username, "new_test");
+
+        let post_id = Uuid::new_v4();
+        let new_post = NewDbPost {
+            id: post_id,
+            title: "New Post".to_string(),
+            slug: "new-post".to_string(),
+            content: "New Content".to_string(),
+            excerpt: None,
+            author_id: user_id,
+            status: "published".to_string(),
+            featured_image_id: None,
+            tags: vec![],
+            categories: vec![],
+            meta_title: None,
+            meta_description: None,
+            published_at: Some(now),
+            created_at: now,
+            updated_at: now,
+        };
+        assert_eq!(new_post.id, post_id);
+        assert_eq!(new_post.title, "New Post");
+
+        let comment_id = Uuid::new_v4();
+        let new_comment = NewDbComment {
+            id: comment_id,
+            post_id,
+            author_id: user_id,
+            content: "new comment".to_string(),
+            parent_id: Some(Uuid::new_v4()),
+            is_approved: false,
+            created_at: now,
+            updated_at: now,
+        };
+        assert_eq!(new_comment.id, comment_id);
+        assert_eq!(new_comment.content, "new comment");
+
+        let category_id = Uuid::new_v4();
+        let new_category = NewDbCategory {
+            id: category_id,
+            name: "New Category".to_string(),
+            slug: "new-category".to_string(),
+            description: None,
+            is_active: false,
+            post_count: 0,
+            created_at: now,
+            updated_at: now,
+        };
+        assert_eq!(new_category.id, category_id);
+        assert_eq!(new_category.name, "New Category");
+
+        let tag_id = Uuid::new_v4();
+        let new_tag = NewDbTag {
+            id: tag_id,
+            name: "New Tag".to_string(),
+            slug: "new-tag".to_string(),
+            usage_count: 0,
+            created_at: now,
+            updated_at: now,
+        };
+        assert_eq!(new_tag.id, tag_id);
+        assert_eq!(new_tag.name, "New Tag");
     }
 }

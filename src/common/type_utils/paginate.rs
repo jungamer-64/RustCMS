@@ -1,3 +1,6 @@
+//! Phase 6-E: Legacy pagination utils (disabled with restructure_domain)
+#![cfg(not(feature = "restructure_domain"))]
+
 use crate::models::pagination::Paginated;
 
 /// Generic helper to fetch items and total count, returning `Paginated<T>`.

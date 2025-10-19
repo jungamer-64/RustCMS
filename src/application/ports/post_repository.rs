@@ -10,12 +10,14 @@ pub trait PostRepository: Send + Sync {
     async fn find_by_id(&self, id: PostId) -> Result<Option<Self::Post>, RepositoryError>;
     async fn save(&self, post: &Self::Post) -> Result<(), RepositoryError>;
     /// Create a new post from a request object
+    #[cfg(not(feature = "restructure_domain"))]
     async fn create(
         &self,
         request: crate::models::CreatePostRequest,
     ) -> Result<Self::Post, RepositoryError>;
 
     /// Update an existing post
+    #[cfg(not(feature = "restructure_domain"))]
     async fn update(
         &self,
         id: crate::domain::value_objects::PostId,

@@ -1,15 +1,22 @@
 //! Common response types for API
 //!
-//! Unified response structures used across all handlers
+//! Phase 6-B: Legacy models dependency, protected with feature flag
+//! Use application/dto/user.rs for new structure
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
+#[cfg(not(feature = "restructure_domain"))]
 use crate::dto_from_model;
+#[cfg(not(feature = "restructure_domain"))]
 use crate::models::{User, UserRole}; // macro
 
+#[cfg(feature = "restructure_domain")]
+use crate::application::dto::user::UserDto;
+
 /// Unified user information for API responses
+#[cfg(not(feature = "restructure_domain"))]
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UserInfo {
     pub id: String,
@@ -18,6 +25,23 @@ pub struct UserInfo {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub role: UserRole,
+    pub is_active: bool,
+    pub email_verified: bool,
+    pub last_login: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// Phase 6-C: Simplified UserInfo for new structure (role as String)
+#[cfg(feature = "restructure_domain")]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UserInfo {
+    pub id: String,
+    pub username: String,
+    pub email: String,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub role: String, // TODO: Phase 7 - Implement UserRole in domain layer
     pub is_active: bool,
     pub email_verified: bool,
     pub last_login: Option<DateTime<Utc>>,
@@ -56,6 +80,7 @@ impl AsRef<str> for SessionId {
     }
 }
 
+#[cfg(not(feature = "restructure_domain"))]
 dto_from_model!(UserInfo, User, |u| UserInfo {
     id: u.id.to_string(),
     username: u.username.clone(),

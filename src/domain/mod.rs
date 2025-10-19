@@ -15,14 +15,9 @@ pub mod events;
 #[cfg(feature = "restructure_domain")]
 pub mod services;
 
-// Database models re-export or placeholder depending on feature
-#[cfg(feature = "database")]
-pub mod models {
-    pub use crate::models::*;
-}
-
-#[cfg(not(feature = "database"))]
-pub mod models {}
+// Phase 6-A: Removed legacy models re-export
+// Database models are now in infrastructure/database/models.rs
+// Domain entities are defined in this module (user.rs, post.rs, etc.)
 
 // Value objects facade (may be expanded during migration)
 pub mod value_objects;

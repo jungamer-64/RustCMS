@@ -1,3 +1,6 @@
+//! Phase 6-E: Legacy cache helpers (disabled with restructure_domain)
+#![cfg(not(feature = "restructure_domain"))]
+
 use std::time::Duration;
 
 /// Cache-or-compute helper that hides cache feature flag branching.

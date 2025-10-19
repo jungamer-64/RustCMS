@@ -13,14 +13,17 @@
 //! - Broadcast channel を使用した非同期イベント配信
 
 pub mod bus;
+#[cfg(not(feature = "restructure_domain"))]
 pub mod listeners;
 
 // Re-exports for convenience
 pub use bus::{AppEvent, EventBus, create_event_bus};
+#[cfg(not(feature = "restructure_domain"))]
 pub use listeners::spawn_event_listeners;
 
 /// Events prelude
 pub mod prelude {
     pub use super::bus::{AppEvent, EventBus, create_event_bus};
+    #[cfg(not(feature = "restructure_domain"))]
     pub use super::listeners::spawn_event_listeners;
 }

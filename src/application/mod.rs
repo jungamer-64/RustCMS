@@ -1,41 +1,79 @@
-//! アプリケーション層 (Application Layer)
+//! アプリケーション層 (Application Layer) - 監査済み構造
 //!
-//! ユースケースの実装とポート定義を担うレイヤーです。
-//! - Use Cases: ビジネスユースケースの実装
-//! - Ports: インターフェース定義（Repository, Service等）
-//! - DTOs: Data Transfer Objects
-//! - Commands/Queries: CQRS パターン
-//! - AppContainer: Use Case 集約・DI コンテナ
+//! Commands + Queries + DTOs を統合した CQRS パターンを採用します。
+//!
+//! ## 構造（監査推奨）
+//! - **user.rs**: User CQRS統合（Commands + Queries + DTOs）
+//! - **post.rs**: Post CQRS統合（Commands + Queries + DTOs）
+//! - **comment.rs**: Comment CQRS統合（Commands + Queries + DTOs）
+//! - **category.rs**: Category CQRS統合（Commands + Queries + DTOs）
+//! - **dto/**: 共通DTOモジュール（pagination等）
+//! - **ports/**: インターフェース定義（Repository, Service等）
+//!
+//! ## 設計原則
+//! - Entity + Value Objects 統合パターン（domain層）
+//! - Commands + Queries + DTOs 統合パターン（application層）
+//! - 500行未満は単一ファイル推奨
+//! - Repository Port への依存性注入
 
 use std::sync::Arc;
 
 // ============================================================================
-// Phase 3: 新しいアプリケーション層構造（監査済み）
+// Phase 3 完成版: CQRS統合構造（監査済み）
 // ============================================================================
 
+/// DTOs - Data Transfer Objects（共通モジュール）
 pub mod dto;
-pub mod ports;
+pub use dto::*;
 
-// Phase 3 Week 11: CQRS Queries
+/// Ports - インターフェース定義（Repository, Service等）
+pub mod ports;
+pub use ports::{cache, events, repositories, search};
+
+// Re-export commonly used types (feature-gated)
+#[cfg(feature = "restructure_domain")]
+pub use ports::repositories::{
+    CategoryRepository, CommentRepository, PostRepository, RepositoryError, TagRepository,
+    UserRepository,
+};
+
+pub use ports::{CacheService, EventPublisher};
+
+// ============================================================================
+// CQRS統合モジュール（Commands + Queries + DTOs）
+// ============================================================================
+
+/// User CQRS統合（Commands + Queries + DTOs）
+#[cfg(feature = "restructure_domain")]
+pub mod user;
+
+/// Post CQRS統合（Commands + Queries + DTOs）
+#[cfg(feature = "restructure_domain")]
+pub mod post;
+
+/// Comment CQRS統合（Commands + Queries + DTOs）
+#[cfg(feature = "restructure_domain")]
+pub mod comment;
+
+/// Category CQRS統合（Commands + Queries + DTOs）
+#[cfg(feature = "restructure_domain")]
+pub mod category;
+
+/// Queries（CQRSクエリ層）
 #[cfg(feature = "restructure_domain")]
 pub mod queries;
 
 // ============================================================================
-// レガシー構造（既存コードとの並行稼働）
+// レガシー構造（既存コードとの並行稼働）Phase 6-B: Feature flag 保護
 // ============================================================================
 
-// Note: handlers::* is re-exported first to avoid ambiguity with ports::search
+#[cfg(not(feature = "restructure_domain"))]
 pub mod handlers {
     pub use crate::handlers::*;
 }
 
+#[cfg(not(feature = "restructure_domain"))]
 pub use handlers::*;
-
-// Ports - intentionally after handlers to avoid search module conflict
-// Only re-export specific items to avoid glob conflicts
-#[allow(unused_imports)] // Used conditionally
-pub use ports::{CacheService, EventPublisher, PostRepository, UserRepository};
-pub use ports::{cache, events, repositories};
 
 pub mod use_cases;
 pub use use_cases::*;
@@ -46,6 +84,7 @@ pub mod services {
 
 /// Application prelude: commonly used handler/service types for migrating
 /// call sites to `crate::application`.
+#[cfg(not(feature = "restructure_domain"))]
 pub mod prelude {
     pub use super::handlers::*;
 }
@@ -68,12 +107,14 @@ pub mod prelude {
 /// - AppState が既に全サービスを保有しているため、AppContainer は軽量
 /// - feature flag で段階的に Use Case を追加
 /// - Phase 5-4 で最小実装、Phase 5-5 で拡張
+#[cfg(not(feature = "restructure_domain"))]
 #[derive(Clone)]
 pub struct AppContainer {
     /// AppState への参照（全サービスを含む）
     state: Arc<crate::app::AppState>,
 }
 
+#[cfg(not(feature = "restructure_domain"))]
 impl AppContainer {
     /// 新しい AppContainer を作成
     ///

@@ -17,6 +17,9 @@
 //! - **Resilience**: Listener failures are logged, not propagated
 //! - **Idempotency**: Listeners should handle duplicate events gracefully
 
+//! Phase 6-E: Legacy listeners (disabled with restructure_domain)
+#![cfg(not(feature = "restructure_domain"))]
+
 use crate::AppState;
 use crate::events::{AppEvent, EventBus};
 use tracing::{debug, error, info, warn};

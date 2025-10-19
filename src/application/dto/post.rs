@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 /// 投稿レスポンス DTO（完全版）
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct PostDto {
     pub id: String,
     pub slug: String,
@@ -92,6 +92,10 @@ pub struct UpdatePostRequest {
     #[validate(length(min = 3, max = 50))]
     pub slug: Option<String>,
 }
+
+// Phase 6-C: Type aliases for handler compatibility
+pub type CreatePostDto = CreatePostRequest;
+pub type UpdatePostDto = UpdatePostRequest;
 
 /// 投稿公開リクエスト
 #[derive(Debug, Clone, Deserialize)]

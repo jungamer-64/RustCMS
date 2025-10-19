@@ -21,6 +21,8 @@ pub enum DomainError {
     InvalidEmail(String),
     #[error("Invalid username: {0}")]
     InvalidUsername(String),
+    #[error("Invalid post ID: {0}")]
+    InvalidPostId(String),
     #[error("Invalid slug: {0}")]
     InvalidSlug(String),
     #[error("Invalid title: {0}")]
@@ -138,6 +140,26 @@ impl From<crate::application::ports::repositories::RepositoryError> for Applicat
             RE::ConversionError(msg) => ApplicationError::ValidationError(format!("Conversion error: {}", msg)),
             RE::DatabaseError(msg) | RE::Unknown(msg) => ApplicationError::RepositoryError(msg),
         }
+    }
+}
+
+// ============================================================================
+// Error Conversions (Value Object Errors → DomainError)
+// ============================================================================
+
+/// Convert EmailError to DomainError
+#[cfg(feature = "restructure_domain")]
+impl From<crate::domain::user::EmailError> for DomainError {
+    fn from(err: crate::domain::user::EmailError) -> Self {
+        DomainError::InvalidEmail(err.to_string())
+    }
+}
+
+/// Convert UsernameError to DomainError
+#[cfg(feature = "restructure_domain")]
+impl From<crate::domain::user::UsernameError> for DomainError {
+    fn from(err: crate::domain::user::UsernameError) -> Self {
+        DomainError::InvalidUsername(err.to_string())
     }
 }
 

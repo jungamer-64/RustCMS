@@ -29,23 +29,22 @@ use axum::response::{IntoResponse, Json};
 use serde_json::json;
 
 // Core modules
-pub mod app;
 pub mod config;
 pub mod error;
 pub mod telemetry;
 
 // Re-structured layer entry points (incremental, re-exports existing modules)
+// Phase 6-A: New DDD structure (activated with --features "restructure_domain")
+#[cfg(feature = "restructure_domain")]
 pub mod application;
+#[cfg(feature = "restructure_domain")]
 pub mod domain;
+#[cfg(feature = "restructure_domain")]
 pub mod infrastructure;
 
 // Phase 4: Presentation Layer (監査済み構造)
 #[cfg(feature = "restructure_presentation")]
 pub mod presentation;
-
-// Phase 4: Web Layer (監査推奨命名)
-// Note: `web` は `presentation` の別名として監査で推奨されています
-pub mod web;
 
 pub mod common;
 
@@ -62,12 +61,16 @@ pub mod auth;
 // only available when the `auth` feature is enabled.
 #[cfg(not(feature = "auth"))]
 pub mod auth {
+    #[cfg(not(feature = "restructure_domain"))]
     use crate::utils::common_types::SessionId;
+    #[cfg(feature = "restructure_domain")]
+    pub type SessionId = uuid::Uuid; // Phase 6-B: Placeholder for SessionId
     use uuid::Uuid;
 
     /// Minimal AuthContext used by code paths that only need to compile when
     /// the `auth` feature is disabled. Fields mirror the real type closely
     /// enough for compile-time compatibility.
+    #[cfg(not(feature = "restructure_domain"))]
     #[derive(Clone, Debug)]
     pub struct AuthContext {
         pub user_id: Uuid,
@@ -78,6 +81,7 @@ pub mod auth {
     }
 
     /// Minimal AuthResponse used by conversions in `utils::auth_response`.
+    #[cfg(not(feature = "restructure_domain"))]
     #[derive(Clone, Debug)]
     pub struct AuthResponse {
         pub user: crate::utils::common_types::UserInfo,
@@ -92,6 +96,7 @@ pub mod auth {
 
     /// Small helper to preserve API compatibility. Returns a NotImplemented
     /// AppError when called without the `auth` feature enabled.
+    #[cfg(not(feature = "restructure_domain"))]
     pub fn require_admin_permission(_: &AuthContext) -> crate::Result<()> {
         Err(crate::AppError::NotImplemented(
             "auth feature not enabled".into(),
@@ -135,23 +140,12 @@ pub mod cache;
 pub mod search;
 
 // API and web framework modules
-pub mod handlers;
+// Phase 7: Legacy modules removed
 pub mod limiter;
 pub mod middleware;
-pub mod models;
-pub mod repositories;
-pub mod routes;
-pub mod utils; // unified rate limiting
-
-// Event-driven architecture
-pub mod events;
-pub mod listeners;
-
-// OpenAPI documentation system
-pub mod openapi;
+pub mod utils; // Phase 7: Minimal utility set (legacy removed)
 
 // Re-export core types for API
-pub use app::{AppMetrics, AppState};
 pub use config::Config;
 pub use error::{AppError, Result};
 

@@ -125,11 +125,19 @@ impl AuthService {
         // `database` feature is enabled. The adapter implements both the
         // new application port and the legacy repository trait so it can be
         // used where the older trait object is still expected.
-        #[cfg(feature = "database")]
+        #[cfg(all(feature = "database", feature = "restructure_domain"))]
         {
             use crate::infrastructure::repositories::DieselUserRepository;
             let repo: Arc<dyn UserRepository> =
                 Arc::new(DieselUserRepository::new(database.clone())) as Arc<dyn UserRepository>;
+            Self::new_with_repo(config, repo)
+        }
+        
+        #[cfg(all(feature = "database", not(feature = "restructure_domain")))]
+        {
+            use crate::repositories::UserRepository as LegacyRepo;
+            let repo: Arc<dyn UserRepository> =
+                Arc::new(LegacyRepo::new(database.clone())) as Arc<dyn UserRepository>;
             Self::new_with_repo(config, repo)
         }
 

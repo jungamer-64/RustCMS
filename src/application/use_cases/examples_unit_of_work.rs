@@ -6,10 +6,12 @@
 //! 投稿を公開し、同時に著者の統計（公開投稿数）を更新する。
 //! この操作は原子的でなければならない（両方成功 or 両方失敗）。
 
+#![cfg(feature = "database")]
+
 use crate::application::ports::repositories::{PostRepository, RepositoryError, UserRepository};
 use crate::domain::post::{Post, PostId};
 use crate::domain::user::UserId;
-use crate::infrastructure::database::unit_of_work::DieselUnitOfWork;
+use crate::infrastructure::database::DieselUnitOfWork;
 use std::sync::Arc;
 
 /// 投稿公開 + 著者統計更新 Use Case（トランザクション管理付き）

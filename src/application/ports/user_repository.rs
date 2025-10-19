@@ -17,10 +17,12 @@ pub trait UserRepository: Send + Sync {
 
     async fn find_by_id(&self, id: UserId) -> Result<Option<Self::User>, RepositoryError>;
     async fn find_by_email(&self, email: &Email) -> Result<Option<Self::User>, RepositoryError>;
+    #[cfg(not(feature = "restructure_domain"))]
     async fn create(
         &self,
         request: crate::models::CreateUserRequest,
     ) -> Result<Self::User, RepositoryError>;
+    #[cfg(not(feature = "restructure_domain"))]
     async fn update(
         &self,
         id: UserId,
