@@ -26,10 +26,12 @@ use std::time::Instant;
 use tracing::{error, info, instrument, warn};
 
 use crate::cli::{Cli, Commands};
-use crate::handlers::{
-    analytics::handle_analytics_action, content::handle_content_action,
-    security::handle_security_action, system::handle_system_action, user::handle_user_action_state,
-};
+// Phase 10: レガシーhandlers削除により一時無効化
+// Phase 4でUse Cases直接呼び出しに移行予定
+// use crate::handlers::{
+//     analytics::handle_analytics_action, content::handle_content_action,
+//     security::handle_security_action, system::handle_system_action, user::handle_user_action_state,
+// };
 
 /// Application metadata for logging and diagnostics
 const APP_NAME: &str = "cms-admin"; // Override package name for binary identity
@@ -78,13 +80,34 @@ async fn run(cli: Cli) -> Result<()> {
     // Validate prerequisites
     validate_prerequisites(&app_state).await?;
 
-    // Execute command with comprehensive error handling
-    let result = match cli.command {
-        Commands::User { action } => handle_user_action_state(action, &app_state).await,
-        Commands::Content { action } => handle_content_action(action, &app_state),
-        Commands::System { action } => handle_system_action(action, &app_state).await,
-        Commands::Analytics { action } => handle_analytics_action(action, &app_state),
-        Commands::Security { action } => handle_security_action(action, &app_state),
+    // Phase 10: レガシーhandlers削除により一時無効化
+    // Phase 4でUse Cases直接呼び出しに移行予定
+    let result: Result<()> = match cli.command {
+        Commands::User { action: _ } => {
+            warn!("User command temporarily disabled (Phase 10: レガシー削除)");
+            warn!("Phase 4で新実装に移行予定");
+            Ok(())
+        }
+        Commands::Content { action: _ } => {
+            warn!("Content command temporarily disabled (Phase 10: レガシー削除)");
+            warn!("Phase 4で新実装に移行予定");
+            Ok(())
+        }
+        Commands::System { action: _ } => {
+            warn!("System command temporarily disabled (Phase 10: レガシー削除)");
+            warn!("Phase 4で新実装に移行予定");
+            Ok(())
+        }
+        Commands::Analytics { action: _ } => {
+            warn!("Analytics command temporarily disabled (Phase 10: レガシー削除)");
+            warn!("Phase 4で新実装に移行予定");
+            Ok(())
+        }
+        Commands::Security { action: _ } => {
+            warn!("Security command temporarily disabled (Phase 10: レガシー削除)");
+            warn!("Phase 4で新実装に移行予定");
+            Ok(())
+        }
     };
 
     // Report execution time
