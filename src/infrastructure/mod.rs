@@ -62,10 +62,6 @@ pub mod auth {
     pub use crate::auth::*;
 }
 
-// Repositories are defined unconditionally but may themselves be feature-gated
-// internally. Re-export them so callers can refer to `crate::infrastructure::repositories`.
-pub mod repositories;
-
 // Phase 9: Legacy re-exports removed (database/cache/search modules deleted in Phase 7)
 // Re-export the gated modules at the top level where appropriate.
 // #[cfg(feature = "database")]

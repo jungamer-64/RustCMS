@@ -139,62 +139,14 @@ impl AppContainer {
 
     // ========================================================================
     // Use Case Accessors (feature-gated)
-    // Phase 5-4: 既存の Use Case 実装と互換性を保つ
+    // Phase 3 Week 8-9: 新しいCQRS実装に移行済み
+    // Phase 4: 旧互換レイヤー削除完了
     // ========================================================================
-
-    /// User 作成 Use Case（既存実装への互換レイヤー）
-    #[cfg(feature = "database")]
-    pub fn create_user(
-        &self,
-    ) -> Arc<
-        crate::application::use_cases::CreateUserUseCase<
-            crate::infrastructure::repositories::DieselUserRepository,
-        >,
-    > {
-        let repo = crate::infrastructure::repositories::DieselUserRepository::new(
-            self.state.database.clone(),
-        );
-        Arc::new(crate::application::use_cases::CreateUserUseCase::new(
-            Arc::new(repo),
-        ))
-    }
-
-    /// User 取得 Use Case（既存実装への互換レイヤー）
-    #[cfg(feature = "database")]
-    pub fn get_user_by_id(
-        &self,
-    ) -> Arc<
-        crate::application::use_cases::GetUserByIdUseCase<
-            crate::infrastructure::repositories::DieselUserRepository,
-        >,
-    > {
-        let repo = crate::infrastructure::repositories::DieselUserRepository::new(
-            self.state.database.clone(),
-        );
-        Arc::new(crate::application::use_cases::GetUserByIdUseCase::new(
-            Arc::new(repo),
-        ))
-    }
-
-    /// User 更新 Use Case（既存実装への互換レイヤー）
-    #[cfg(feature = "database")]
-    pub fn update_user(
-        &self,
-    ) -> Arc<
-        crate::application::use_cases::UpdateUserUseCase<
-            crate::infrastructure::repositories::DieselUserRepository,
-        >,
-    > {
-        let repo = crate::infrastructure::repositories::DieselUserRepository::new(
-            self.state.database.clone(),
-        );
-        Arc::new(crate::application::use_cases::UpdateUserUseCase::new(
-            Arc::new(repo),
-        ))
-    }
+    // 注: Use Cases は application::user, application::post 等に移行済み
+    // 旧 application/use_cases/ ディレクトリは削除予定
 }
 
 // ============================================================================
-// 注記: Phase 5-4 では既存の Use Case 実装を AppContainer 経由で提供
-// Phase 5-5 で新しい Use Case を段階的に追加予定
+// 注記: Phase 3 完了 - 新 Use Cases に完全移行
+// application::user::RegisterUserUseCase 等を直接使用
 // ============================================================================
