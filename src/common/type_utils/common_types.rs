@@ -97,15 +97,21 @@ impl Default for SessionId {
     }
 }
 
-impl From<String> for SessionId {
-    fn from(s: String) -> Self {
-        Self(s)
+impl std::fmt::Display for SessionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
 impl AsRef<str> for SessionId {
     fn as_ref(&self) -> &str {
         &self.0
+    }
+}
+
+impl From<String> for SessionId {
+    fn from(s: String) -> Self {
+        Self(s)
     }
 }
 

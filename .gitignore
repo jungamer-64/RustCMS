@@ -18,6 +18,8 @@ gitleaks-exitcode.txt
 .env.*
 .secrets
 secret-*
+secrets/          # Phase 5.7: EdDSA keys directory
+test_secrets/     # Phase 5.7: Test EdDSA keys
 
 # Private keys and certificates
 *.pem

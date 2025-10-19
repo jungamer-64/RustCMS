@@ -91,6 +91,9 @@ pub struct AuthConfig {
     pub remember_me_access_ttl_secs: u64,
     #[serde(default = "default_role_permissions")]
     pub role_permissions: HashMap<String, Vec<String>>,
+    /// JWT 署名用秘密鍵 (Phase 5.4.2)
+    #[serde(serialize_with = "serialize_secret_masked")]
+    pub jwt_secret: SecretString,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -329,6 +332,7 @@ impl Default for AuthConfig {
             refresh_token_ttl_secs: 86_400,
             remember_me_access_ttl_secs: 86_400, // 24 hours
             role_permissions: default_role_permissions(),
+            jwt_secret: SecretString::new("change-this-in-production-use-at-least-32-bytes".into()),
         }
     }
 }

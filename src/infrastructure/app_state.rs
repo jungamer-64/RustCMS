@@ -33,6 +33,10 @@ use std::collections::HashMap;
 #[cfg(feature = "cache")]
 use parking_lot::RwLock;
 
+// Auth support (Phase 5.5)
+#[cfg(feature = "auth")]
+use crate::auth::SessionStore;
+
 // Events module location depends on feature flag
 #[cfg(not(feature = "restructure_domain"))]
 use crate::events::AppEvent;
@@ -49,6 +53,8 @@ pub type EventBus = broadcast::Sender<crate::infrastructure::events::AppEvent>;
 ///
 /// AppStateはアプリケーションの中核状態を管理します。
 /// Phase 5.1: database/cache サービスを統合
+/// Phase 5.4: JWT 認証サービスを統合
+/// Phase 5.5: セッションストアを統合
 #[derive(Clone)]
 pub struct AppState {
     /// Application configuration (public for backward compatibility)
@@ -64,6 +70,14 @@ pub struct AppState {
     /// In-memory cache (optional)
     #[cfg(feature = "cache")]
     cache: Arc<RwLock<HashMap<String, Vec<u8>>>>,
+
+    /// JWT authentication service (Phase 5.4)
+    #[cfg(feature = "auth")]
+    jwt_service: Option<Arc<crate::auth::JwtService>>,
+
+    /// Session store (Phase 5.5)
+    #[cfg(feature = "auth")]
+    session_store: Option<Arc<crate::auth::InMemorySessionStore>>,
 }
 
 impl AppState {
@@ -73,6 +87,10 @@ impl AppState {
             config: Arc::new(config),
             #[cfg(feature = "database")]
             database: None,
+            #[cfg(feature = "auth")]
+            jwt_service: None,
+            #[cfg(feature = "auth")]
+            session_store: None,
         }
     }
 
@@ -84,6 +102,18 @@ impl AppState {
     /// Get reference to event bus
     pub fn event_bus(&self) -> &EventBus {
         &self.event_bus
+    }
+
+    /// Get reference to JWT service (Phase 5.4)
+    #[cfg(feature = "auth")]
+    pub fn jwt_service(&self) -> Option<&Arc<crate::auth::JwtService>> {
+        self.jwt_service.as_ref()
+    }
+
+    /// Get reference to session store (Phase 5.5)
+    #[cfg(feature = "auth")]
+    pub fn session_store(&self) -> Option<&Arc<crate::auth::InMemorySessionStore>> {
+        self.session_store.as_ref()
     }
 
     /// Get database pool (if available)
@@ -184,6 +214,30 @@ impl AppState {
 
         info!("AppState shutdown complete");
     }
+
+    /// Start background session cleanup task (Phase 5.5.3)
+    /// 
+    /// Spawns a background task that periodically removes expired sessions.
+    /// The task runs every hour.
+    #[cfg(feature = "auth")]
+    pub fn start_session_cleanup(&self) {
+        if let Some(session_store) = self.session_store.clone() {
+            tokio::spawn(async move {
+                use tokio::time::{interval, Duration};
+                use chrono::Utc;
+                
+                let mut cleanup_interval = interval(Duration::from_secs(3600)); // 1 hour
+                
+                loop {
+                    cleanup_interval.tick().await;
+                    let now = Utc::now();
+                    session_store.cleanup_expired(now).await;
+                    info!("Session cleanup completed");
+                }
+            });
+            info!("Session cleanup task started");
+        }
+    }
 }
 
 /// Health status for all services
@@ -198,11 +252,19 @@ pub struct HealthStatus {
 ///
 /// AppStateBuilderは段階的にサービスを初期化します。
 /// Phase 5.1: database/cache サービスを統合
+/// Phase 5.4: JWT サービスを統合
+/// Phase 5.5: セッションストアを統合
 pub struct AppStateBuilder {
     config: Arc<Config>,
     
     #[cfg(feature = "database")]
     database: Option<DatabasePool>,
+
+    #[cfg(feature = "auth")]
+    jwt_service: Option<Arc<crate::auth::JwtService>>,
+
+    #[cfg(feature = "auth")]
+    session_store: Option<Arc<crate::auth::InMemorySessionStore>>,
 }
 
 impl AppStateBuilder {
@@ -230,6 +292,22 @@ impl AppStateBuilder {
         }
     }
 
+    /// Initialize JWT service (Phase 5.4)
+    #[cfg(feature = "auth")]
+    pub fn with_jwt_service(mut self, jwt_service: crate::auth::JwtService) -> Self {
+        info!("Initializing JWT service...");
+        self.jwt_service = Some(Arc::new(jwt_service));
+        self
+    }
+
+    /// Initialize session store (Phase 5.5)
+    #[cfg(feature = "auth")]
+    pub fn with_session_store(mut self, session_store: crate::auth::InMemorySessionStore) -> Self {
+        info!("Initializing session store...");
+        self.session_store = Some(Arc::new(session_store));
+        self
+    }
+
     /// Build AppState
     ///
     /// EventBusを作成し、全てのサービスを統合します。
@@ -249,6 +327,10 @@ impl AppStateBuilder {
             database: self.database,
             #[cfg(feature = "cache")]
             cache,
+            #[cfg(feature = "auth")]
+            jwt_service: self.jwt_service,
+            #[cfg(feature = "auth")]
+            session_store: self.session_store,
         };
 
         info!("AppState built successfully");

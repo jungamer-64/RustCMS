@@ -94,13 +94,13 @@ serde_yaml = "0.9"
 toml = "0.9"
 
 # ===== DOMAIN LAYER (Phase 1-2) =====
-derive_more = { version = "1.0", features = ["full"] }
+derive_more = { version = "2.0", features = ["full"] }
 
 # ===== APPLICATION LAYER (Phase 3) =====
 mockall = { version = "0.13", optional = true }
 
 # ===== PRESENTATION LAYER (Phase 4) =====
-schemars = { version = "0.8", features = ["derive"], optional = true }
+schemars = { version = "1.0", features = ["derive"], optional = true }
 
 # ===== DATABASE & ORM (PostgreSQL + Diesel) =====
 deadpool-diesel = { version = "0.6", features = [
@@ -130,6 +130,8 @@ tantivy = { version = "0.25", features = [
 # ===== AUTHENTICATION & SECURITY =====
 argon2 = { version = "0.5", optional = true }
 biscuit-auth = { version = "6.0", optional = true }
+jsonwebtoken = "9.3"  # JWT for authentication (Phase 5.3)
+ed25519-dalek = "2.1"  # EdDSA signing (Phase 5.7)
 oauth2 = "5.0.0-rc.1"
 
 # ===== CACHING (Redis + In-Memory) =====
@@ -281,7 +283,7 @@ tempfile = "3.8"
 # TEMP: testcontainers は bollard バージョン競合により一時的に無効化
 # Phase 3 統合テストでは bollard を直接使用するか、Docker Compose で代替
 # testcontainers = "0.25"
-bollard = "0.18"                                                 # testcontainers の代替 (Docker API 直接操作)
+bollard = "0.19"                                                 # testcontainers の代替 (Docker API 直接操作)
 tokio-test = "0.4"
 wiremock = "0.6"
 http-body-util = { version = "0.1", package = "http-body-util" }

@@ -48,3 +48,22 @@ connection_timeout = 30
 idle_timeout = 600
 max_lifetime = 3600
 enable_migrations = true
+
+[auth]
+# JWT settings (Phase 5.4.2)
+jwt_secret = "${JWT_SECRET}"
+# Biscuit settings
+biscuit_root_key = "${BISCUIT_ROOT_KEY}"
+# Password hashing
+bcrypt_cost = 12
+# Session and token TTLs (in seconds)
+session_timeout = 86400
+access_token_ttl_secs = 3600
+refresh_token_ttl_secs = 86400
+remember_me_access_ttl_secs = 86400
+
+[auth.webauthn]
+rp_id = "localhost"
+rp_name = "CMS"
+rp_origin = "http://localhost:3000"
+timeout = 60000

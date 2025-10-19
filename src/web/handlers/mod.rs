@@ -11,6 +11,7 @@ use axum::{
 use serde_json::{Value as JsonValue, json};
 
 // V2 Handlers (New DDD Structure)
+pub mod auth_v2;
 pub mod categories_v2;
 pub mod comments_v2;
 pub mod health_v2;

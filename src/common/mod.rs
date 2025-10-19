@@ -1,4 +1,4 @@
-//! Common Layer (監査推奨: `shared` → `common`)
+//! Common Layer
 //!
 //! レイヤー横断で使用される共通機能です。
 //! - types: 共通型定義（Result型、エラー型階層、DTOs、Pagination等）
@@ -6,9 +6,6 @@
 //! - security: セキュリティ関連ヘルパー（password, validation）
 //! - validation: バリデーション関数
 //! - telemetry: 監視・ロギング（Phase 2+で実装予定）
-//!
-//! ## 注意
-//! このモジュールは `shared` から `common` に改名されました（Rustの慣習）。
 
 // Phase 1 で実装完了: エラー型階層
 pub mod error_types;

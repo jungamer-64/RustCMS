@@ -33,14 +33,20 @@
 //! - セッション状態: `SessionStore` 抽象 (現状 `InMemory`)。
 
 mod biscuit;
+pub mod ed25519_keys;     // Phase 5.7: Ed25519 鍵管理
 pub mod error;
+pub mod jwt;              // Phase 5.3: JWT 認証サービス
 pub mod key_management;
 mod service;
 pub mod session;
+pub mod unified_context;  // Phase 5.3: JWT + Biscuit 統合コンテキスト
 
+pub use ed25519_keys::Ed25519KeyPair;
 pub use error::AuthError;
+pub use jwt::{JwtClaims, JwtConfig, JwtService, JwtTokenPair, TokenType};
 pub use service::{AuthContext, AuthService, LoginRequest};
 pub use session::{InMemorySessionStore, SessionData, SessionStore};
+pub use unified_context::UnifiedAuthContext;
 
 use crate::common::type_utils::common_types::{AuthResponse, SessionId};
 
@@ -52,7 +58,7 @@ use crate::models::UserRole;
 
 #[inline]
 fn mask_session_id(sid: &SessionId) -> String {
-    let s = sid.as_ref();
+    let s: &str = sid.as_ref();
     if s.len() <= 6 {
         return "***".to_string();
     }

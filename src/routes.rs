@@ -22,12 +22,18 @@ use crate::infrastructure::app_state::AppState;
 pub fn create_router() -> Router<std::sync::Arc<AppState>> {
     use crate::web::handlers::{api_info_v1, api_info_info, home, not_found};
     use crate::web::handlers::health_v2::{health_check, detailed_health_check};
+    use crate::web::handlers::auth_v2::refresh_token;
+    use axum::routing::post;
     use std::sync::Arc;
     
     // ベースルーター (with_state will convert to Router<Arc<AppState>>)
     let router: Router<Arc<AppState>> = Router::new()
         .route("/", get(home))
         .route("/health", get(health_check));
+
+    // API v2 Auth ルート (Phase 5.4.5)
+    let api_v2_auth: Router<Arc<AppState>> = Router::new()
+        .route("/refresh", post(refresh_token));
 
     // API v1 ルート
     let api_v1: Router<Arc<AppState>> = Router::new()
@@ -40,6 +46,7 @@ pub fn create_router() -> Router<std::sync::Arc<AppState>> {
     // ルーターを統合
     router
         .nest("/api/v1", api_v1)
+        .nest("/api/v2/auth", api_v2_auth)
         .fallback(not_found)
 }
 
