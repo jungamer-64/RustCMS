@@ -1,39 +1,29 @@
-//! Repository implementations
+//! Repository implementations (DEPRECATED)
 //!
-//! Concrete implementations of repository traits for different backends.
-//! This module consolidates all repository implementations (database, cache, etc.).
+//! Phase 9: All legacy implementations moved to infrastructure/database/repositories.rs
+//! This module is kept for backward compatibility but will be removed in Phase 10.
 
 // ============================================================================
-// Error Handling Helpers (Phase 3 Refactoring)
+// Phase 9 Migration Notice
+// ============================================================================
+//
+// Legacy repository implementations (2,373 lines) have been replaced with
+// new implementations following the audited structure pattern:
+//
+// Old location: src/infrastructure/repositories/*.rs
+// New location: src/infrastructure/database/repositories.rs (single file)
+//
+// Benefits of new structure:
+// - Single file consolidation (< 1000 lines total)
+// - Consistent with RESTRUCTURE_EXAMPLES.md audited pattern
+// - Direct Pool usage (no Database wrapper dependency)
+// - New trait interface (find_by_id, save, delete)
+// - Async wrapping with tokio::task::spawn_blocking
+//
 // ============================================================================
 
 #[cfg(feature = "restructure_domain")]
 pub mod error_helpers;
 
-// ============================================================================
-// Database Repositories (Diesel ORM)
-// ============================================================================
+// All other legacy modules disabled
 
-// Phase 3 Repositories (restructure_domain feature required)
-#[cfg(all(feature = "database", feature = "restructure_domain"))]
-pub mod diesel_category_repository;
-#[cfg(feature = "database")]
-pub mod diesel_comment_repository;
-#[cfg(feature = "database")]
-pub mod diesel_post_repository;
-#[cfg(all(feature = "database", feature = "restructure_domain"))]
-pub mod diesel_tag_repository;
-#[cfg(feature = "database")]
-pub mod diesel_user_repository;
-
-// Re-exports for convenience
-#[cfg(all(feature = "database", feature = "restructure_domain"))]
-pub use diesel_category_repository::DieselCategoryRepository;
-#[cfg(feature = "database")]
-pub use diesel_comment_repository::DieselCommentRepository;
-#[cfg(feature = "database")]
-pub use diesel_post_repository::DieselPostRepository;
-#[cfg(all(feature = "database", feature = "restructure_domain"))]
-pub use diesel_tag_repository::DieselTagRepository;
-#[cfg(feature = "database")]
-pub use diesel_user_repository::DieselUserRepository;

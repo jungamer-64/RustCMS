@@ -19,7 +19,7 @@ use crate::domain::user::UserId;
 #[cfg(feature = "restructure_domain")]
 use crate::domain::post::Post;
 #[cfg(feature = "restructure_domain")]
-use crate::domain::user::{Email, User};
+use crate::domain::user::{Email, User, Username};
 
 // Additional imports needed for Tag and Category repositories
 #[cfg(feature = "restructure_domain")]
@@ -59,6 +59,13 @@ pub trait UserRepository: Send + Sync {
     ///
     /// データベースエラーが発生した場合
     async fn find_by_email(&self, email: &Email) -> Result<Option<User>, RepositoryError>;
+
+    /// ユーザー名でユーザーを検索
+    ///
+    /// # Errors
+    ///
+    /// データベースエラーが発生した場合
+    async fn find_by_username(&self, username: &Username) -> Result<Option<User>, RepositoryError>;
 
     /// ユーザーを削除
     ///
@@ -320,6 +327,9 @@ pub enum RepositoryError {
     #[error("Database error: {0}")]
     DatabaseError(String),
 
+    #[error("Connection error: {0}")]
+    ConnectionError(String),
+
     #[error("Validation error: {0}")]
     ValidationError(String),
 
@@ -358,7 +368,7 @@ impl From<diesel::result::Error> for RepositoryError {
 #[cfg(feature = "database")]
 impl From<diesel::r2d2::PoolError> for RepositoryError {
     fn from(err: diesel::r2d2::PoolError) -> Self {
-        RepositoryError::DatabaseError(format!("Connection pool error: {err}"))
+        RepositoryError::ConnectionError(format!("Connection pool error: {err}"))
     }
 }
 

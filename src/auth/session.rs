@@ -1,4 +1,9 @@
-use crate::{Result, auth::error::AuthError, models::UserRole, utils::common_types::SessionId};
+use crate::{
+    Result,
+    auth::error::AuthError,
+    domain::user::UserRole,
+    common::type_utils::common_types::SessionId,
+};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

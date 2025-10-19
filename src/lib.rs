@@ -48,10 +48,6 @@ pub mod presentation;
 
 pub mod common;
 
-// Conditional feature modules for scalability
-#[cfg(feature = "database")]
-pub mod database;
-
 #[cfg(feature = "auth")]
 pub mod auth;
 
@@ -132,12 +128,9 @@ pub mod auth {
         }
     }
 }
-
-#[cfg(feature = "cache")]
-pub mod cache;
-
-#[cfg(feature = "search")]
-pub mod search;
+// Phase 9: search module removed (legacy code deleted in Phase 7)
+// #[cfg(feature = "search")]
+// pub mod search;
 
 // API and web framework modules
 // Phase 7: Legacy modules removed

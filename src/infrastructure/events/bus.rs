@@ -1,3 +1,4 @@
+// infrastructure/events/bus.rs
 //! Application Event System
 //!
 //! This module defines the event-driven architecture for decoupling cross-cutting concerns
@@ -21,6 +22,8 @@
 
 use tokio::sync::broadcast;
 use uuid::Uuid;
+
+use crate::infrastructure::database::models::{DbUser, DbPost};
 
 /// Type alias for the broadcast sender.
 ///
@@ -140,7 +143,7 @@ pub struct UserEventData {
 impl UserEventData {
     /// Create from a full User model
     #[cfg(feature = "database")]
-    pub fn from_user(user: &crate::models::user::User) -> Self {
+    pub fn from_user(user: &DbUser) -> Self {
         Self {
             id: user.id,
             username: user.username.clone(),
@@ -172,7 +175,7 @@ pub struct CommentEventData {
 impl PostEventData {
     /// Create from a full Post model
     #[cfg(feature = "database")]
-    pub fn from_post(post: &crate::models::post::Post) -> Self {
+    pub fn from_post(post: &DbPost) -> Self {
         Self {
             id: post.id,
             title: post.title.clone(),

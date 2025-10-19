@@ -37,12 +37,12 @@ pub mod connection;
 // Diesel DBモデル定義
 pub mod models;
 
-// 既存スキーマの再エクスポート（レガシー互換）
+// Phase 9: Diesel schema generated manually from migrations
 #[cfg(feature = "database")]
-pub use crate::database::schema;
+pub mod schema;
 
-// Phase 3で実装予定のモジュール
-#[cfg(feature = "restructure_domain")]
+// Phase 9: New Repository implementations (audited structure - single file)
+#[cfg(feature = "database")]
 pub mod repositories;
 
 #[cfg(feature = "restructure_domain")]
@@ -57,8 +57,8 @@ pub use models::{
     DbTag, NewDbTag,
 };
 
-// Phase 3で実装完了したインターフェース
-#[cfg(feature = "restructure_domain")]
+// Repository exports
+#[cfg(feature = "database")]
 pub use repositories::{
     DieselUserRepository,
     DieselPostRepository,

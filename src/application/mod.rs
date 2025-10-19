@@ -28,7 +28,9 @@ pub use dto::*;
 
 /// Ports - インターフェース定義（Repository, Service等）
 pub mod ports;
-pub use ports::{cache, events, repositories, search};
+pub use ports::{cache, events, repositories};
+// Phase 9: search removed
+// pub use ports::search;
 
 // Re-export commonly used types (feature-gated)
 #[cfg(feature = "restructure_domain")]

@@ -37,16 +37,18 @@ pub mod events; // Event Bus実装 (src/events.rs, src/listeners.rs から移行
 // only compiled when the `database` feature is enabled.
 // Note: Phase 3 new database impl (restructure_domain) takes precedence over legacy
 #[cfg(all(not(feature = "restructure_domain"), feature = "database"))]
-pub mod database {
-    pub use crate::database::*;
-}
+// Phase 9: crate::database removed in Phase 7
+// Database infrastructure is now in infrastructure::database
+// pub mod database {
+//     pub use crate::database::*;
+// }
 
-// Cache adapter re-exports are feature gated because `crate::cache` is
-// only compiled when the `cache` feature is enabled.
-#[cfg(feature = "cache")]
-pub mod cache {
-    pub use crate::cache::*;
-}
+// Phase 9: crate::cache removed in Phase 7
+// Cache implementation needs to be moved to infrastructure::cache
+// #[cfg(feature = "cache")]
+// pub mod cache {
+//     pub use crate::cache::*;
+// }
 
 // Search adapter
 #[cfg(feature = "search")]
@@ -64,21 +66,24 @@ pub mod auth {
 // internally. Re-export them so callers can refer to `crate::infrastructure::repositories`.
 pub mod repositories;
 
+// Phase 9: Legacy re-exports removed (database/cache/search modules deleted in Phase 7)
 // Re-export the gated modules at the top level where appropriate.
-#[cfg(feature = "database")]
-pub use database::*;
+// #[cfg(feature = "database")]
+// pub use database::*;
 
-#[cfg(feature = "cache")]
-pub use cache::*;
+// #[cfg(feature = "cache")]
+// pub use cache::*;
 
-#[cfg(feature = "search")]
-pub use search::*;
+// #[cfg(feature = "search")]
+// pub use search::*;
 
 #[cfg(feature = "auth")]
 pub use auth::*;
 
-// Phase 3: DieselRepositories は database から直接インポート（ambiguous re-export を回避）
+// Phase 9: New Repository implementations (audited structure)
 #[cfg(all(feature = "restructure_domain", feature = "database"))]
-pub use database::{DieselUserRepository, DieselPostRepository, DieselCommentRepository, DieselUnitOfWork};
+pub use database::{DieselUserRepository, DieselPostRepository, DieselCommentRepository};
 
-pub use repositories::*;
+#[cfg(all(feature = "restructure_domain", feature = "database"))]
+pub use database::DieselUnitOfWork;
+

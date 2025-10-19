@@ -39,10 +39,16 @@ mod service;
 pub mod session;
 
 pub use error::AuthError;
-pub use service::{AuthContext, AuthResponse, AuthService, LoginRequest};
+pub use service::{AuthContext, AuthService, LoginRequest};
 pub use session::{InMemorySessionStore, SessionData, SessionStore};
 
-use crate::{models::UserRole, utils::common_types::SessionId};
+use crate::common::type_utils::common_types::{AuthResponse, SessionId};
+
+#[cfg(feature = "restructure_domain")]
+use crate::domain::user::UserRole;
+
+#[cfg(not(feature = "restructure_domain"))]
+use crate::models::UserRole;
 
 #[inline]
 fn mask_session_id(sid: &SessionId) -> String {
@@ -55,13 +61,13 @@ fn mask_session_id(sid: &SessionId) -> String {
 
 /// 管理者権限が必要な場面でのヘルパー関数。
 ///
-/// `SuperAdmin` ロールは常に許可し、それ以外は `"admin"` パーミッションを要求します。
+/// `Admin` ロールは常に許可し、それ以外は `"admin"` パーミッションを要求します。
 ///
 /// # Errors
 ///
 /// 必要な権限を持たない場合は `AuthError::InsufficientPermissions` を返します。
 pub fn require_admin_permission(ctx: &AuthContext) -> crate::Result<()> {
-    if matches!(ctx.role, UserRole::SuperAdmin) || ctx.permissions.iter().any(|p| p == "admin") {
+    if matches!(ctx.role, UserRole::Admin) || ctx.permissions.iter().any(|p| p == "admin") {
         Ok(())
     } else {
         Err(AuthError::InsufficientPermissions.into())

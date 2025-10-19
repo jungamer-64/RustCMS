@@ -3,11 +3,14 @@
 use async_trait::async_trait;
 use diesel::prelude::*;
 
-use crate::application::ports::UserRepository;
-use crate::application::ports::user_repository::RepositoryError;
-use crate::domain::value_objects::{Email, UserId};
-use crate::repositories::user_repository::BoxFuture;
+use crate::application::ports::repositories::{UserRepository, RepositoryError};
+use crate::domain::user::{User, UserId, Email, Username};
 use uuid::Uuid;
+use std::future::Future;
+use std::pin::Pin;
+
+// Phase 9: BoxFuture type alias (was in repositories::user_repository)
+type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// Diesel-backed implementation of the `application::ports::UserRepository` port.
 ///

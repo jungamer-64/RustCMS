@@ -138,6 +138,7 @@ pub struct Comment {
     post_id: PostId,
     author_id: UserId,
     text: CommentText,
+    parent_id: Option<CommentId>,
     status: CommentStatus,
     created_at: DateTime<Utc>,
     edited_at: Option<DateTime<Utc>>,
@@ -163,6 +164,7 @@ impl Comment {
             post_id,
             author_id,
             text,
+            parent_id: None,
             status: CommentStatus::Pending,
             created_at: now,
             edited_at: None,
@@ -180,6 +182,7 @@ impl Comment {
     /// * `post_id` - Post foreign key
     /// * `author_id` - Author foreign key
     /// * `text` - Comment text (validated)
+    /// * `parent_id` - Parent comment ID for replies (optional)
     /// * `status` - Comment status
     /// * `created_at` - Creation timestamp
     /// * `edited_at` - Last edit timestamp (optional)
@@ -189,6 +192,7 @@ impl Comment {
         post_id: PostId,
         author_id: UserId,
         text: CommentText,
+        parent_id: Option<CommentId>,
         status: CommentStatus,
         created_at: DateTime<Utc>,
         edited_at: Option<DateTime<Utc>>,
@@ -199,6 +203,7 @@ impl Comment {
             post_id,
             author_id,
             text,
+            parent_id,
             status,
             created_at,
             edited_at,
@@ -301,8 +306,18 @@ impl Comment {
         self.author_id
     }
 
+    /// Get parent comment ID (if this is a reply)
+    pub fn parent_id(&self) -> Option<CommentId> {
+        self.parent_id
+    }
+
     /// Get comment text
     pub fn text(&self) -> &CommentText {
+        &self.text
+    }
+
+    /// Get comment content (alias for text)
+    pub fn content(&self) -> &CommentText {
         &self.text
     }
 

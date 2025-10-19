@@ -24,11 +24,12 @@ pub use repositories::*;
 pub mod cache;
 pub use cache::{CacheError, CacheService};
 
-pub mod search;
-pub use search::{
-    AdvancedQuery, FilterOperator, SearchDocument, SearchError, SearchFilter, SearchHit,
-    SearchResults, SearchService,
-};
+// Phase 9: search module removed (legacy code deleted in Phase 7)
+// pub mod search;
+// pub use search::{
+//     AdvancedQuery, FilterOperator, SearchDocument, SearchError, SearchFilter, SearchHit,
+//     SearchResults, SearchService,
+// };
 
 pub mod events;
 pub use events::{DomainEvent, EventError, EventMetadata, EventPublisher};

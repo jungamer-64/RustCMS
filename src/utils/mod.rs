@@ -5,14 +5,16 @@ pub mod cache_key;
 pub mod cache_ttl;
 pub mod date;
 pub mod deprecation;
-pub mod dto;
+// Phase 9: dto module removed (legacy code deleted in Phase 7)
+// pub mod dto;
 pub mod dup;
 // pub mod error; // Removed in Phase 7
 pub mod file;
 pub mod hash;
 pub mod password;
 pub mod response_ext;
-pub mod search_index;
+// Phase 9: search_index module removed (legacy code deleted in Phase 7)
+// pub mod search_index;
 pub mod security_validation;
 pub mod sort;
 pub mod text;

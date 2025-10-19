@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 // User model
 #[derive(diesel::Queryable, diesel::Selectable, diesel::Identifiable, Debug, Clone)]
-#[diesel(table_name = crate::database::schema::users)]
+#[diesel(table_name = crate::infrastructure::database::schema::users)]
 pub struct DbUser {
     pub id: Uuid,
     pub username: String,
@@ -22,7 +22,7 @@ pub struct DbUser {
 }
 
 #[derive(diesel::Insertable, Debug, Clone)]
-#[diesel(table_name = crate::database::schema::users)]
+#[diesel(table_name = crate::infrastructure::database::schema::users)]
 pub struct NewDbUser {
     pub id: Uuid,
     pub username: String,
@@ -40,7 +40,7 @@ pub struct NewDbUser {
 
 // Post model
 #[derive(diesel::Queryable, diesel::Selectable, diesel::Identifiable, Debug, Clone)]
-#[diesel(table_name = crate::database::schema::posts)]
+#[diesel(table_name = crate::infrastructure::database::schema::posts)]
 pub struct DbPost {
     pub id: Uuid,
     pub title: String,
@@ -60,7 +60,7 @@ pub struct DbPost {
 }
 
 #[derive(diesel::Insertable, Debug, Clone)]
-#[diesel(table_name = crate::database::schema::posts)]
+#[diesel(table_name = crate::infrastructure::database::schema::posts)]
 pub struct NewDbPost {
     pub id: Uuid,
     pub title: String,
@@ -81,7 +81,7 @@ pub struct NewDbPost {
 
 // Comment model
 #[derive(diesel::Queryable, diesel::Selectable, diesel::Identifiable, Debug, Clone)]
-#[diesel(table_name = crate::database::schema::comments)]
+#[diesel(table_name = crate::infrastructure::database::schema::comments)]
 pub struct DbComment {
     pub id: Uuid,
     pub post_id: Uuid,
@@ -94,7 +94,7 @@ pub struct DbComment {
 }
 
 #[derive(diesel::Insertable, Debug, Clone)]
-#[diesel(table_name = crate::database::schema::comments)]
+#[diesel(table_name = crate::infrastructure::database::schema::comments)]
 pub struct NewDbComment {
     pub id: Uuid,
     pub post_id: Uuid,
@@ -108,7 +108,7 @@ pub struct NewDbComment {
 
 // Category model
 #[derive(diesel::Queryable, diesel::Selectable, diesel::Identifiable, Debug, Clone)]
-#[diesel(table_name = crate::database::schema::categories)]
+#[diesel(table_name = crate::infrastructure::database::schema::categories)]
 pub struct DbCategory {
     pub id: Uuid,
     pub name: String,
@@ -121,7 +121,7 @@ pub struct DbCategory {
 }
 
 #[derive(diesel::Insertable, Debug, Clone)]
-#[diesel(table_name = crate::database::schema::categories)]
+#[diesel(table_name = crate::infrastructure::database::schema::categories)]
 pub struct NewDbCategory {
     pub id: Uuid,
     pub name: String,
@@ -135,7 +135,7 @@ pub struct NewDbCategory {
 
 // Tag model
 #[derive(diesel::Queryable, diesel::Selectable, diesel::Identifiable, Debug, Clone)]
-#[diesel(table_name = crate::database::schema::tags)]
+#[diesel(table_name = crate::infrastructure::database::schema::tags)]
 pub struct DbTag {
     pub id: Uuid,
     pub name: String,
@@ -146,7 +146,7 @@ pub struct DbTag {
 }
 
 #[derive(diesel::Insertable, Debug, Clone)]
-#[diesel(table_name = crate::database::schema::tags)]
+#[diesel(table_name = crate::infrastructure::database::schema::tags)]
 pub struct NewDbTag {
     pub id: Uuid,
     pub name: String,

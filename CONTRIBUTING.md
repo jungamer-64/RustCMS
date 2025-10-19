@@ -30,11 +30,14 @@ We are committed to providing a welcoming and inclusive environment for all cont
 
 1. Fork the repository on GitHub
 2. Clone your fork:
+
    ```bash
    git clone https://github.com/YOUR_USERNAME/RustCMS.git
    cd RustCMS
    ```
+
 3. Add the upstream repository:
+
    ```bash
    git remote add upstream https://github.com/jungamer-64/RustCMS.git
    ```
@@ -44,11 +47,13 @@ We are committed to providing a welcoming and inclusive environment for all cont
 ### Initial Setup
 
 1. **Install dependencies:**
+
    ```bash
    cargo build
    ```
 
 2. **Set up the database:**
+
    ```bash
    # Create database
    createdb cms_dev
@@ -59,6 +64,7 @@ We are committed to providing a welcoming and inclusive environment for all cont
 
 3. **Configure environment:**
    Create a `.env` file:
+
    ```env
    DATABASE_URL=postgres://localhost/cms_dev
    REDIS_URL=redis://localhost:6379
@@ -66,6 +72,7 @@ We are committed to providing a welcoming and inclusive environment for all cont
    ```
 
 4. **Generate Biscuit keys:**
+
    ```bash
    cargo run --bin gen_biscuit_keys
    ```
@@ -122,10 +129,12 @@ RustCMS/
 ```
 
 **Key Architecture Documents:**
+
 - [PHASE7_COMPLETION_REPORT.md](PHASE7_COMPLETION_REPORT.md) - Phase 7 completion details
 - [RESTRUCTURE_PLAN.md](RESTRUCTURE_PLAN.md) - Full DDD migration plan
 - [docs/MODULES_OVERVIEW.md](docs/MODULES_OVERVIEW.md) - Module structure details
 - [.github/copilot-instructions.md](.github/copilot-instructions.md) - DDD implementation guide
+
 ```
 
 ## Coding Standards
@@ -137,7 +146,9 @@ RustCMS/
   ```bash
   cargo fmt
   ```
+
 - Use `clippy` for linting:
+
   ```bash
   cargo clippy -- -D warnings
   ```
@@ -273,17 +284,20 @@ fn test_with_fixture() {
 ### Creating a Pull Request
 
 1. **Create a feature branch:**
+
    ```bash
    git checkout -b feature/my-feature
    ```
 
 2. **Make your changes and commit:**
+
    ```bash
    git add .
    git commit -m "feat: add user authentication"
    ```
 
 3. **Follow commit message conventions:**
+
    ```
    <type>(<scope>): <subject>
    
@@ -291,10 +305,11 @@ fn test_with_fixture() {
    
    <footer>
    ```
-   
+
    Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
 
 4. **Push to your fork:**
+
    ```bash
    git push origin feature/my-feature
    ```
@@ -380,6 +395,7 @@ cargo bench
 ### Layer Responsibilities
 
 **Domain Layer** (`src/domain/`):
+
 - **Entities**: Core business objects with identity (User, Post, Comment, Tag, Category)
 - **Value Objects**: Immutable, validated types (UserId, Email, Slug, Title, etc.)
 - **Domain Events**: Business events (UserRegistered, PostPublished, etc.)
@@ -387,6 +403,7 @@ cargo bench
 - **No external dependencies**: Domain layer must be independent
 
 **Application Layer** (`src/application/`):
+
 - **Use Cases**: Application logic orchestration (CreatePost, RegisterUser, etc.)
 - **DTOs**: Data transfer objects for API boundaries
 - **Ports (Traits)**: Repository and service interfaces
@@ -394,12 +411,14 @@ cargo bench
 - **Depends on**: Domain layer only (not Infrastructure)
 
 **Infrastructure Layer** (`src/infrastructure/`):
+
 - **Repository Implementations**: Concrete Diesel/PostgreSQL implementations
 - **Unit of Work**: Transaction management
 - **External Services**: Cache, Search, Email, etc.
 - **Implements**: Application layer Ports
 
 **Presentation Layer** (`src/web/`):
+
 - **Handlers**: HTTP request/response handling
 - **Middleware**: Authentication, logging, rate limiting, etc.
 - **API versioning**: `/api/v2/*` endpoints
@@ -557,11 +576,13 @@ mod tests {
 - **`full_restructure`**: Complete DDD structure (Use Cases + Repositories + Handlers)
 
 To build with DDD structure (default):
+
 ```bash
 cargo build --release
 ```
 
 To test only Domain layer:
+
 ```bash
 cargo test --lib --no-default-features --features "restructure_domain"
 ```
@@ -574,6 +595,7 @@ cargo test --lib --no-default-features --features "restructure_domain"
 - [docs/MODULES_OVERVIEW.md](docs/MODULES_OVERVIEW.md) - Module structure
 
 **Template Files** (use as reference):
+
 - `src/domain/user.rs` - Entity + Value Objects pattern
 - `src/application/user.rs` - Use Cases pattern
 - `src/application/dto/user.rs` - DTO pattern

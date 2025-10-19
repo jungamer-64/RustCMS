@@ -325,8 +325,11 @@ pub struct User {
     id: UserId,
     username: Username,
     email: Email,
+    password_hash: Option<String>,
     role: UserRole,
     is_active: bool,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl User {
@@ -343,12 +346,16 @@ impl User {
     /// ```
     #[must_use]
     pub fn new(username: Username, email: Email) -> Self {
+        let now = chrono::Utc::now();
         Self {
             id: UserId::new(),
             username,
             email,
+            password_hash: None,
             role: UserRole::default_role(),
             is_active: true,
+            created_at: now,
+            updated_at: now,
         }
     }
 
@@ -358,15 +365,21 @@ impl User {
         id: UserId,
         username: Username,
         email: Email,
+        password_hash: Option<String>,
         role: UserRole,
         is_active: bool,
+        created_at: chrono::DateTime<chrono::Utc>,
+        updated_at: chrono::DateTime<chrono::Utc>,
     ) -> Self {
         Self {
             id,
             username,
             email,
+            password_hash,
             role,
             is_active,
+            created_at,
+            updated_at,
         }
     }
 
@@ -429,6 +442,21 @@ impl User {
     #[must_use]
     pub const fn is_active(&self) -> bool {
         self.is_active
+    }
+
+    #[must_use]
+    pub const fn password_hash(&self) -> Option<&String> {
+        self.password_hash.as_ref()
+    }
+
+    #[must_use]
+    pub const fn created_at(&self) -> chrono::DateTime<chrono::Utc> {
+        self.created_at
+    }
+
+    #[must_use]
+    pub const fn updated_at(&self) -> chrono::DateTime<chrono::Utc> {
+        self.updated_at
     }
 
     // ========================================================================
@@ -629,7 +657,17 @@ mod tests {
             let username = Username::new("testuser".to_string()).unwrap();
             let email = Email::new("test@example.com".to_string()).unwrap();
             let role = UserRole::Author;
-            let user = User::restore(id, username.clone(), email.clone(), role, false);
+            let now = chrono::Utc::now();
+            let user = User::restore(
+                id,
+                username.clone(),
+                email.clone(),
+                None,
+                role,
+                false,
+                now,
+                now,
+            );
 
             assert_eq!(user.id(), id);
             assert_eq!(user.username(), &username);
