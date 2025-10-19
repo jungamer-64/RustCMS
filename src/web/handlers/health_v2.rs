@@ -43,14 +43,25 @@ pub async fn health_check() -> impl IntoResponse {
 ///
 /// GET /api/v2/health
 #[cfg(feature = "restructure_domain")]
-pub async fn detailed_health_check(State(_state): State<std::sync::Arc<AppState>>) -> impl IntoResponse {
-    // TODO: Phase 5+ でサービス統合後に実装
-    // Database接続確認
-    let db_status = "not_implemented";
+pub async fn detailed_health_check(State(state): State<std::sync::Arc<AppState>>) -> impl IntoResponse {
+    // Get health status from AppState
+    let health = match state.health_check().await {
+        Ok(h) => h,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(HealthResponse {
+                    status: "unhealthy".to_string(),
+                    version: env!("CARGO_PKG_VERSION").to_string(),
+                    database: "error".to_string(),
+                    cache: None,
+                }),
+            );
+        }
+    };
 
-    // Cache接続確認（optional）
     let cache_status = if cfg!(feature = "cache") {
-        Some("not_implemented".to_string())
+        Some(health.cache)
     } else {
         None
     };
@@ -58,7 +69,7 @@ pub async fn detailed_health_check(State(_state): State<std::sync::Arc<AppState>
     let response = HealthResponse {
         status: "healthy".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
-        database: db_status.to_string(),
+        database: health.database,
         cache: cache_status,
     };
 

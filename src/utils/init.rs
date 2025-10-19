@@ -34,17 +34,21 @@ pub fn init_logging_and_config() -> Result<Config> {
 
 /// Initialize AppState with all services
 ///
-/// Phase 5: 新AppState実装（infrastructure/app_state.rs）を使用
-/// Note: サービス初期化は今後実装予定。現在はconfig+eventのみ
+/// Phase 5.1: database/cache サービスを統合
 #[cfg(feature = "restructure_domain")]
 pub async fn init_app_state() -> Result<Arc<crate::AppState>> {
     use crate::infrastructure::app_state::AppState;
     
     let config = Config::from_env()?;
-    let builder = AppState::builder(config);
+    let mut builder = AppState::builder(config);
     
-    // Phase 5: サービス初期化は後で実装
-    // TODO: database, cache, search, auth の初期化を追加
+    // Initialize database if feature is enabled
+    #[cfg(feature = "database")]
+    {
+        builder = builder.with_database()?;
+    }
+    
+    // TODO: Initialize search, auth services
     
     Ok(Arc::new(builder.build()?))
 }

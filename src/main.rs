@@ -97,9 +97,8 @@ async fn main() -> Result<(), ServerError> {
     let server = axum::serve(listener, router).with_graceful_shutdown(shutdown_signal());
     server.await?;
 
-    // TODO: Phase 5+ で AppState に shutdown メソッドを実装
     // After server returns (graceful shutdown triggered), run AppState shutdown
-    // state.shutdown().await;
+    state.shutdown().await;
 
     info!("✅ Server shutdown complete");
     Ok(())
