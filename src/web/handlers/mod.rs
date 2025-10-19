@@ -17,24 +17,6 @@ pub mod health_v2;
 pub mod posts_v2;
 pub mod users_v2;
 
-// ============================================================================
-// Phase 4 New Structure - CQRS統合ハンドラ（監査推奨）
-// ============================================================================
-#[cfg(feature = "restructure_domain")]
-pub mod users_v2;
-
-#[cfg(feature = "restructure_domain")]
-pub mod posts_v2;
-
-#[cfg(feature = "restructure_domain")]
-pub mod comments_v2;
-
-#[cfg(feature = "restructure_domain")]
-pub mod categories_v2;
-
-#[cfg(feature = "restructure_domain")]
-pub mod health_v2;
-
 // Public endpoints and HTTP methods used to determine security configuration.
 // NOTE: When adding new unauthenticated endpoints, update this list to keep the
 // generated OpenAPI specification accurate.
@@ -116,16 +98,23 @@ pub async fn docs_ui() -> impl IntoResponse {
 
 // Legacy `/docs` support removed - use `/api/docs`.
 
-/// Return generated `OpenAPI` JSON from the compile-time `ApiDoc`
+/// Return generated `OpenAPI` JSON
 ///
-/// Errors are surfaced as `AppError` instead of panicking to make the handler robust.
-pub async fn openapi_json() -> Result<impl IntoResponse, AppError> {
-    let doc = ApiDoc::openapi();
-    let mut spec = serde_json::to_value(&doc).map_err(AppError::Serde)?;
-    configure_openapi_security(&mut spec)?;
-    Ok(Json(spec))
+/// TODO: Phase 5+ で ApiDoc を再実装
+/// 現在はスタブを返します
+pub async fn openapi_json() -> impl IntoResponse {
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(json!({
+            "error": "OpenAPI documentation temporarily unavailable",
+            "message": "OpenAPI documentation will be reimplemented in Phase 5+"
+        })),
+    )
 }
 
+// TODO: Phase 5+ で OpenAPI セキュリティ設定を再実装
+// 以下の関数は一時的にコメントアウト
+/*
 fn configure_openapi_security(spec: &mut JsonValue) -> Result<(), AppError> {
     add_security_schemes(spec)?;
     add_api_key_permissions(spec);
@@ -176,12 +165,6 @@ fn remove_global_security(spec: &mut JsonValue) {
     }
 }
 
-fn apply_endpoint_security(spec: &mut JsonValue) -> Result<(), AppError> {
-    let paths = spec
-        .get_mut("paths")
-        .and_then(|p| p.as_object_mut())
-        .ok_or_else(|| AppError::Internal("Missing paths section in OpenAPI spec".into()))?;
-
     for (path, item) in paths.iter_mut() {
         let Some(item_obj) = item.as_object_mut() else {
             continue;
@@ -214,6 +197,7 @@ fn is_public_endpoint(path: &str, method: &str) -> bool {
         .iter()
         .any(|(public_path, public_method)| path == *public_path && method == *public_method)
 }
+*/
 
 #[cfg(test)]
 mod tests {

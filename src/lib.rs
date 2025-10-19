@@ -136,7 +136,9 @@ pub mod auth {
 // Phase 7: Legacy modules removed
 pub mod limiter;
 pub mod middleware;
+pub mod routes; // Router configuration
 pub mod utils; // Phase 7: Minimal utility set (legacy removed)
+pub mod web; // Web handlers and presentation layer
 
 // Re-export core types for API
 // Phase 5: AppState re-export (new DDD implementation only)
@@ -145,6 +147,17 @@ pub use infrastructure::app_state::AppState;
 
 pub use config::Config;
 pub use error::{AppError, Result};
+
+// Legacy compatibility: re-export domain entities as "models"
+#[cfg(feature = "restructure_domain")]
+pub mod models {
+    //! Legacy models module - re-exports domain entities for backward compatibility
+    pub use crate::domain::user::{User, UserId, UserRole};
+    pub use crate::domain::post::{Post, PostId, PostStatus};
+    pub use crate::domain::comment::{Comment, CommentId, CommentStatus};
+    pub use crate::domain::category::{Category, CategoryId};
+    pub use crate::domain::tag::{Tag, TagId};
+}
 
 /// Build information endpoint
 #[must_use]

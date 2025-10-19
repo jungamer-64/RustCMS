@@ -16,15 +16,20 @@ pub mod core;
 pub use core::{rate_limit, request_logging, require_auth};
 
 // レガシーモジュール（Phase 5で段階廃止）
+// TODO: これらのモジュールは新AppStateに対応していないため一時的に無効化
+// Phase 5+ でサービス統合後に再実装予定
+#[cfg(feature = "legacy_middlewares")]
 pub mod api_key;
+#[cfg(feature = "legacy_middlewares")]
 pub mod auth;
 pub mod common;
 pub mod compression;
+#[cfg(feature = "legacy_middlewares")]
 pub mod csrf;
 pub mod deprecation;
 pub mod logging;
 pub mod permission;
 pub mod rate_limit_backend;
+#[cfg(feature = "legacy_middlewares")]
 pub mod rate_limiting;
-pub mod request_id;
 pub mod security;

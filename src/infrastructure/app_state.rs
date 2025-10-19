@@ -42,8 +42,8 @@ pub type EventBus = broadcast::Sender<crate::infrastructure::events::AppEvent>;
 /// Phase 5: 現在はconfig とevent_busのみ。サービスは段階的に追加予定。
 #[derive(Clone)]
 pub struct AppState {
-    /// Application configuration
-    config: Arc<Config>,
+    /// Application configuration (public for backward compatibility)
+    pub config: Arc<Config>,
 
     /// Event bus for domain events
     event_bus: EventBus,

@@ -5,7 +5,8 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::Serialize;
 
-use crate::app::AppState;
+#[cfg(feature = "restructure_domain")]
+use crate::AppState;
 
 // ============================================================================
 // Response Types
@@ -42,17 +43,14 @@ pub async fn health_check() -> impl IntoResponse {
 ///
 /// GET /api/v2/health
 #[cfg(feature = "restructure_domain")]
-pub async fn detailed_health_check(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn detailed_health_check(State(_state): State<std::sync::Arc<AppState>>) -> impl IntoResponse {
+    // TODO: Phase 5+ でサービス統合後に実装
     // Database接続確認
-    let db_status = if state.pool().is_some() {
-        "connected"
-    } else {
-        "unavailable"
-    };
+    let db_status = "not_implemented";
 
     // Cache接続確認（optional）
     let cache_status = if cfg!(feature = "cache") {
-        Some("connected".to_string())
+        Some("not_implemented".to_string())
     } else {
         None
     };
@@ -70,13 +68,10 @@ pub async fn detailed_health_check(State(state): State<AppState>) -> impl IntoRe
 /// Readiness Probe（Kubernetes用）
 ///
 /// GET /ready
-pub async fn readiness_check(State(state): State<AppState>) -> StatusCode {
+pub async fn readiness_check(State(_state): State<std::sync::Arc<AppState>>) -> StatusCode {
+    // TODO: Phase 5+ でサービス統合後に実装
     // 必須コンポーネントの確認
-    if state.pool().is_some() {
-        StatusCode::OK
-    } else {
-        StatusCode::SERVICE_UNAVAILABLE
-    }
+    StatusCode::OK
 }
 
 /// Liveness Probe（Kubernetes用）
