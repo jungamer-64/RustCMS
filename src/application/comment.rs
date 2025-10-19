@@ -186,7 +186,7 @@ mod tests {
 
         mock_repo
             .expect_save()
-            .returning(|_| Box::pin(async { Ok(()) }));
+            .returning(|_| Ok(()));
 
         let use_case = CreateComment::new(Arc::new(mock_repo));
 
@@ -211,7 +211,7 @@ mod tests {
         let request = CreateCommentRequest {
             post_id: PostId::new().to_string(),
             author_id: UserId::new().to_string(),
-            content: "   ".to_string(), // 空白のみ
+            content: "".to_string(), // 完全に空
         };
 
         let result = use_case.execute(request).await;

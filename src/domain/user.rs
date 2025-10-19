@@ -213,6 +213,106 @@ pub enum UsernameError {
     InvalidCharacters,
 }
 
+/// ユーザーロール（権限レベル）
+///
+/// システム内でのユーザーの権限レベルを表します。
+/// 
+/// # 不変条件
+/// - 各ロールは明確に定義された権限セットを持つ
+/// - ロール変更はビジネスルールに従って行われる
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UserRole {
+    /// 管理者 - 全ての操作が可能
+    Admin,
+    /// 編集者 - コンテンツの管理が可能
+    Editor,
+    /// 著者 - 自分のコンテンツの作成・編集が可能
+    Author,
+    /// 購読者 - 閲覧のみ可能
+    Subscriber,
+}
+
+impl UserRole {
+    /// 文字列からUserRoleをパース
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use crate::domain::user::UserRole;
+    ///
+    /// let role = UserRole::from_str("admin").unwrap();
+    /// assert_eq!(role, UserRole::Admin);
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// 無効なロール名の場合、`UserRoleError::InvalidRole` を返します。
+    pub fn from_str(s: &str) -> Result<Self, UserRoleError> {
+        match s.to_lowercase().as_str() {
+            "admin" => Ok(Self::Admin),
+            "editor" => Ok(Self::Editor),
+            "author" => Ok(Self::Author),
+            "subscriber" => Ok(Self::Subscriber),
+            _ => Err(UserRoleError::InvalidRole(s.to_string())),
+        }
+    }
+
+    /// UserRoleを文字列に変換
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Admin => "admin",
+            Self::Editor => "editor",
+            Self::Author => "author",
+            Self::Subscriber => "subscriber",
+        }
+    }
+
+    /// デフォルトロール（新規ユーザー用）
+    #[must_use]
+    pub const fn default_role() -> Self {
+        Self::Subscriber
+    }
+
+    /// 管理者かどうかを判定
+    #[must_use]
+    pub const fn is_admin(&self) -> bool {
+        matches!(self, Self::Admin)
+    }
+
+    /// 編集者以上かどうかを判定
+    #[must_use]
+    pub const fn can_edit(&self) -> bool {
+        matches!(self, Self::Admin | Self::Editor)
+    }
+
+    /// 著者以上かどうかを判定
+    #[must_use]
+    pub const fn can_author(&self) -> bool {
+        matches!(self, Self::Admin | Self::Editor | Self::Author)
+    }
+}
+
+impl Default for UserRole {
+    fn default() -> Self {
+        Self::default_role()
+    }
+}
+
+impl fmt::Display for UserRole {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+/// UserRole変換エラー
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum UserRoleError {
+    #[error("Invalid role: {0}")]
+    InvalidRole(String),
+}
+
 // ============================================================================
 // Entity
 // ============================================================================
@@ -225,6 +325,7 @@ pub struct User {
     id: UserId,
     username: Username,
     email: Email,
+    role: UserRole,
     is_active: bool,
 }
 
@@ -246,17 +347,25 @@ impl User {
             id: UserId::new(),
             username,
             email,
+            role: UserRole::default_role(),
             is_active: true,
         }
     }
 
     /// 既存のデータからユーザーを復元（リポジトリ用）
     #[must_use]
-    pub fn restore(id: UserId, username: Username, email: Email, is_active: bool) -> Self {
+    pub fn restore(
+        id: UserId,
+        username: Username,
+        email: Email,
+        role: UserRole,
+        is_active: bool,
+    ) -> Self {
         Self {
             id,
             username,
             email,
+            role,
             is_active,
         }
     }
@@ -313,8 +422,42 @@ impl User {
     }
 
     #[must_use]
+    pub const fn role(&self) -> UserRole {
+        self.role
+    }
+
+    #[must_use]
     pub const fn is_active(&self) -> bool {
         self.is_active
+    }
+
+    // ========================================================================
+    // ロール関連メソッド
+    // ========================================================================
+
+    /// ロールを変更
+    ///
+    /// ビジネスルール: 権限レベルの変更は管理者のみ実行可能
+    pub fn change_role(&mut self, new_role: UserRole) {
+        self.role = new_role;
+    }
+
+    /// 管理者かどうかを判定
+    #[must_use]
+    pub const fn is_admin(&self) -> bool {
+        self.role.is_admin()
+    }
+
+    /// 編集権限を持つかどうかを判定
+    #[must_use]
+    pub const fn can_edit(&self) -> bool {
+        self.role.can_edit()
+    }
+
+    /// 執筆権限を持つかどうかを判定
+    #[must_use]
+    pub const fn can_author(&self) -> bool {
+        self.role.can_author()
     }
 }
 
@@ -485,9 +628,12 @@ mod tests {
             let id = UserId::new();
             let username = Username::new("testuser".to_string()).unwrap();
             let email = Email::new("test@example.com".to_string()).unwrap();
-            let user = User::restore(id, username, email, false);
+            let role = UserRole::Author;
+            let user = User::restore(id, username.clone(), email.clone(), role, false);
 
             assert_eq!(user.id(), id);
+            assert_eq!(user.username(), &username);
+            assert_eq!(user.role(), role);
             assert!(!user.is_active());
         }
 

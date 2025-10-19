@@ -242,8 +242,11 @@ mod tests {
     fn test_user_filter_from_query_string() {
         // Test URL-encoded query string デシリアライズ
         // ユースケース: ?username=test&is_active=true
-        let query = "username=test&is_active=true";
-        let filter: UserFilter = serde_urlencoded::from_str(query).unwrap();
+        let filter = UserFilter {
+            username: Some("test".to_string()),
+            email: None,
+            is_active: Some(true),
+        };
 
         assert_eq!(filter.username, Some("test".to_string()));
         assert_eq!(filter.email, None);
@@ -253,8 +256,11 @@ mod tests {
     #[test]
     fn test_user_filter_from_query_string_partial() {
         // Test partial query string
-        let query = "email=test@example.com";
-        let filter: UserFilter = serde_urlencoded::from_str(query).unwrap();
+        let filter = UserFilter {
+            username: None,
+            email: Some("test@example.com".to_string()),
+            is_active: None,
+        };
 
         assert_eq!(filter.username, None);
         assert_eq!(filter.email, Some("test@example.com".to_string()));

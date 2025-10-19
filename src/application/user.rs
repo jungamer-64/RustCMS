@@ -257,12 +257,12 @@ mod tests {
         // メール重複チェック: None（存在しない）
         mock_repo
             .expect_find_by_email()
-            .returning(|_| Box::pin(async { Ok(None) }));
+            .returning(|_| Ok(None));
 
         // 保存成功
         mock_repo
             .expect_save()
-            .returning(|_| Box::pin(async { Ok(()) }));
+            .returning(|_| Ok(()));
 
         let use_case = RegisterUser::new(Arc::new(mock_repo));
 
@@ -291,7 +291,7 @@ mod tests {
 
         mock_repo
             .expect_find_by_email()
-            .returning(move |_| Box::pin(async move { Ok(Some(existing_user.clone())) }));
+            .returning(move |_| Ok(Some(existing_user.clone())));
 
         let use_case = RegisterUser::new(Arc::new(mock_repo));
 

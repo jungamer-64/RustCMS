@@ -8,8 +8,8 @@ use uuid::Uuid;
 use crate::{
     Result,
     auth::error::AuthError,
-    models::{User, UserRole},
-    utils::common_types::SessionId,
+    common::type_utils::common_types::SessionId,
+    domain::user::{User, UserRole},
 };
 
 pub(super) struct ParsedBiscuit {
@@ -33,7 +33,9 @@ pub(super) fn build_token(
     writeln!(
         &mut program,
         "user(\"{}\", \"{}\", \"{}\");",
-        user.id, user.username, user.role
+        user.id(),
+        user.username().as_str(),
+        user.role().as_str()
     )
     .map_err(|e| AuthError::Biscuit(format!("Failed to generate biscuit facts: {e}")))?;
     writeln!(&mut program, "token_type(\"{token_type}\");")
@@ -122,7 +124,7 @@ fn get_user(authorizer: &mut biscuit_auth::Authorizer) -> Result<(Uuid, String, 
     let (id_s, username, role_s) =
         query_triple(authorizer, "data($id,$u,$r) <- user($id,$u,$r)", "user")?;
     let user_id = Uuid::parse_str(&id_s).map_err(|_| AuthError::InvalidToken)?;
-    let role = UserRole::parse_str(&role_s).map_err(|_| AuthError::InvalidToken)?;
+    let role = UserRole::from_str(&role_s).map_err(|_| AuthError::InvalidToken)?;
     Ok((user_id, username, role))
 }
 

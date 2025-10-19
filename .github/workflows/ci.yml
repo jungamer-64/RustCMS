@@ -105,8 +105,8 @@ jobs:
           - feature-set: minimal
             cargo-features: "--no-default-features"
           - feature-set: no-flat
-            # Preview removal of deprecated flattened auth fields (disable auth-flat-fields only)
-            cargo-features: "--no-default-features --features auth,cache,compression,database,search"
+            # Phase 7 Complete: restructure_domain is now default (legacy removed)
+            cargo-features: "--no-default-features --features auth,cache,compression,database,search,restructure_domain"
     steps:
       - name: Checkout repository
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1

@@ -307,7 +307,7 @@ database = [
     "dep:diesel_migrations",
     "dep:r2d2",
 ]
-default = ["auth", "cache", "compression", "database", "email", "search"]
+default = ["auth", "cache", "compression", "database", "email", "search", "restructure_domain"]
 development = ["monitoring", "search"]
 dev = ["auth", "database"]
 email = ["dep:lettre"]
@@ -316,8 +316,9 @@ monitoring = ["dep:metrics", "dep:metrics-prometheus", "dep:prometheus"]
 production = ["default"]
 search = ["dep:tantivy"]
 
-# === 構造再編 Features (Phase 1-5) ===
-restructure_domain = [] # Phase 1-2: Value Objects + Entities
+# === 構造再編 Features (Phase 1-7) ===
+# Phase 7 Complete: restructure_domain is now default (legacy code removed)
+restructure_domain = [] # Phase 1-2: Value Objects + Entities (now standard)
 restructure_application = [
     "restructure_domain",
 ] # Phase 3: Use Cases + Repositories

@@ -7,7 +7,7 @@ pub mod date;
 pub mod deprecation;
 pub mod dto;
 pub mod dup;
-pub mod error;
+// pub mod error; // Removed in Phase 7
 pub mod file;
 pub mod hash;
 pub mod password;

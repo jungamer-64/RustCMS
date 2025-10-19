@@ -138,6 +138,7 @@ pub trait PostRepository: Send + Sync {
 /// コメントリポジトリ（Port）
 ///
 /// コメント管理のための抽象インターフェース
+#[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait CommentRepository: Send + Sync {
     /// コメントを作成または更新

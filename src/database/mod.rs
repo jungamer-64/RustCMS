@@ -27,13 +27,16 @@ pub mod schema;
 
 pub use pool::{DatabasePool, Pool, PooledConnection};
 
-use crate::repositories::UserRepository;
+#[cfg(feature = "restructure_domain")]
+use crate::application::ports::repositories::UserRepository;
 use crate::{
     Result,
     config::DatabaseConfig,
-    models::{
-        CreatePostRequest, CreateUserRequest, Post, UpdatePostRequest, UpdateUserRequest, User,
-    },
+};
+#[cfg(feature = "restructure_domain")]
+use crate::domain::{
+    user::User,
+    post::Post,
 };
 #[cfg(all(feature = "database", not(test)))]
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};

@@ -80,25 +80,52 @@ The server will start on `http://localhost:8080` by default.
 
 ## Project Structure
 
+**Note:** As of Phase 7 (completed), RustCMS has migrated to a complete Domain-Driven Design (DDD) architecture. Legacy code has been removed.
+
 ```
 RustCMS/
 ├── src/
-│   ├── auth/          # Authentication and authorization
-│   ├── cache/         # Caching layer
-│   ├── database/      # Database models and connections
-│   ├── handlers/      # HTTP request handlers
-│   ├── middleware/    # Middleware components
-│   ├── models/        # Domain models
-│   ├── repositories/  # Data access layer
-│   ├── routes/        # Route definitions
-│   ├── search/        # Full-text search
-│   └── utils/         # Utility functions
-├── tests/             # Integration tests
-│   └── fixtures/      # Test data
-├── examples/          # Usage examples
-├── benches/           # Performance benchmarks
-├── migrations/        # Database migrations
-└── docs/              # Documentation
+│   ├── domain/                    # Domain Layer (DDD)
+│   │   ├── user.rs               # User Entity + Value Objects
+│   │   ├── post.rs               # Post Entity + Value Objects
+│   │   ├── comment.rs            # Comment Entity + Value Objects
+│   │   ├── tag.rs                # Tag Entity + Value Objects
+│   │   └── category.rs           # Category Entity + Value Objects
+│   ├── application/               # Application Layer (DDD)
+│   │   ├── dto/                  # Data Transfer Objects
+│   │   ├── ports/                # Repository Ports (traits)
+│   │   ├── queries/              # CQRS Queries
+│   │   ├── user.rs               # User Use Cases
+│   │   ├── post.rs               # Post Use Cases
+│   │   └── comment.rs            # Comment Use Cases
+│   ├── infrastructure/            # Infrastructure Layer (DDD)
+│   │   ├── database/             # Diesel Repository Implementations
+│   │   ├── cache/                # Redis Cache Service
+│   │   └── search/               # Tantivy Search Service
+│   ├── web/                       # Presentation Layer
+│   │   ├── handlers/             # API Handlers (/api/v2/*)
+│   │   └── middleware/           # Middleware components
+│   ├── auth/                      # Authentication (Biscuit-based)
+│   ├── common/                    # Common types & errors
+│   │   ├── error_types.rs        # DDD Error Hierarchy
+│   │   └── types.rs              # Shared types
+│   ├── config/                    # Configuration
+│   ├── telemetry/                 # Observability
+│   └── utils/                     # Utility functions
+├── tests/                         # Integration tests
+│   ├── fixtures/                 # Test data
+│   └── helpers/                  # Test helpers
+├── examples/                      # Usage examples
+├── benches/                       # Performance benchmarks
+├── migrations/                    # Database migrations
+└── docs/                          # Documentation
+```
+
+**Key Architecture Documents:**
+- [PHASE7_COMPLETION_REPORT.md](PHASE7_COMPLETION_REPORT.md) - Phase 7 completion details
+- [RESTRUCTURE_PLAN.md](RESTRUCTURE_PLAN.md) - Full DDD migration plan
+- [docs/MODULES_OVERVIEW.md](docs/MODULES_OVERVIEW.md) - Module structure details
+- [.github/copilot-instructions.md](.github/copilot-instructions.md) - DDD implementation guide
 ```
 
 ## Coding Standards
@@ -345,6 +372,212 @@ cargo flamegraph --bin cms-server
 # Run benchmarks
 cargo bench
 ```
+
+## Domain-Driven Design (DDD) Guidelines
+
+**Note:** As of Phase 7, RustCMS has fully migrated to a DDD architecture. All new code should follow these patterns.
+
+### Layer Responsibilities
+
+**Domain Layer** (`src/domain/`):
+- **Entities**: Core business objects with identity (User, Post, Comment, Tag, Category)
+- **Value Objects**: Immutable, validated types (UserId, Email, Slug, Title, etc.)
+- **Domain Events**: Business events (UserRegistered, PostPublished, etc.)
+- **Domain Services**: Complex business logic spanning multiple entities
+- **No external dependencies**: Domain layer must be independent
+
+**Application Layer** (`src/application/`):
+- **Use Cases**: Application logic orchestration (CreatePost, RegisterUser, etc.)
+- **DTOs**: Data transfer objects for API boundaries
+- **Ports (Traits)**: Repository and service interfaces
+- **Queries (CQRS)**: Read-only operations with filtering/pagination
+- **Depends on**: Domain layer only (not Infrastructure)
+
+**Infrastructure Layer** (`src/infrastructure/`):
+- **Repository Implementations**: Concrete Diesel/PostgreSQL implementations
+- **Unit of Work**: Transaction management
+- **External Services**: Cache, Search, Email, etc.
+- **Implements**: Application layer Ports
+
+**Presentation Layer** (`src/web/`):
+- **Handlers**: HTTP request/response handling
+- **Middleware**: Authentication, logging, rate limiting, etc.
+- **API versioning**: `/api/v2/*` endpoints
+- **Depends on**: Application layer Use Cases
+
+### Writing New Domain Code
+
+**Example: Adding a new Value Object**
+
+```rust
+// src/domain/my_entity.rs
+use crate::common::error_types::{DomainError, DomainResult};
+use uuid::Uuid;
+
+/// Value Object: Validated email address
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Email(String);
+
+impl Email {
+    pub fn new(value: String) -> DomainResult<Self> {
+        // Validation logic
+        if value.is_empty() {
+            return Err(DomainError::InvalidEmail("Email cannot be empty".into()));
+        }
+        if !value.contains('@') {
+            return Err(DomainError::InvalidEmail("Invalid email format".into()));
+        }
+        Ok(Self(value))
+    }
+
+    pub fn value(&self) -> &str {
+        &self.0
+    }
+}
+```
+
+**Example: Adding a new Entity**
+
+```rust
+// src/domain/my_entity.rs
+pub struct MyEntity {
+    id: MyEntityId,
+    email: Email,
+    created_at: DateTime<Utc>,
+    // Keep fields private for invariant protection
+}
+
+impl MyEntity {
+    /// Factory method with validation
+    pub fn new(email: Email) -> Self {
+        Self {
+            id: MyEntityId::new(),
+            email,
+            created_at: Utc::now(),
+        }
+    }
+
+    /// Business method with domain logic
+    pub fn change_email(&mut self, new_email: Email) -> DomainResult<()> {
+        // Business rules validation
+        if self.email == new_email {
+            return Err(DomainError::BusinessRuleViolation(
+                "New email must be different".into()
+            ));
+        }
+        self.email = new_email;
+        Ok(())
+    }
+}
+```
+
+**Example: Adding a new Use Case**
+
+```rust
+// src/application/my_use_case.rs
+use crate::application::ports::repositories::MyEntityRepository;
+use crate::common::error_types::{ApplicationResult, ApplicationError};
+
+pub struct CreateMyEntityUseCase<R: MyEntityRepository> {
+    repository: R,
+}
+
+impl<R: MyEntityRepository> CreateMyEntityUseCase<R> {
+    pub fn new(repository: R) -> Self {
+        Self { repository }
+    }
+
+    pub async fn execute(&self, email: String) -> ApplicationResult<MyEntityDto> {
+        // 1. Create domain value objects
+        let email = Email::new(email)
+            .map_err(|e| ApplicationError::InvalidInput(e.to_string()))?;
+
+        // 2. Create domain entity
+        let entity = MyEntity::new(email);
+
+        // 3. Persist via repository
+        self.repository.save(&entity).await?;
+
+        // 4. Convert to DTO
+        Ok(MyEntityDto::from(entity))
+    }
+}
+```
+
+### Testing Patterns
+
+**Domain Layer Tests** (no external dependencies):
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn email_validation_succeeds() {
+        let email = Email::new("test@example.com".to_string());
+        assert!(email.is_ok());
+    }
+
+    #[test]
+    fn email_validation_fails_without_at() {
+        let email = Email::new("invalid".to_string());
+        assert!(email.is_err());
+    }
+}
+```
+
+**Application Layer Tests** (with mocked repositories):
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockall::predicate::*;
+
+    #[tokio::test]
+    async fn create_entity_succeeds() {
+        let mut mock_repo = MockMyEntityRepository::new();
+        mock_repo
+            .expect_save()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        let use_case = CreateMyEntityUseCase::new(mock_repo);
+        let result = use_case.execute("test@example.com".to_string()).await;
+        
+        assert!(result.is_ok());
+    }
+}
+```
+
+### Feature Flags
+
+- **`restructure_domain`**: DDD Domain layer (now **default** after Phase 7)
+- **`full_restructure`**: Complete DDD structure (Use Cases + Repositories + Handlers)
+
+To build with DDD structure (default):
+```bash
+cargo build --release
+```
+
+To test only Domain layer:
+```bash
+cargo test --lib --no-default-features --features "restructure_domain"
+```
+
+### Key References
+
+- [.github/copilot-instructions.md](.github/copilot-instructions.md) - Comprehensive DDD patterns and rules
+- [PHASE7_COMPLETION_REPORT.md](PHASE7_COMPLETION_REPORT.md) - Phase 7 completion report
+- [RESTRUCTURE_PLAN.md](RESTRUCTURE_PLAN.md) - Full migration plan
+- [docs/MODULES_OVERVIEW.md](docs/MODULES_OVERVIEW.md) - Module structure
+
+**Template Files** (use as reference):
+- `src/domain/user.rs` - Entity + Value Objects pattern
+- `src/application/user.rs` - Use Cases pattern
+- `src/application/dto/user.rs` - DTO pattern
+- `src/infrastructure/database/repositories/user.rs` - Repository implementation
 
 ## Getting Help
 

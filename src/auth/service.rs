@@ -18,13 +18,23 @@ use crate::{
         session::{InMemorySessionStore, SessionData, SessionStore},
     },
     config::AuthConfig,
+};
+
+#[cfg(feature = "restructure_domain")]
+use crate::{
+    domain::user::{User, UserRole},
+    application::ports::repositories::UserRepository,
+    common::type_utils::common_types::{SessionId, UserInfo},
+};
+
+#[cfg(not(feature = "restructure_domain"))]
+use crate::{
     models::{User, UserRole},
     repositories::UserRepository,
-    utils::{
-        common_types::{SessionId, UserInfo},
-        password,
-    },
+    utils::common_types::{SessionId, UserInfo},
 };
+
+use crate::utils::password;
 
 /// Authentication service
 #[cfg(feature = "auth")]
