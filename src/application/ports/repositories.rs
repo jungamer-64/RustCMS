@@ -347,8 +347,9 @@ impl From<diesel::result::Error> for RepositoryError {
         use diesel::result::Error as DieselError;
         match err {
             DieselError::NotFound => RepositoryError::NotFound("Record not found".to_string()),
-            DieselError::DatabaseError(kind, info) => {
-                RepositoryError::DatabaseError(format!("{kind:?}: {info}"))
+            DieselError::DatabaseError(kind, _info) => {
+                // DatabaseErrorInformation doesn't implement Display, so just use kind
+                RepositoryError::DatabaseError(format!("Database error: {kind:?}"))
             }
             DieselError::QueryBuilderError(msg) => {
                 RepositoryError::DatabaseError(format!("Query builder error: {msg}"))

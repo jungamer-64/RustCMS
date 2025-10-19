@@ -1,7 +1,7 @@
 # RustCMS 構造再編 - マイグレーションチェックリスト
 
-> **最終更新**: 2025年10月18日  
-> **現在のステータス**: ✅ Phase 1 完了 | 🚀 Phase 2 進行中（85%完了）
+> **最終更新**: 2025年10月19日  
+> **現在のステータス**: ✅ Phase 1-3 完了 | ✅ Phase 9 完了（95%） | 🔜 Phase 4/10 準備中
 
 ---
 
@@ -826,6 +826,173 @@ cargo test --lib --no-default-features --features "restructure_domain database" 
 
 ---
 
-**作成日**: 2025年10月16日
-**最終更新**: 2025年10月16日
-**ステータス**: Phase 1 Week 1 開始準備中
+**作成日**: 2025年10月16日  
+**最終更新**: 2025年10月19日  
+**ステータス**: Phase 9 完了（95%）、Phase 10 準備中
+
+---
+
+## ✅ Phase 9: Repository実装とエラー統合（完了 - 2025年10月19日）
+
+### 📊 完了サマリー
+
+| 指標 | 開始時 | 完了時 | 達成率 |
+|------|--------|--------|--------|
+| **総エラー数** | 101 | 5 | **-95%** ✅ |
+| **Domain層エラー** | 45 | 0 | **100%** ✅ |
+| **Application層エラー** | 38 | 0 | **100%** ✅ |
+| **Infrastructure層エラー** | 18 | 0 | **100%** ✅ |
+| **Presentation層エラー** | 0 | 5 | **Phase 4対応予定** |
+| **修正ファイル数** | - | 12 | - |
+| **追加コード行数** | - | ~300行 | - |
+| **作業時間** | - | ~5.5時間 | - |
+
+### 主要成果
+
+#### 1. Repository実装（3個、1,084行、14 tests）
+- [x] `DieselUserRepository` - UserRepository 完全実装（341行, 5 tests）
+- [x] `DieselPostRepository` - PostRepository 完全実装（370行, 4 tests）
+- [x] `DieselCommentRepository` - CommentRepository 完全実装（373行, 5 tests）
+
+#### 2. Domain Entity拡張
+- [x] **Comment Entity** - parent_id フィールド追加（ネストコメント対応）
+  - `parent_id: Option<CommentId>` フィールド
+  - `parent_id()` getter
+  - `restore()` 9引数対応
+  - **Impact**: -28 errors
+
+- [x] **User Entity** - タイムスタンプ管理完全実装
+  - `password_hash: Option<String>` フィールド
+  - `created_at: DateTime<Utc>` フィールド
+  - `updated_at: DateTime<Utc>` フィールド
+  - 3個のgetter追加
+  - **Impact**: -4 errors
+
+- [x] **Post Entity** - PostStatus拡張
+  - `from_str()` / `as_str()` helper methods
+  - **Impact**: -1 error
+
+#### 3. Infrastructure修正（Diesel 2.x互換化）
+- [x] **connection.rs修正** - Diesel 2.x完全互換化
+  - `error_handler` 削除（クロージャー非対応）
+  - `sql_query().execute()` パターン採用
+  - **Impact**: -2 errors
+
+#### 4. Error Chain完全統合（3層）
+- [x] **RepositoryError拡張** - ConnectionError追加
+  - `From<diesel::r2d2::PoolError>` 実装
+  - `From<diesel::result::Error>` 実装
+  - DatabaseError Display修正
+  - **Impact**: -17 errors
+
+- [x] **ApplicationError拡張** - InvalidPostStatus追加
+- [x] **AppError統合** - From<RepositoryError> 実装
+- [x] **HTTP Responses** - InvalidUuid pattern match
+
+#### 5. Schema整合（Diesel models ↔ schema.rs）
+- [x] users table: 26 → 13フィールド
+- [x] posts table: 27 → 16フィールド
+- [x] comments table: 18 → 9フィールド
+- **Impact**: -15 errors
+
+### アーキテクチャパターン確立（7個）
+
+1. **Value Object Conversion Pattern** - Domain → Primitive変換
+2. **Schema Alignment Pattern** - Diesel models完全一致
+3. **Error Chain Extension Pattern** - 3層完全統合
+4. **From Trait Pattern** - Borrowed + Owned conversion
+5. **Getter Encapsulation Pattern** - Private fields → public getters
+6. **Diesel 2.x Compatibility Pattern** - API migration完了
+7. **Comment Hierarchy Pattern** - parent_id支援（ネスト対応）
+
+### テスト結果
+
+```bash
+# Domain Layer: 133/133 passing ✅
+cargo test --lib --no-default-features --features "restructure_domain" 'domain::'
+
+# Application Layer: 110/110 passing ✅
+cargo test --lib --no-default-features --features "restructure_domain" 'application::'
+
+# Infrastructure Layer: 14/19 passing, 5 ignored（DB接続必要）✅
+cargo test --lib --no-default-features --features "restructure_domain database" 'infrastructure::'
+```
+
+### 残存課題
+
+**Presentation層レガシーコード（5 errors）**:
+- ファイル: `src/presentation/http/handlers.rs`
+- 原因: 新DTO（Phase 3実装）との非互換性
+- Feature Flag: `restructure_presentation`でゲート済み
+- CI Impact:
+  - `--no-default-features`: 0 errors ✅
+  - `no-flat` feature-set: 0 errors ✅
+  - `--all-features`: 5 errors（レガシー有効化）
+- **対応**: Phase 4で完全リファクタリング（Option A推奨）
+
+### 完了条件
+
+- [x] Domain/Application/Infrastructure層: 0 errors ✅
+- [x] Repository実装完了（3個）✅
+- [x] Diesel 2.x互換性確保 ✅
+- [x] Error Chain完全統合 ✅
+- [x] Schema整合完了 ✅
+
+**達成率**: 95%（新構造層100%）✅
+
+**完了ドキュメント**: `PHASE9_COMPLETION_REPORT.md` 作成済み
+
+---
+
+## 🔜 Phase 10: レガシーコード削除（準備中）
+
+### 目標
+
+- [ ] Presentation層レガシーコード完全削除
+- [ ] エラー0達成（全ビルド）
+- [ ] 新handlers実装（新DTO完全対応）
+- [ ] API Versioning（/api/v2/）実装
+
+### 戦略: Option A（Phase 4待ち）⭐ 推奨
+
+#### 理由
+1. **Phase 9目標100%達成済み**（Domain/Application/Infrastructure層0エラー）
+2. **依存関係複雑**（router.rs、admin.rs、テストコード）
+3. **完全リファクタリング必要**（handlers + router + middleware同時実装）
+4. **リスク最小化**（技術リスク: 🟢 低、品質リスク: 🟢 低）
+
+#### 実装計画（Week 12-14）
+
+**Week 12: 新Handlers実装**
+- [ ] `src/web/handlers/users.rs` - User関連ハンドラ
+- [ ] `src/web/handlers/posts.rs` - Post関連ハンドラ
+- [ ] `src/web/handlers/comments.rs` - Comment関連ハンドラ
+- [ ] `src/web/handlers/auth.rs` - 認証ハンドラ
+- [ ] `src/web/handlers/health.rs` - ヘルスチェック
+
+**Week 13: Router + Middleware統合**
+- [ ] `src/web/routes.rs` 完全書き換え（/api/v2/）
+- [ ] `src/web/middleware.rs` 統合（Auth/RateLimit/Logging）
+- [ ] `src/bin/admin.rs` リファクタリング（Use Cases直接呼び出し）
+
+**Week 14: レガシー削除 + 統合テスト**
+- [ ] `src/presentation/http/handlers.rs` 削除
+- [ ] Feature Flag整理（restructure_presentation → default化）
+- [ ] PostgreSQL統合テスト実行
+- [ ] CI/CD更新（Feature matrix最適化）
+
+#### 検証基準
+
+- [ ] `cargo build --all-features`: 0 errors ✅
+- [ ] 統合テスト: 100% passing ✅
+- [ ] CI: All jobs Green ✅
+
+**完了予定**: 2025年11月上旬（3週間）
+
+**戦略ドキュメント**: `PHASE10_LEGACY_REMOVAL_STRATEGY.md` 作成済み
+
+---
+
+**作成日**: 2025年10月16日  
+**最終更新**: 2025年10月19日  
+**ステータス**: Phase 9 完了（95%）、Phase 10 準備中

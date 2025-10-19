@@ -31,6 +31,8 @@ pub enum DomainError {
     InvalidContent(String),
     #[error("Invalid published at: {0}")]
     InvalidPublishedAt(String),
+    #[error("Invalid post status: {0}")]
+    InvalidPostStatus(String),
     #[error("Invalid comment text: {0}")]
     InvalidCommentText(String),
     #[error("Invalid comment author: {0}")]
@@ -138,6 +140,7 @@ impl From<crate::application::ports::repositories::RepositoryError> for Applicat
             RE::Duplicate(msg) => ApplicationError::Conflict(msg),
             RE::ValidationError(msg) => ApplicationError::ValidationError(msg),
             RE::ConversionError(msg) => ApplicationError::ValidationError(format!("Conversion error: {}", msg)),
+            RE::ConnectionError(msg) => ApplicationError::RepositoryError(format!("Connection error: {}", msg)),
             RE::DatabaseError(msg) | RE::Unknown(msg) => ApplicationError::RepositoryError(msg),
         }
     }

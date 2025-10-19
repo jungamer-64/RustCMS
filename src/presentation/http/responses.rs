@@ -125,6 +125,14 @@ impl From<ApplicationError> for HttpErrorResponse {
                 details: None,
             },
 
+            // ========== 400 Bad Request（不正なUUID）==========
+            ApplicationError::InvalidUuid(msg) => Self {
+                status: 400,
+                error_type: "INVALID_UUID".to_string(),
+                message: format!("Invalid UUID format: {}", msg),
+                details: None,
+            },
+
             // ========== 404 Not Found（リソース未検出）==========
             ApplicationError::NotFound(msg) => Self {
                 status: 404,

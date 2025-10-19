@@ -51,9 +51,8 @@ impl DatabasePool {
         
         let pool = Pool::builder()
             .max_size(32)  // 最大コネクション数
-            .error_handler(Box::new(|err| {
-                eprintln!("データベース接続エラー: {}", err);
-            }))
+            // Diesel 2.x: NopErrorHandler または LoggingErrorHandler を使用
+            // クロージャーは非対応
             .build(manager)
             .map_err(|e| InfrastructureError::DatabaseError(
                 format!("接続プール初期化失敗: {}", e)
@@ -87,10 +86,12 @@ impl DatabasePool {
     /// `Ok(())` - 接続が正常
     /// `Err(InfrastructureError)` - 接続が失敗
     pub fn health_check(&self) -> Result<(), InfrastructureError> {
-        use diesel::Connection;
+        use diesel::sql_query;
+        use diesel::RunQueryDsl;
 
-        let conn = self.get_connection()?;
-        conn.execute("SELECT 1")
+        let mut conn = self.get_connection()?;
+        sql_query("SELECT 1")
+            .execute(&mut conn)
             .map_err(|e| InfrastructureError::DatabaseError(
                 format!("ヘルスチェック失敗: {}", e)
             ))?;

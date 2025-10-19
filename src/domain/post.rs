@@ -337,13 +337,34 @@ pub enum PostStatus {
     Archived,
 }
 
+impl PostStatus {
+    /// Parse PostStatus from string
+    pub fn from_str(s: &str) -> Result<Self, DomainError> {
+        match s.to_lowercase().as_str() {
+            "draft" => Ok(PostStatus::Draft),
+            "published" => Ok(PostStatus::Published),
+            "archived" => Ok(PostStatus::Archived),
+            _ => Err(DomainError::InvalidPostStatus(format!(
+                "Invalid post status: {}. Must be 'draft', 'published', or 'archived'",
+                s
+            ))),
+        }
+    }
+
+    /// Convert PostStatus to string
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            PostStatus::Draft => "draft",
+            PostStatus::Published => "published",
+            PostStatus::Archived => "archived",
+        }
+    }
+}
+
 impl fmt::Display for PostStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            PostStatus::Draft => write!(f, "draft"),
-            PostStatus::Published => write!(f, "published"),
-            PostStatus::Archived => write!(f, "archived"),
-        }
+        write!(f, "{}", self.as_str())
     }
 }
 

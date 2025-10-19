@@ -346,6 +346,21 @@ impl From<tantivy::TantivyError> for AppError {
     }
 }
 
+#[cfg(feature = "restructure_domain")]
+impl From<crate::application::ports::repositories::RepositoryError> for AppError {
+    fn from(err: crate::application::ports::repositories::RepositoryError) -> Self {
+        use crate::application::ports::repositories::RepositoryError as RE;
+        match err {
+            RE::NotFound(msg) => Self::NotFound(msg),
+            RE::Duplicate(msg) => Self::Conflict(msg),
+            RE::ValidationError(msg) => Self::BadRequest(msg),
+            RE::ConversionError(msg) => Self::BadRequest(format!("Conversion error: {}", msg)),
+            RE::ConnectionError(msg) => Self::Internal(format!("Database connection error: {}", msg)),
+            RE::DatabaseError(msg) | RE::Unknown(msg) => Self::Internal(msg),
+        }
+    }
+}
+
 //--- AppError inherent methods ---//
 
 impl AppError {
