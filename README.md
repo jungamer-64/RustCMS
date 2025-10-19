@@ -73,6 +73,7 @@ RustCMS は柔軟な feature flags で機能を選択的に有効化できます
 | `full_restructure` | Phase 5-7 | 完全DDD構造 + Legacy削除 | ✅ **完了** |
 
 **主要成果**:
+
 - ✅ 25ファイル削除 (~300KB legacy code removed)
 - ✅ 392 tests passing (100%)
 - ✅ 新DDD構造のみでビルド可能
@@ -98,6 +99,7 @@ cargo build --features "full_restructure"
 ```
 
 詳細は以下を参照:
+
 - [RESTRUCTURE_PLAN.md](RESTRUCTURE_PLAN.md) - DDD移行計画
 - [PHASE7_COMPLETION_REPORT.md](PHASE7_COMPLETION_REPORT.md) - Phase 7完了レポート
 
@@ -243,6 +245,7 @@ Phase 7完了により、完全なDomain-Driven Designアーキテクチャに�
 ```
 
 **主要成果**（Phase 1-7）:
+
 - ✅ **19個の Value Objects** - 型安全な検証済み値型
 - ✅ **5個の Entities** - ビジネスロジック集約（User, Post, Comment, Tag, Category）
 - ✅ **10個の Use Cases** - アプリケーションロジック分離
@@ -255,10 +258,12 @@ Phase 7完了により、完全なDomain-Driven Designアーキテクチャに�
 **テストカバレッジ**: 392 tests passing (100%) ✅
 
 詳細は以下を参照:
+
 - [PHASE7_COMPLETION_REPORT.md](PHASE7_COMPLETION_REPORT.md) - Phase 7完了レポート
 - [RESTRUCTURE_PLAN.md](RESTRUCTURE_PLAN.md) - DDD移行計画全体
 - [docs/MODULES_OVERVIEW.md](docs/MODULES_OVERVIEW.md) - モジュール構成詳細
 - [.github/copilot-instructions.md](.github/copilot-instructions.md) - 開発者向けDDD実装ガイド
+
 ```
 
 ## 🔐 認証（Biscuit トークンによる統一認証）
@@ -408,6 +413,7 @@ mkdir -p secrets
 ```
 
 **セキュリティ上の注意**:
+
 - `./secrets/` ディレクトリは `.gitignore` に含まれています
 - 秘密鍵のパーミッションは自動的に `600` に設定されます（Unix系）
 - 本番環境では、鍵を安全な場所（HSM、Azure Key Vault等）に保管することを推奨

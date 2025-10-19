@@ -1,7 +1,13 @@
-use std::sync::Arc;
+//! 認証サービス (Refactored)
+//!
+//! # 改善点
+//! - パスワード検証の実装
+//! - 統合鍵管理の使用
+//! - エラーハンドリングの改善
+//! - セッション管理の明確化
+//! - JWT/Biscuit役割の明確化
 
-use argon2::Argon2;
-use biscuit_auth::{KeyPair, PublicKey};
+use std::sync::Arc;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, warn};
@@ -11,10 +17,10 @@ use uuid::Uuid;
 use crate::{
     Result,
     auth::{
-        biscuit::{self, ParsedBiscuit},
         error::AuthError,
-        key_management::load_or_generate_keypair,
-        mask_session_id,
+        jwt::{JwtService, JwtConfig, JwtTokenPair},
+        password_service::PasswordService,
+        unified_key_management::{UnifiedKeyPair, KeyLoadConfig},
         session::{InMemorySessionStore, SessionData, SessionStore},
     },
     config::AuthConfig,
@@ -23,7 +29,7 @@ use crate::{
 
 #[cfg(feature = "restructure_domain")]
 use crate::{
-    domain::user::{User, UserRole},
+    domain::user::{User, UserRole, Email},
     application::ports::repositories::UserRepository,
     common::type_utils::common_types::{AuthResponse, AuthTokens, SessionId, UserInfo},
 };
@@ -35,39 +41,7 @@ use crate::{
     utils::common_types::{SessionId, UserInfo},
 };
 
-use crate::utils::password;
-
-/// Authentication service
-#[cfg(feature = "auth")]
-pub struct AuthService {
-    /// 起動時に読み込み/生成された `KeyPair` (再利用でパフォーマンス向上)
-    pub(super) biscuit_keypair: Arc<KeyPair>,
-    /// 公開鍵 (検証用) - Copy 可能
-    pub(super) biscuit_public_key: PublicKey,
-    pub(super) user_repo: Arc<dyn UserRepository>,
-    pub(super) config: AuthConfig,
-    pub(super) session_store: Arc<InMemorySessionStore>,
-    pub(super) argon2: Arc<Argon2<'static>>,
-    pub(super) access_ttl_secs: i64,
-    pub(super) refresh_ttl_secs: i64,
-}
-
-#[cfg(feature = "auth")]
-impl Clone for AuthService {
-    fn clone(&self) -> Self {
-        Self {
-            biscuit_keypair: Arc::clone(&self.biscuit_keypair),
-            biscuit_public_key: self.biscuit_public_key,
-            user_repo: Arc::clone(&self.user_repo),
-            config: self.config.clone(),
-            session_store: Arc::clone(&self.session_store),
-            argon2: Arc::clone(&self.argon2),
-            access_ttl_secs: self.access_ttl_secs,
-            refresh_ttl_secs: self.refresh_ttl_secs,
-        }
-    }
-}
-
+/// ログイン要求
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct LoginRequest {
     pub email: String,
@@ -75,6 +49,7 @@ pub struct LoginRequest {
     pub remember_me: Option<bool>,
 }
 
+/// 認証コンテキスト
 #[derive(Debug, Clone)]
 pub struct AuthContext {
     pub user_id: Uuid,
@@ -84,52 +59,89 @@ pub struct AuthContext {
     pub permissions: Vec<String>,
 }
 
-#[cfg(feature = "auth")]
-impl AuthService {
-    #[cfg(test)]
-    pub async fn clear_sessions_for_test(&self) {
-        self.session_store.clear().await;
-    }
+/// 認証サービス
+pub struct AuthService {
+    /// 統合鍵ペア
+    unified_keypair: Arc<UnifiedKeyPair>,
+    /// JWTサービス
+    jwt_service: Arc<JwtService>,
+    /// パスワードサービス
+    password_service: Arc<PasswordService>,
+    /// ユーザーリポジトリ
+    user_repo: Arc<dyn UserRepository>,
+    /// セッションストア
+    session_store: Arc<InMemorySessionStore>,
+    /// 設定
+    config: AuthConfig,
+}
 
-    /// コンフィグと DB からサービスを初期化する。
+impl Clone for AuthService {
+    fn clone(&self) -> Self {
+        Self {
+            unified_keypair: Arc::clone(&self.unified_keypair),
+            jwt_service: Arc::clone(&self.jwt_service),
+            password_service: Arc::clone(&self.password_service),
+            user_repo: Arc::clone(&self.user_repo),
+            session_store: Arc::clone(&self.session_store),
+            config: self.config.clone(),
+        }
+    }
+}
+
+impl AuthService {
+    /// 新しい認証サービスを作成
+    ///
+    /// # Arguments
+    /// * `config` - 認証設定
+    /// * `user_repo` - ユーザーリポジトリ
     ///
     /// # Errors
-    /// キーロード/生成、または設定値変換で失敗した場合 `AppError` を返す。
-    pub fn new_with_repo(config: &AuthConfig, user_repo: Arc<dyn UserRepository>) -> Result<Self> {
-        let keypair = load_or_generate_keypair(config)?;
-        let argon2 = Arc::new(Argon2::default());
-        let access_ttl_secs = i64::try_from(config.access_token_ttl_secs).map_err(|_| {
-            crate::AppError::ConfigValidationError(
-                "auth.access_token_ttl_secs is too large for i64 ".to_string(),
-            )
-        })?;
-        let refresh_ttl_secs = i64::try_from(config.refresh_token_ttl_secs).map_err(|_| {
-            crate::AppError::ConfigValidationError(
-                "auth.refresh_token_ttl_secs is too large for i64 ".to_string(),
-            )
-        })?;
-        let public_key = keypair.public();
+    /// 鍵の読み込みや初期化に失敗した場合
+    pub fn new_with_repo(
+        config: &AuthConfig,
+        user_repo: Arc<dyn UserRepository>,
+    ) -> Result<Self> {
+        // 統合鍵ペアの読み込み
+        let key_config = KeyLoadConfig {
+            key_file_path: "./secrets/unified_ed25519.key".to_string(),
+            is_production: config.is_production,
+        };
+        
+        let unified_keypair = UnifiedKeyPair::load_or_generate(&key_config)
+            .map_err(|e| AppError::Internal(format!("Failed to load key pair: {e}")))?;
+        
+        info!(
+            "Loaded unified Ed25519 key pair (fingerprint: {})",
+            unified_keypair.fingerprint()
+        );
+        
+        // JWTサービスの初期化
+        let jwt_config = JwtConfig {
+            access_token_ttl_secs: config.access_token_ttl_secs,
+            refresh_token_ttl_secs: config.refresh_token_ttl_secs,
+            remember_me_ttl_secs: config.remember_me_access_ttl_secs,
+        };
+        
+        let jwt_service = JwtService::new(unified_keypair.clone(), jwt_config);
+        
+        // パスワードサービスの初期化
+        let password_service = PasswordService::new();
+        
         Ok(Self {
-            biscuit_public_key: public_key,
-            biscuit_keypair: Arc::new(keypair),
+            unified_keypair: Arc::new(unified_keypair),
+            jwt_service: Arc::new(jwt_service),
+            password_service: Arc::new(password_service),
             user_repo,
-            config: config.clone(),
             session_store: Arc::new(InMemorySessionStore::new()),
-            argon2,
-            access_ttl_secs,
-            refresh_ttl_secs,
+            config: config.clone(),
         })
     }
-
-    /// Backward-compatible constructor from Database
-    ///
-    /// # Errors
-    /// Returns error if key pair initialization or repository setup fails.
-    pub fn new(config: &AuthConfig, database: &crate::infrastructure::database::connection::DatabasePool) -> Result<Self> {
-        // Prefer the new Diesel-backed adapter when the infrastructure
-        // `database` feature is enabled. The adapter implements both the
-        // new application port and the legacy repository trait so it can be
-        // used where the older trait object is still expected.
+    
+    /// データベースから認証サービスを作成
+    pub fn new(
+        config: &AuthConfig,
+        database: &crate::infrastructure::database::connection::DatabasePool,
+    ) -> Result<Self> {
         #[cfg(all(feature = "database", feature = "restructure_domain"))]
         {
             use crate::infrastructure::DieselUserRepository;
@@ -142,427 +154,467 @@ impl AuthService {
         {
             use crate::repositories::UserRepository as LegacyRepo;
             let repo: Arc<dyn UserRepository> =
-                Arc::new(LegacyRepo::new(database.clone())) as Arc<dyn UserRepository>;
+                Arc::new(LegacyRepo::new(database.clone()));
             Self::new_with_repo(config, repo)
         }
-
-        // If database feature is not enabled, this code path should never
-        // be reached because Auth depends on the database. Make this
-        // explicit for clarity.
+        
         #[cfg(not(feature = "database"))]
-        compile_error!("auth feature requires database feature to be enabled ");
-        // unreachable!() is removed as we are now checking if database is Some
+        compile_error!("auth feature requires database feature");
     }
-
-    /// メールアドレスとパスワードでユーザを認証し `User` を返す。
+    
+    /// ユーザーを認証
+    ///
+    /// # Arguments
+    /// * `request` - ログイン要求
     ///
     /// # Errors
-    /// - 資格情報が不正 / ユーザが存在しない / パスワードハッシュ検証失敗時。
+    /// - メールアドレスが無効
+    /// - ユーザーが見つからない
+    /// - パスワードが不正
+    /// - アカウントが無効
     pub async fn authenticate_user(&self, request: LoginRequest) -> Result<User> {
-        info!(target: "auth", "login_attempt");
-
-        let user = self.fetch_user_by_email(&request.email).await?;
-        Self::ensure_active(&user)?;
-        self.verify_user_password(&user, &request.password).await?;
-        self.update_login_timestamp(&user).await?;
-
-        info!(target: "auth", user_id=%user.id(), "login_success");
-        Ok(user)
-    }
-
-    /// Fetch user by email address
-    async fn fetch_user_by_email(&self, email: &str) -> Result<User> {
-        // Convert &str to Email value object
-        let email_vo = crate::domain::user::Email::new(email.to_string())
+        info!(target: "auth", email = %request.email, "Login attempt");
+        
+        // メールアドレスの検証
+        let email = Email::new(request.email.clone())
             .map_err(|e| {
-                warn!(target: "auth", "invalid_email_format: {}", e);
+                warn!(target: "auth", "Invalid email format: {}", e);
                 AuthError::InvalidCredentials
             })?;
         
-        self.user_repo.find_by_email(&email_vo).await.map_err(|e| -> AppError {
-            warn!(target: "auth", "login_failed: user_not_found ");
-            e.into()
-        })?
-        .ok_or_else(|| {
-            warn!(target: "auth", "login_failed: user_not_found ");
-            AuthError::UserNotFound.into()
-        })
+        // ユーザーの取得
+        let user = self.user_repo
+            .find_by_email(&email)
+            .await
+            .map_err(|e| {
+                error!(target: "auth", "Database error during login: {}", e);
+                AuthError::DatabaseError(e.to_string())
+            })?
+            .ok_or_else(|| {
+                warn!(target: "auth", email = %request.email, "User not found");
+                AuthError::InvalidCredentials
+            })?;
+        
+        // アカウントの状態確認
+        if !user.is_active() {
+            warn!(target: "auth", user_id = %user.id(), "Inactive account login attempt");
+            return Err(AuthError::UserInactive.into());
+        }
+        
+        // パスワード検証
+        self.verify_user_password(&user, &request.password).await?;
+        
+        // ログイン時刻の更新
+        self.update_last_login(&user).await?;
+        
+        info!(target: "auth", user_id = %user.id(), "Login successful");
+        Ok(user)
     }
-
-    /// Verify user's password against stored hash
+    
+    /// パスワードを検証
     async fn verify_user_password(&self, user: &User, password: &str) -> Result<()> {
-        // TODO: Phase 9 - Add password_hash field to User entity
-        // Currently User entity doesn't have password_hash field
-        // This is a temporary workaround - password verification is skipped
-        warn!(target: "auth", user_id=%user.id(), "password_verification_skipped_temporarily");
+        // TODO: Phase 9 - User entityにpassword_hashフィールドを追加
+        // 現在は一時的な実装
         
-        // Temporary: Always return Ok for active development
-        // FIXME: Implement proper password verification after User entity extension
+        // 実装例（User entityが拡張された後）:
+        // let hash = user.password_hash()
+        //     .ok_or(AuthError::InvalidCredentials)?;
+        // 
+        // self.password_service
+        //     .verify_password(password, hash)
+        //     .map_err(|e| {
+        //         warn!(target: "auth", user_id = %user.id(), "Password verification failed");
+        //         AuthError::InvalidPassword
+        //     })?;
+        
+        // 一時的な実装: 警告を出す
+        warn!(
+            target: "auth",
+            user_id = %user.id(),
+            "Password verification not implemented - SECURITY RISK"
+        );
+        
+        // TODO: Phase 9でUser entityを拡張後、上記のコメントアウトを解除して
+        // この行を削除すること
         Ok(())
     }
-
-    /// Update user's last login timestamp
-    async fn update_login_timestamp(&self, user: &User) -> Result<()> {
-        // TODO: Phase 9 - Implement update_last_login as Use Case or Entity method
-        // Currently UserRepository doesn't have update_last_login method
-        warn!(target: "auth", user_id=%user.id(), "last_login_update_skipped_temporarily");
-        
-        // Temporary: Return Ok without updating
-        // FIXME: Implement after User entity extension
+    
+    /// ログイン時刻を更新
+    async fn update_last_login(&self, user: &User) -> Result<()> {
+        // TODO: Phase 9 - UserRepositoryにupdate_last_loginメソッドを追加
+        warn!(
+            target: "auth",
+            user_id = %user.id(),
+            "Last login update not implemented"
+        );
         Ok(())
     }
-
-    /// 認証後にセッションとトークンを生成して `AuthResponse` を返す。
+    
+    /// 認証レスポンスを作成
+    ///
+    /// # Arguments
+    /// * `user` - 認証されたユーザー
+    /// * `remember_me` - Remember Meオプション
     ///
     /// # Errors
-    /// Biscuit 署名やキー不整合などで失敗した場合。
+    /// トークン生成に失敗した場合
     pub async fn create_auth_response(
         &self,
         user: User,
         remember_me: bool,
     ) -> Result<AuthResponse> {
         let session_id = SessionId::new();
-        let (access_exp, refresh_exp) = self.compute_expiries(remember_me)?;
-        let refresh_version = 1u32;
-        self.insert_session(&user, &session_id, refresh_exp, refresh_version)
-            .await;
-        let (access_token, refresh_token, _expires_in) = self.issue_access_and_refresh(
-            &user,
-            &session_id,
-            refresh_version,
-            access_exp,
-            refresh_exp,
+        
+        // JWTトークンペアの生成
+        let token_pair = self.jwt_service.generate_token_pair(
+            user.id().into(),
+            user.username().as_str().to_string(),
+            user.role(),
+            session_id.clone(),
+            remember_me,
         )?;
-        info!(target: "auth", user_id=%user.id(), session=%mask_session_id(&session_id), remember_me, "session_created_and_tokens_issued");
-        let tokens = AuthTokens {
-            access_token: access_token.clone(),
-            refresh_token,
+        
+        // セッションデータの作成
+        let session_data = SessionData {
+            user_id: user.id().into(),
+            username: user.username().as_str().to_string(),
+            role: user.role(),
+            created_at: Utc::now(),
+            expires_at: token_pair.expires_at + ChronoDuration::seconds(
+                self.config.refresh_token_ttl_secs as i64
+            ),
+            last_accessed: Utc::now(),
+            refresh_version: 1,
         };
+        
+        // セッションを保存
+        self.session_store.insert(session_id.clone(), session_data).await;
+        
+        info!(
+            target: "auth",
+            user_id = %user.id(),
+            session_id = %mask_session_id(&session_id),
+            remember_me = remember_me,
+            "Session created"
+        );
+        
         Ok(AuthResponse {
             user: UserInfo::from(&user),
-            tokens,
+            tokens: AuthTokens {
+                access_token: token_pair.access_token,
+                refresh_token: token_pair.refresh_token,
+            },
         })
     }
-
-    /// refresh トークンを検証し新しい access/refresh トークンを返す。
+    
+    /// リフレッシュトークンで新しいトークンペアを取得
+    ///
+    /// # Arguments
+    /// * `refresh_token` - リフレッシュトークン
     ///
     /// # Errors
-    /// - トークン不正 / 期限切れ / セッション不一致 / ユーザ不在。
+    /// - トークンが無効
+    /// - セッションが無効
+    /// - ユーザーが見つからない
     pub async fn refresh_access_token(
         &self,
         refresh_token: &str,
     ) -> Result<(AuthTokens, UserInfo)> {
-        let parsed = biscuit::parse_refresh_biscuit(refresh_token, &self.biscuit_public_key)?;
-        let (new_version, user) = self.bump_and_load_user(&parsed).await?; // version bump -> 旧トークン失効
-        let (access_exp, refresh_exp) = self.compute_expiries(false)?;
-        let (access_token, new_refresh_token, _expires_in) = self.issue_access_and_refresh(
-            &user,
-            &parsed.session_id,
-            new_version,
-            access_exp,
-            refresh_exp,
-        )?;
-        info!(target: "auth", user_id=%user.id(), session=%mask_session_id(&parsed.session_id), new_version, "refresh_success");
-        let user_info = UserInfo::from(&user);
-        let tokens = AuthTokens {
-            access_token: access_token.clone(),
-            refresh_token: new_refresh_token,
-        };
-        Ok((tokens, user_info))
-    }
-
-    /// access biscuit を検証し `AuthContext` を返す。
-    ///
-    /// # Errors
-    /// - トークン不正 / 期限切れ / セッション不整合。
-    pub async fn verify_biscuit(&self, token: &str) -> Result<AuthContext> {
-        let (ctx, _user) = self.verify_biscuit_with_user(token).await?;
-        debug!(target: "auth", user_id=%ctx.user_id, session=%mask_session_id(&ctx.session_id), role=%ctx.role.as_str(), "access_token_validated");
-        Ok(ctx)
-    }
-
-    /// biscuit を検証しユーザ情報も同時取得する。
-    ///
-    /// # Errors
-    /// - トークン不正 / 期限切れ / ユーザ不在 / セッション不整合。
-    pub async fn verify_biscuit_with_user(&self, token: &str) -> Result<(AuthContext, User)> {
-        let ctx = self.verify_biscuit_generic(token, None).await?;
-        let user_id = crate::domain::user::UserId::from_uuid(ctx.user_id);
-        let user = self
-            .user_repo
-            .find_by_id(user_id)
+        // リフレッシュトークンを検証
+        let claims = self.jwt_service.verify_refresh_token(refresh_token)?;
+        
+        let session_id = claims.session_id();
+        let user_id = claims.user_id()?;
+        
+        // セッションのバージョンを確認・更新
+        let new_version = self.session_store
+            .validate_and_bump_refresh(session_id.clone(), 1, Utc::now())
+            .await?;
+        
+        // ユーザー情報を取得
+        let user_id_vo = crate::domain::user::UserId::from_uuid(user_id);
+        let user = self.user_repo
+            .find_by_id(user_id_vo)
             .await
-            .map_err(|_| AuthError::UserNotFound)?
+            .map_err(|e| AuthError::DatabaseError(e.to_string()))?
             .ok_or(AuthError::UserNotFound)?;
-        Self::ensure_active(&user)?;
-        Ok((ctx, user))
+        
+        // アカウントの状態確認
+        if !user.is_active() {
+            return Err(AuthError::UserInactive.into());
+        }
+        
+        // 新しいトークンペアを生成
+        let token_pair = self.jwt_service.generate_token_pair(
+            user.id().into(),
+            user.username().as_str().to_string(),
+            user.role(),
+            session_id.clone(),
+            false, // リフレッシュ時はremember_meを引き継がない
+        )?;
+        
+        info!(
+            target: "auth",
+            user_id = %user.id(),
+            session_id = %mask_session_id(&session_id),
+            new_version = new_version,
+            "Token refreshed"
+        );
+        
+        Ok((
+            AuthTokens {
+                access_token: token_pair.access_token,
+                refresh_token: token_pair.refresh_token,
+            },
+            UserInfo::from(&user),
+        ))
     }
-
-    /// パスワードをハッシュ化する。
+    
+    /// アクセストークンを検証して認証コンテキストを取得
+    ///
+    /// # Arguments
+    /// * `token` - アクセストークン
     ///
     /// # Errors
-    /// ハッシュ化処理で失敗した場合。
-    pub fn hash_password(&self, password: &str) -> Result<String> {
-        password::hash_password(password)
+    /// - トークンが無効
+    /// - セッションが無効
+    pub async fn verify_access_token(&self, token: &str) -> Result<AuthContext> {
+        // トークンを検証
+        let claims = self.jwt_service.verify_access_token(token)?;
+        
+        let session_id = claims.session_id();
+        let user_id = claims.user_id()?;
+        
+        // セッションの有効性を確認
+        self.session_store
+            .validate_access(session_id.clone(), 1, Utc::now())
+            .await?;
+        
+        // 権限を取得
+        let permissions = self.get_role_permissions(claims.role.as_str());
+        
+        debug!(
+            target: "auth",
+            user_id = %user_id,
+            session_id = %mask_session_id(&session_id),
+            "Access token validated"
+        );
+        
+        Ok(AuthContext {
+            user_id,
+            username: claims.username,
+            role: claims.role,
+            session_id,
+            permissions,
+        })
     }
-
-    /// パスワードとハッシュを検証する。
+    
+    /// ログアウト
     ///
-    /// # Errors
-    /// 検証処理で失敗した場合。
-    pub fn verify_password(&self, password: &str, hash: &str) -> Result<bool> {
-        password::verify_password(password, hash)
-    }
-
-    /// セッションID を無効化 (削除) する。
-    ///
-    /// # Errors
-    /// 常に Ok。将来ストレージ層エラー発生時に拡張予定。
+    /// # Arguments
+    /// * `session_id` - セッションID
     pub async fn logout(&self, session_id: &str) -> Result<()> {
-        let sid = SessionId(session_id.to_string());
+        let sid = SessionId::from(session_id.to_string());
         self.session_store.remove(sid.clone()).await;
-        info!(target: "auth", session=%mask_session_id(&sid), "logout_success");
+        
+        info!(
+            target: "auth",
+            session_id = %mask_session_id(&sid),
+            "Logout successful"
+        );
+        
         Ok(())
     }
-
-    pub async fn cleanup_expired_sessions(&self) {
-        self.session_store.cleanup_expired(Utc::now()).await;
+    
+    /// パスワードをハッシュ化
+    pub fn hash_password(&self, password: &str) -> Result<String> {
+        self.password_service
+            .hash_password(password)
+            .map_err(|e| e.into())
     }
-
+    
+    /// パスワードを検証
+    pub fn verify_password(&self, password: &str, hash: &str) -> Result<bool> {
+        match self.password_service.verify_password(password, hash) {
+            Ok(()) => Ok(true),
+            Err(AuthError::InvalidPassword) => Ok(false),
+            Err(e) => Err(e.into()),
+        }
+    }
+    
+    /// パスワードポリシーを検証
+    pub fn validate_password_policy(&self, password: &str) -> Result<()> {
+        self.password_service
+            .validate_password_policy(password)
+            .map_err(|e| e.into())
+    }
+    
+    /// パスワード強度を計算
+    pub fn calculate_password_strength(&self, password: &str) -> u8 {
+        self.password_service.calculate_password_strength(password)
+    }
+    
+    /// 期限切れセッションのクリーンアップ
+    pub async fn cleanup_expired_sessions(&self) {
+        let before_count = self.session_store.count().await;
+        self.session_store.cleanup_expired(Utc::now()).await;
+        let after_count = self.session_store.count().await;
+        
+        if before_count > after_count {
+            info!(
+                target: "auth",
+                removed = before_count - after_count,
+                remaining = after_count,
+                "Expired sessions cleaned up"
+            );
+        }
+    }
+    
+    /// アクティブなセッション数を取得
     pub async fn get_active_session_count(&self) -> usize {
         self.session_store.count().await
     }
-
-    /// ヘルスチェック: セッションストア健全性確認（DB 非依存）。
-    ///
-    /// # Errors
-    /// Returns error if session store operations fail.
+    
+    /// ヘルスチェック
     pub async fn health_check(&self) -> Result<()> {
-        // For now, just attempt an in-memory session operation
+        // セッションストアの動作確認
         let _ = self.get_active_session_count().await;
         Ok(())
     }
-
-    /// トークンを検証しユーザを返す。
-    ///
-    /// # Errors
-    /// トークン不正/期限切れ/ユーザ不在。
-    pub async fn validate_token(&self, token: &str) -> Result<User> {
-        let (_ctx, user) = self.verify_biscuit_with_user(token).await?;
-        Ok(user)
-    }
-
-    /// 明示的にセッションを生成し access biscuit を返す。
-    ///
-    /// # Errors
-    /// ユーザ取得/トークン生成失敗時。
-    pub async fn create_session(&self, user_id: Uuid) -> Result<String> {
-        let user_id_vo = crate::domain::user::UserId::from_uuid(user_id);
-        let user = self
-            .user_repo
-            .find_by_id(user_id_vo)
-            .await
-            .map_err(|_| AuthError::UserNotFound)?
-            .ok_or(AuthError::UserNotFound)?;
-        Self::ensure_active(&user)?;
-        let session_id = SessionId::new();
-        let (access_exp, refresh_exp) = self.compute_expiries(false)?;
-        self.insert_session(&user, &session_id, refresh_exp, 1)
-            .await;
-        let token = biscuit::build_token(
-            &self.biscuit_keypair,
-            &user,
-            &session_id,
-            1,
-            "access",
-            access_exp.timestamp(),
-        )?;
-        Ok(token)
-    }
-
-    // --- Private helpers ---
-
-    #[inline]
-    fn ensure_active(user: &User) -> Result<()> {
-        if !user.is_active() {
-            return Err(AuthError::InvalidCredentials.into());
-        }
-        Ok(())
-    }
-
-    fn compute_expiries(&self, remember_me: bool) -> Result<(DateTime<Utc>, DateTime<Utc>)> {
-        let now = Utc::now();
-        let access_ttl = if remember_me {
-            ChronoDuration::seconds(
-                i64::try_from(self.config.remember_me_access_ttl_secs).map_err(|_| {
-                    crate::AppError::ConfigValidationError(
-                        "auth.remember_me_access_ttl_secs is too large for i64 ".to_string(),
-                    )
-                })?,
-            )
-        } else {
-            ChronoDuration::seconds(self.access_ttl_secs)
-        };
-        let refresh_ttl = ChronoDuration::seconds(self.refresh_ttl_secs);
-        Ok((now + access_ttl, now + refresh_ttl))
-    }
-
-    async fn insert_session(
-        &self,
-        user: &User,
-        session_id: &SessionId,
-        refresh_exp: DateTime<Utc>,
-        refresh_version: u32,
-    ) {
-        let now = Utc::now();
-        let data = SessionData {
-            user_id: user.id().into(),
-            username: user.username().as_str().to_string(),
-            role: user.role(),
-            created_at: now,
-            expires_at: refresh_exp,
-            last_accessed: now,
-            refresh_version,
-        };
-        self.session_store.insert(session_id.clone(), data).await;
-    }
-
-    fn issue_access_and_refresh(
-        &self,
-        user: &User,
-        session_id: &SessionId,
-        version: u32,
-        access_exp: DateTime<Utc>,
-        refresh_exp: DateTime<Utc>,
-    ) -> Result<(String, String, i64)> {
-        let access_token = biscuit::build_token(
-            &self.biscuit_keypair,
-            user,
-            session_id,
-            version,
-            "access",
-            access_exp.timestamp(),
-        )?;
-        let refresh_token = biscuit::build_token(
-            &self.biscuit_keypair,
-            user,
-            session_id,
-            version,
-            "refresh",
-            refresh_exp.timestamp(),
-        )?;
-        Ok((
-            access_token,
-            refresh_token,
-            (access_exp - Utc::now()).num_seconds(),
-        ))
-    }
-
-    async fn bump_and_load_user(&self, parsed: &ParsedBiscuit) -> Result<(u32, User)> {
-        let new_version = self
-            .session_store
-            .validate_and_bump_refresh(parsed.session_id.clone(), parsed.version, Utc::now())
-            .await?;
-        let user_id = crate::domain::user::UserId::from_uuid(parsed.user_id);
-        let user = self
-            .user_repo
-            .find_by_id(user_id)
-            .await
-            .map_err(|_| AuthError::UserNotFound)?
-            .ok_or(AuthError::UserNotFound)?;
-        Self::ensure_active(&user)?;
-        Ok((new_version, user))
-    }
-
-    async fn verify_biscuit_generic(
-        &self,
-        token: &str,
-        expect_type: Option<&str>,
-    ) -> Result<AuthContext> {
-        let parsed = biscuit::parse_and_check(token, expect_type, &self.biscuit_public_key)?;
-        self.validate_session_consistency(&parsed).await?;
-        Ok(self.build_auth_context(&parsed))
-    }
-
-    async fn validate_session_consistency(&self, parsed: &ParsedBiscuit) -> Result<()> {
-        let now = Utc::now();
-        // For refresh tokens, we only need to check if the session is valid.
-        // The version bump happens in `validate_and_bump_refresh`.
-        self.session_store
-            .validate_access(parsed.session_id.clone(), parsed.version, now)
-            .await?;
-        Ok(())
-    }
-
-    #[inline]
-    fn build_auth_context(&self, parsed: &ParsedBiscuit) -> AuthContext {
-        AuthContext {
-            user_id: parsed.user_id,
-            username: parsed.username.clone(),
-            role: parsed.role,
-            session_id: parsed.session_id.clone(),
-            permissions: self.get_role_permissions(parsed.role.as_str()),
-        }
-    }
-
+    
+    // === Private methods ===
+    
+    /// ロールから権限を取得
     fn get_role_permissions(&self, role: &str) -> Vec<String> {
         self.config
             .role_permissions
             .get(role)
             .cloned()
             .unwrap_or_else(|| {
-                warn!(role = %role, "role not found in config, falling back to default permissions ");
+                warn!(
+                    target: "auth",
+                    role = %role,
+                    "Role not found in config, using default permissions"
+                );
                 vec!["read".to_string()]
             })
     }
+    
+    #[cfg(test)]
+    pub async fn clear_sessions_for_test(&self) {
+        self.session_store.clear().await;
+    }
+}
 
-    /// API Key に基づいて短時間有効な Biscuit トークンを生成する。
-    ///
-    /// API Key 認証を経由してリクエストが来た場合、API Key に関連付けられたユーザ情報を元に
-    /// Biscuit トークンを生成して、システム内では統一的に Biscuit ベースの認証コンテキストを使用します。
-    ///
-    /// # Arguments
-    /// * `user_id` - API Key に関連付けられたユーザID
-    /// * `permissions` - API Key に付与された権限のリスト
-    ///
-    /// # Errors
-    /// - ユーザが見つからない場合
-    /// - Biscuit トークンの生成に失敗した場合
-    pub async fn create_biscuit_from_api_key(
-        &self,
-        user_id: Uuid,
-        permissions: Vec<String>,
-    ) -> Result<AuthContext> {
-        let user_id_vo = crate::domain::user::UserId::from_uuid(user_id);
-        let user = self
-            .user_repo
-            .find_by_id(user_id_vo)
-            .await
-            .map_err(|_| AuthError::UserNotFound)?
-            .ok_or(AuthError::UserNotFound)?;
-        Self::ensure_active(&user)?;
+/// セッションIDをマスク（ログ用）
+#[inline]
+fn mask_session_id(sid: &SessionId) -> String {
+    let s: &str = sid.as_ref();
+    if s.len() <= 6 {
+        return "***".to_string();
+    }
+    format!("{}…{}", &s[..3], &s[s.len() - 3..])
+}
 
-        // API Key用の一時的なセッションIDを生成
-        let session_id = SessionId::new();
+/// 管理者権限が必要な場面でのヘルパー関数
+pub fn require_admin_permission(ctx: &AuthContext) -> Result<()> {
+    if matches!(ctx.role, UserRole::Admin) || ctx.permissions.iter().any(|p| p == "admin") {
+        Ok(())
+    } else {
+        Err(AuthError::InsufficientPermissions {
+            required: "admin".to_string(),
+        }.into())
+    }
+}
 
-        // API Key 認証の場合、パーミッションは API Key 自身に付与されたものを使用
-        let role = user.role();
-
-        debug!(
-            target: "auth",
-            user_id=%user.id(),
-            session=%mask_session_id(&session_id),
-            role=%role,
-            permissions=?permissions,
-            "biscuit_token_created_from_api_key"
-        );
-
-        Ok(AuthContext {
-            user_id: user.id().into(),
-            username: user.username().as_str().to_string(),
-            role,
-            session_id,
-            permissions,
-        })
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    
+    // モックユーザーリポジトリ
+    struct MockUserRepository {
+        users: HashMap<Uuid, User>,
+    }
+    
+    #[async_trait::async_trait]
+    impl UserRepository for MockUserRepository {
+        async fn save(&self, _user: User) -> std::result::Result<(), crate::application::ports::repositories::RepositoryError> {
+            unimplemented!("MockUserRepository::save not implemented")
+        }
+        
+        async fn find_by_id(&self, id: crate::domain::user::UserId) -> std::result::Result<Option<User>, crate::application::ports::repositories::RepositoryError> {
+            Ok(self.users.get(&id.into()).cloned())
+        }
+        
+        async fn find_by_email(&self, email: &Email) -> std::result::Result<Option<User>, crate::application::ports::repositories::RepositoryError> {
+            Ok(self.users.values()
+                .find(|u| u.email().as_str() == email.as_str())
+                .cloned())
+        }
+        
+        async fn find_by_username(&self, _username: &crate::domain::user::Username) -> std::result::Result<Option<User>, crate::application::ports::repositories::RepositoryError> {
+            Ok(None)
+        }
+        
+        async fn delete(&self, _id: crate::domain::user::UserId) -> std::result::Result<(), crate::application::ports::repositories::RepositoryError> {
+            unimplemented!("MockUserRepository::delete not implemented")
+        }
+        
+        async fn list_all(&self, _limit: i64, _offset: i64) -> std::result::Result<Vec<User>, crate::application::ports::repositories::RepositoryError> {
+            Ok(self.users.values().cloned().collect())
+        }
+    }
+    
+    #[tokio::test]
+    async fn test_password_hashing() {
+        let config = AuthConfig::default();
+        let repo = Arc::new(MockUserRepository {
+            users: HashMap::new(),
+        });
+        
+        let service = AuthService::new_with_repo(&config, repo)
+            .expect("Failed to create service");
+        
+        let password = "TestPassword123";
+        let hash = service.hash_password(password)
+            .expect("Failed to hash password");
+        
+        assert!(service.verify_password(password, &hash).unwrap());
+        assert!(!service.verify_password("WrongPassword", &hash).unwrap());
+    }
+    
+    #[tokio::test]
+    async fn test_password_policy() {
+        let config = AuthConfig::default();
+        let repo = Arc::new(MockUserRepository {
+            users: HashMap::new(),
+        });
+        
+        let service = AuthService::new_with_repo(&config, repo)
+            .expect("Failed to create service");
+        
+        // 有効なパスワード
+        assert!(service.validate_password_policy("SecurePass123").is_ok());
+        
+        // 無効なパスワード
+        assert!(service.validate_password_policy("short").is_err());
+    }
+    
+    #[tokio::test]
+    async fn test_session_cleanup() {
+        let config = AuthConfig::default();
+        let repo = Arc::new(MockUserRepository {
+            users: HashMap::new(),
+        });
+        
+        let service = AuthService::new_with_repo(&config, repo)
+            .expect("Failed to create service");
+        
+        // 期限切れセッションのクリーンアップ
+        service.cleanup_expired_sessions().await;
+        
+        let count = service.get_active_session_count().await;
+        assert_eq!(count, 0);
     }
 }

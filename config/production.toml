@@ -36,6 +36,8 @@ bcrypt_cost = 14             # 高セキュリティ
 session_timeout = 86400      # 24 hours
 access_token_ttl_secs = 3600
 refresh_token_ttl_secs = 86400
+# Production environment flag (disable key auto-generation)
+is_production = true
 
 [auth.webauthn]
 rp_id = "${WEBAUTHN_RP_ID}"

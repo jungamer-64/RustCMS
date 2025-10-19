@@ -94,6 +94,9 @@ pub struct AuthConfig {
     /// JWT 署名用秘密鍵 (Phase 5.4.2)
     #[serde(serialize_with = "serialize_secret_masked")]
     pub jwt_secret: SecretString,
+    /// 本番環境フラグ（Phase 5.7 統合鍵管理）
+    #[serde(default)]
+    pub is_production: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -333,6 +336,7 @@ impl Default for AuthConfig {
             remember_me_access_ttl_secs: 86_400, // 24 hours
             role_permissions: default_role_permissions(),
             jwt_secret: SecretString::new("change-this-in-production-use-at-least-32-bytes".into()),
+            is_production: false, // デフォルトは開発環境
         }
     }
 }
@@ -649,12 +653,14 @@ enable_fuzzy = true
 fuzzy_distance = 2
 
 [auth]
+jwt_secret = "test-jwt-secret-key-for-development-only-do-not-use-in-production"
 biscuit_root_key = "default-key"
 bcrypt_cost = 12
 session_timeout = 86400
 access_token_ttl_secs = 3600
 refresh_token_ttl_secs = 86400
 remember_me_access_ttl_secs = 86400
+is_production = false
 
 [auth.webauthn]
 rp_id = "localhost"

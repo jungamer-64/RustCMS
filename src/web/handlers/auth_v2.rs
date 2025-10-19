@@ -83,7 +83,7 @@ pub async fn refresh_token(
                     debug!("Refresh token expired");
                     AppError::Authentication("Refresh token expired".to_string())
                 }
-                AuthError::InvalidToken => {
+                AuthError::InvalidTokenFormat | AuthError::InvalidTokenSignature => {
                     debug!("Invalid refresh token");
                     AppError::Authentication("Invalid refresh token".to_string())
                 }
@@ -94,8 +94,14 @@ pub async fn refresh_token(
             }
         })?;
 
+    // claims.user_id() は Result<Uuid, AuthError> を返すので、ここで処理
+    let user_id = claims.user_id().map_err(|e| {
+        error!("Failed to parse user ID from token: {:?}", e);
+        AppError::Authentication("Invalid user ID in token".to_string())
+    })?;
+
     debug!(
-        user_id = %claims.user_id(),
+        user_id = %user_id,
         username = %claims.username,
         "Refresh token verified successfully"
     );
@@ -103,7 +109,7 @@ pub async fn refresh_token(
     // 新しいトークンペアを生成
     let token_pair = jwt_service
         .generate_token_pair(
-            claims.user_id(),
+            user_id,
             claims.username.clone(),
             claims.role.clone(),
             SessionId::from(claims.session_id.clone()),
@@ -115,7 +121,7 @@ pub async fn refresh_token(
         })?;
 
     info!(
-        user_id = %claims.user_id(),
+        user_id = %user_id,
         username = %claims.username,
         "New token pair generated successfully"
     );

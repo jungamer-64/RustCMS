@@ -169,8 +169,13 @@ async fn verify_jwt_token(
                     debug!("JWT token expired");
                     AppError::Authentication("Token expired".to_string())
                 }
+                AuthError::InvalidTokenFormat | AuthError::InvalidTokenSignature => {
+                    warn!("Invalid JWT token: {:?}", e);
+                    AppError::Authentication("Invalid token".to_string())
+                }
+                #[allow(deprecated)]
                 AuthError::InvalidToken => {
-                    warn!("Invalid JWT token");
+                    warn!("Invalid JWT token (deprecated path)");
                     AppError::Authentication("Invalid token".to_string())
                 }
                 _ => {

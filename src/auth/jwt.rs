@@ -1,34 +1,19 @@
-//! JWT 認証サービス (Phase 5.3 - 新実装)
+//! JWT 認証サービス (Refactored - EdDSA Only)
 //!
-//! # 役割: 認証 (Authentication)
-//! - ユーザーのアイデンティティ検証
-//! - セッション管理
-//! - トークン生成・検証・リフレッシュ
-//!
-//! # JWT vs Biscuit の使い分け
-//! - **JWT**: "このユーザーは誰か?" (Who are you?)
-//! - **Biscuit**: "このユーザーは何ができるか?" (What can you do?)
-//!
-//! # JWT クレーム構造
-//! ```json
-//! {
-//!   "sub": "<user_id>",           // Subject (UUID)
-//!   "username": "<username>",      // ユーザー名
-//!   "role": "Admin|Editor|Viewer", // 基本ロール
-//!   "session_id": "<uuid>",        // セッション識別子
-//!   "exp": 1234567890,             // 有効期限 (Unix timestamp)
-//!   "iat": 1234567890,             // 発行時刻
-//!   "token_type": "access|refresh" // トークン種別
-//! }
-//! ```
+//! # 改善点
+//! - EdDSA (Ed25519) のみをサポート（HS256廃止）
+//! - 統合鍵管理システムを使用
+//! - エラーハンドリングの改善
+//! - コードの簡素化
 
 use chrono::{DateTime, Duration, Utc};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation, Algorithm};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 use uuid::Uuid;
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 
 use crate::auth::error::AuthError;
+use crate::auth::unified_key_management::UnifiedKeyPair;
 
 #[cfg(feature = "restructure_domain")]
 use crate::domain::user::UserRole;
@@ -42,16 +27,23 @@ use crate::common::type_utils::common_types::SessionId;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum TokenType {
-    /// アクセストークン (短命、リソースアクセス用)
     Access,
-    /// リフレッシュトークン (長命、アクセストークン更新用)
     Refresh,
 }
 
-/// JWT クレーム (標準 + カスタム)
+impl TokenType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Access => "access",
+            Self::Refresh => "refresh",
+        }
+    }
+}
+
+/// JWT クレーム
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JwtClaims {
-    /// Subject - ユーザーID (標準クレーム)
+    /// Subject - ユーザーID
     pub sub: String,
     /// ユーザー名
     pub username: String,
@@ -59,9 +51,9 @@ pub struct JwtClaims {
     pub role: UserRole,
     /// セッションID
     pub session_id: String,
-    /// 有効期限 (標準クレーム)
+    /// 有効期限 (Unix timestamp)
     pub exp: i64,
-    /// 発行時刻 (標準クレーム)
+    /// 発行時刻 (Unix timestamp)
     pub iat: i64,
     /// トークン種別
     pub token_type: TokenType,
@@ -69,12 +61,18 @@ pub struct JwtClaims {
 
 impl JwtClaims {
     /// ユーザーID を UUID として取得
-    pub fn user_id(&self) -> Uuid {
-        Uuid::parse_str(&self.sub).expect("Invalid UUID in JWT sub claim")
+    pub fn user_id(&self) -> Result<Uuid, AuthError> {
+        Uuid::parse_str(&self.sub)
+            .map_err(|_| AuthError::TokenParseError("Invalid UUID in sub claim".to_string()))
+    }
+    
+    /// セッションIDを取得
+    pub fn session_id(&self) -> SessionId {
+        SessionId::from(self.session_id.clone())
     }
 }
 
-/// JWT トークンペア (アクセス + リフレッシュ)
+/// JWT トークンペア
 #[derive(Debug, Clone)]
 pub struct JwtTokenPair {
     pub access_token: String,
@@ -85,10 +83,6 @@ pub struct JwtTokenPair {
 /// JWT サービス設定
 #[derive(Debug, Clone)]
 pub struct JwtConfig {
-    /// JWT 署名用秘密鍵 (HS256) - 互換性のために残す
-    pub secret: String,
-    /// Ed25519 鍵ペアのファイルパス (EdDSA) - Phase 5.7
-    pub key_pair_path: Option<String>,
     /// アクセストークン有効期限 (秒)
     pub access_token_ttl_secs: u64,
     /// リフレッシュトークン有効期限 (秒)
@@ -100,8 +94,6 @@ pub struct JwtConfig {
 impl Default for JwtConfig {
     fn default() -> Self {
         Self {
-            secret: String::from("default-secret-change-in-production"),
-            key_pair_path: Some(String::from("./secrets/ed25519.key")), // Phase 5.7
             access_token_ttl_secs: 900,        // 15分
             refresh_token_ttl_secs: 2_592_000, // 30日
             remember_me_ttl_secs: 86_400,      // 24時間
@@ -110,13 +102,9 @@ impl Default for JwtConfig {
 }
 
 impl JwtConfig {
-    /// Config から JwtConfig を作成 (Phase 5.4.2)
+    /// Config から JwtConfig を作成
     pub fn from_config(config: &crate::config::Config) -> Self {
-        use secrecy::ExposeSecret;
-        
         Self {
-            secret: config.auth.jwt_secret.expose_secret().to_string(),
-            key_pair_path: Some(String::from("./secrets/ed25519.key")), // Phase 5.7
             access_token_ttl_secs: config.auth.access_token_ttl_secs,
             refresh_token_ttl_secs: config.auth.refresh_token_ttl_secs,
             remember_me_ttl_secs: config.auth.remember_me_access_ttl_secs,
@@ -124,117 +112,19 @@ impl JwtConfig {
     }
 }
 
-/// JWT 認証サービス
+/// JWT 認証サービス (EdDSA Only)
 pub struct JwtService {
-    encoding_key: EncodingKey,
-    decoding_key: DecodingKey,
+    keypair: UnifiedKeyPair,
     config: JwtConfig,
-    ed25519_keypair: Option<super::Ed25519KeyPair>, // Phase 5.7
 }
 
 impl JwtService {
     /// 新しい JWT サービスを作成
-    pub fn new(config: JwtConfig) -> Result<Self, AuthError> {
-        let encoding_key = EncodingKey::from_secret(config.secret.as_bytes());
-        let decoding_key = DecodingKey::from_secret(config.secret.as_bytes());
-        
-        // Phase 5.7: EdDSA鍵ペアをロード（存在する場合）
-        let ed25519_keypair = if let Some(ref path) = config.key_pair_path {
-            match super::Ed25519KeyPair::load_or_generate(path) {
-                Ok(kp) => {
-                    debug!("EdDSA keypair loaded from: {}", path);
-                    Some(kp)
-                }
-                Err(e) => {
-                    warn!("Failed to load EdDSA keypair, falling back to HS256: {:?}", e);
-                    None
-                }
-            }
-        } else {
-            None
-        };
-        
-        Ok(Self {
-            encoding_key,
-            decoding_key,
-            config,
-            ed25519_keypair,
-        })
+    pub fn new(keypair: UnifiedKeyPair, config: JwtConfig) -> Self {
+        Self { keypair, config }
     }
-
-    /// EdDSA (Ed25519) でJWTトークンを署名 (Phase 5.7)
-    ///
-    /// jsonwebtoken 9.3 は EdDSA をサポートしていないため、手動で JWT を構築
-    fn sign_with_eddsa(&self, claims: &JwtClaims) -> Result<String, AuthError> {
-        use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-        
-        let keypair = self.ed25519_keypair.as_ref()
-            .ok_or(AuthError::InvalidToken)?;
-        
-        // JWT ヘッダー (EdDSA = Ed25519)
-        let header = serde_json::json!({
-            "alg": "EdDSA",
-            "typ": "JWT"
-        });
-        
-        let header_b64 = URL_SAFE_NO_PAD.encode(serde_json::to_string(&header)
-            .map_err(|_| AuthError::InvalidToken)?);
-        let claims_b64 = URL_SAFE_NO_PAD.encode(serde_json::to_string(claims)
-            .map_err(|_| AuthError::InvalidToken)?);
-        
-        let message = format!("{}.{}", header_b64, claims_b64);
-        let signature = keypair.sign(message.as_bytes());
-        let signature_b64 = URL_SAFE_NO_PAD.encode(signature.to_bytes());
-        
-        Ok(format!("{}.{}", message, signature_b64))
-    }
-
-    /// EdDSA (Ed25519) でJWTトークンを検証 (Phase 5.7)
-    fn verify_with_eddsa(&self, token: &str) -> Result<JwtClaims, AuthError> {
-        use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-        
-        let keypair = self.ed25519_keypair.as_ref()
-            .ok_or(AuthError::InvalidToken)?;
-        
-        let parts: Vec<&str> = token.split('.').collect();
-        if parts.len() != 3 {
-            return Err(AuthError::InvalidToken);
-        }
-        
-        let message = format!("{}.{}", parts[0], parts[1]);
-        let signature_bytes = URL_SAFE_NO_PAD.decode(parts[2])
-            .map_err(|_| AuthError::InvalidToken)?;
-        
-        if signature_bytes.len() != 64 {
-            return Err(AuthError::InvalidToken);
-        }
-        
-        let signature = ed25519_dalek::Signature::from_bytes(
-            signature_bytes.as_slice().try_into().map_err(|_| AuthError::InvalidToken)?
-        );
-        
-        keypair.verify(message.as_bytes(), &signature)?;
-        
-        // クレームをデコード
-        let claims_json = URL_SAFE_NO_PAD.decode(parts[1])
-            .map_err(|_| AuthError::InvalidToken)?;
-        let claims: JwtClaims = serde_json::from_slice(&claims_json)
-            .map_err(|_| AuthError::InvalidToken)?;
-        
-        Ok(claims)
-    }
-
-    /// JWT トークンペアを生成 (アクセス + リフレッシュ)
-    ///
-    /// # Arguments
-    /// * `user_id` - ユーザーID
-    /// * `username` - ユーザー名
-    /// * `role` - ユーザーロール
-    /// * `session_id` - セッションID
-    /// * `remember_me` - "Remember Me" オプション
-    ///
-    /// # Errors
-    /// トークン生成に失敗した場合
+    
+    /// JWT トークンペアを生成
     pub fn generate_token_pair(
         &self,
         user_id: Uuid,
@@ -254,7 +144,7 @@ impl JwtService {
         
         let access_exp = now + Duration::seconds(access_ttl as i64);
         let refresh_exp = now + Duration::seconds(self.config.refresh_token_ttl_secs as i64);
-
+        
         // アクセストークン
         let access_claims = JwtClaims {
             sub: user_id.to_string(),
@@ -265,7 +155,7 @@ impl JwtService {
             iat: now.timestamp(),
             token_type: TokenType::Access,
         };
-
+        
         // リフレッシュトークン
         let refresh_claims = JwtClaims {
             sub: user_id.to_string(),
@@ -276,161 +166,149 @@ impl JwtService {
             iat: now.timestamp(),
             token_type: TokenType::Refresh,
         };
-
-        // Phase 5.7: EdDSA優先、フォールバックとしてHS256を使用
-        let access_token = if self.ed25519_keypair.is_some() {
-            self.sign_with_eddsa(&access_claims)?
-        } else {
-            encode(&Header::default(), &access_claims, &self.encoding_key)
-                .map_err(|e| {
-                    warn!("Failed to encode access token: {}", e);
-                    AuthError::InvalidToken
-                })?
-        };
-
-        let refresh_token = if self.ed25519_keypair.is_some() {
-            self.sign_with_eddsa(&refresh_claims)?
-        } else {
-            encode(&Header::default(), &refresh_claims, &self.encoding_key)
-                .map_err(|e| {
-                    warn!("Failed to encode refresh token: {}", e);
-                    AuthError::InvalidToken
-                })?
-        };
-
+        
+        let access_token = self.sign_token(&access_claims)?;
+        let refresh_token = self.sign_token(&refresh_claims)?;
+        
         debug!(
             user_id = %user_id,
             session_id = %session_id,
             remember_me = remember_me,
             "Generated JWT token pair"
         );
-
+        
         Ok(JwtTokenPair {
             access_token,
             refresh_token,
             expires_at: access_exp,
         })
     }
-
-    /// JWT トークンを検証してクレームを取得
-    ///
-    /// # Arguments
-    /// * `token` - JWT トークン文字列
-    /// * `expected_type` - 期待するトークン種別
-    ///
-    /// # Errors
-    /// トークンが無効、期限切れ、または種別が不一致の場合
+    
+    /// JWT トークンを検証
     pub fn verify_token(
         &self,
         token: &str,
         expected_type: TokenType,
     ) -> Result<JwtClaims, AuthError> {
-        // Phase 5.7: EdDSA優先、HS256フォールバック
-        let claims = if self.ed25519_keypair.is_some() {
-            // EdDSA検証を試みる
-            match self.verify_with_eddsa(token) {
-                Ok(c) => c,
-                Err(_) => {
-                    // EdDSA検証失敗時はHS256にフォールバック（移行期間用）
-                    let mut validation = Validation::new(Algorithm::HS256);
-                    validation.validate_exp = true;
-                    
-                    let token_data = decode::<JwtClaims>(token, &self.decoding_key, &validation)
-                        .map_err(|e| {
-                            match e.kind() {
-                                jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
-                                    debug!("JWT token expired");
-                                    AuthError::TokenExpired
-                                }
-                                _ => {
-                                    warn!("JWT verification failed (EdDSA and HS256): {}", e);
-                                    AuthError::InvalidToken
-                                }
-                            }
-                        })?;
-                    token_data.claims
-                }
-            }
-        } else {
-            // EdDSA鍵がない場合はHS256のみ
-            let mut validation = Validation::new(Algorithm::HS256);
-            validation.validate_exp = true;
-            
-            let token_data = decode::<JwtClaims>(token, &self.decoding_key, &validation)
-                .map_err(|e| {
-                    match e.kind() {
-                        jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
-                            debug!("JWT token expired");
-                            AuthError::TokenExpired
-                        }
-                        _ => {
-                            warn!("JWT verification failed: {}", e);
-                            AuthError::InvalidToken
-                        }
-                    }
-                })?;
-            token_data.claims
-        };
-
-        // 有効期限の検証（EdDSA検証の場合は手動で確認）
-        if self.ed25519_keypair.is_some() {
-            let now = Utc::now().timestamp();
-            if claims.exp < now {
-                debug!("JWT token expired (EdDSA)");
-                return Err(AuthError::TokenExpired);
-            }
+        let claims = self.verify_signature(token)?;
+        
+        // 有効期限の検証
+        let now = Utc::now().timestamp();
+        if claims.exp < now {
+            debug!("JWT token expired: exp={}, now={}", claims.exp, now);
+            return Err(AuthError::TokenExpired);
         }
-
+        
         // トークン種別の検証
         if claims.token_type != expected_type {
             warn!(
                 "Token type mismatch: expected {:?}, got {:?}",
                 expected_type, claims.token_type
             );
-            return Err(AuthError::InvalidToken);
+            return Err(AuthError::TokenTypeMismatch {
+                expected: expected_type.as_str().to_string(),
+                actual: claims.token_type.as_str().to_string(),
+            });
         }
-
+        
         debug!(
             user_id = %claims.sub,
             session_id = %claims.session_id,
             token_type = ?claims.token_type,
             "JWT token verified successfully"
         );
-
+        
         Ok(claims)
     }
-
+    
     /// アクセストークンを検証
     pub fn verify_access_token(&self, token: &str) -> Result<JwtClaims, AuthError> {
         self.verify_token(token, TokenType::Access)
     }
-
+    
     /// リフレッシュトークンを検証
     pub fn verify_refresh_token(&self, token: &str) -> Result<JwtClaims, AuthError> {
         self.verify_token(token, TokenType::Refresh)
+    }
+    
+    // === Private methods ===
+    
+    /// EdDSA でJWTトークンを署名
+    fn sign_token(&self, claims: &JwtClaims) -> Result<String, AuthError> {
+        // JWT ヘッダー
+        let header = serde_json::json!({
+            "alg": "EdDSA",
+            "typ": "JWT"
+        });
+        
+        let header_b64 = URL_SAFE_NO_PAD.encode(
+            serde_json::to_string(&header)
+                .map_err(|e| AuthError::JwtError(format!("Failed to serialize header: {e}")))?
+        );
+        
+        let claims_b64 = URL_SAFE_NO_PAD.encode(
+            serde_json::to_string(claims)
+                .map_err(|e| AuthError::JwtError(format!("Failed to serialize claims: {e}")))?
+        );
+        
+        let message = format!("{}.{}", header_b64, claims_b64);
+        let signature = self.keypair.sign(message.as_bytes());
+        let signature_b64 = URL_SAFE_NO_PAD.encode(signature.to_bytes());
+        
+        Ok(format!("{}.{}", message, signature_b64))
+    }
+    
+    /// EdDSA でJWTトークンの署名を検証
+    fn verify_signature(&self, token: &str) -> Result<JwtClaims, AuthError> {
+        let parts: Vec<&str> = token.split('.').collect();
+        if parts.len() != 3 {
+            return Err(AuthError::InvalidTokenFormat);
+        }
+        
+        // 署名検証
+        let message = format!("{}.{}", parts[0], parts[1]);
+        let signature_bytes = URL_SAFE_NO_PAD.decode(parts[2])
+            .map_err(|e| AuthError::TokenParseError(format!("Invalid signature base64: {e}")))?;
+        
+        if signature_bytes.len() != 64 {
+            return Err(AuthError::InvalidTokenSignature);
+        }
+        
+        let signature = ed25519_dalek::Signature::from_bytes(
+            signature_bytes.as_slice().try_into()
+                .map_err(|_| AuthError::InvalidTokenSignature)?
+        );
+        
+        self.keypair.verify(message.as_bytes(), &signature)?;
+        
+        // クレームをデコード
+        let claims_json = URL_SAFE_NO_PAD.decode(parts[1])
+            .map_err(|e| AuthError::TokenParseError(format!("Invalid claims base64: {e}")))?;
+        
+        let claims: JwtClaims = serde_json::from_slice(&claims_json)
+            .map_err(|e| AuthError::TokenParseError(format!("Invalid claims JSON: {e}")))?;
+        
+        Ok(claims)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use crate::auth::unified_key_management::UnifiedKeyPair;
+    
     fn create_test_service() -> JwtService {
-        JwtService::new(JwtConfig {
-            secret: "test-secret-key".to_string(),
-            key_pair_path: None, // テスト環境ではHS256を使用
-            access_token_ttl_secs: 900,
-            refresh_token_ttl_secs: 2592000,
-            remember_me_ttl_secs: 86400,
-        }).expect("Failed to create JwtService")
+        let keypair = UnifiedKeyPair::generate().expect("Failed to generate keypair");
+        let config = JwtConfig::default();
+        JwtService::new(keypair, config)
     }
-
+    
     #[test]
     fn test_generate_and_verify_token_pair() {
         let service = create_test_service();
         let user_id = Uuid::new_v4();
         let session_id = SessionId::new();
-
+        
         let token_pair = service
             .generate_token_pair(
                 user_id,
@@ -440,155 +318,108 @@ mod tests {
                 false,
             )
             .expect("Failed to generate token pair");
-
+        
         // アクセストークンの検証
         let access_claims = service
             .verify_access_token(&token_pair.access_token)
             .expect("Failed to verify access token");
-
+        
         assert_eq!(access_claims.sub, user_id.to_string());
         assert_eq!(access_claims.username, "testuser");
-        assert_eq!(access_claims.session_id, session_id.as_ref());  // to_string() → as_ref()
+        assert_eq!(access_claims.session_id, session_id.as_ref());
         assert_eq!(access_claims.token_type, TokenType::Access);
-
+        
         // リフレッシュトークンの検証
         let refresh_claims = service
             .verify_refresh_token(&token_pair.refresh_token)
             .expect("Failed to verify refresh token");
-
+        
         assert_eq!(refresh_claims.token_type, TokenType::Refresh);
     }
-
+    
     #[test]
     fn test_token_type_mismatch() {
         let service = create_test_service();
         let user_id = Uuid::new_v4();
         let session_id = SessionId::new();
-
+        
         let token_pair = service
             .generate_token_pair(
                 user_id,
                 "testuser".to_string(),
-                UserRole::Subscriber,  // Viewer → Subscriber に修正
+                UserRole::Subscriber,
                 session_id,
                 false,
             )
             .expect("Failed to generate token pair");
-
+        
         // アクセストークンをリフレッシュトークンとして検証 (エラーになるべき)
         let result = service.verify_refresh_token(&token_pair.access_token);
-        assert!(matches!(result, Err(AuthError::InvalidToken)));
+        assert!(matches!(result, Err(AuthError::TokenTypeMismatch { .. })));
     }
-
+    
     #[test]
-    fn test_invalid_token() {
+    fn test_invalid_token_format() {
         let service = create_test_service();
-        let result = service.verify_access_token("invalid.token.here");
-        assert!(matches!(result, Err(AuthError::InvalidToken)));
-    }
-
-    // ===== Phase 5.7: EdDSA テスト =====
-
-    fn create_eddsa_test_service() -> JwtService {
-        JwtService::new(JwtConfig {
-            secret: "fallback-secret".to_string(),
-            key_pair_path: Some("./test_secrets/test_ed25519.key".to_string()),
-            access_token_ttl_secs: 900,
-            refresh_token_ttl_secs: 2592000,
-            remember_me_ttl_secs: 86400,
-        }).expect("Failed to create EdDSA JwtService")
-    }
-
-    #[test]
-    fn test_eddsa_generate_and_verify() {
-        let service = create_eddsa_test_service();
-        let user_id = Uuid::new_v4();
-        let session_id = SessionId::new();
-
-        let token_pair = service
-            .generate_token_pair(
-                user_id,
-                "eddsa_user".to_string(),
-                UserRole::Admin,
-                session_id.clone(),
-                false,
-            )
-            .expect("Failed to generate EdDSA token pair");
-
-        // EdDSA署名されたトークンを検証
-        let access_claims = service
-            .verify_access_token(&token_pair.access_token)
-            .expect("Failed to verify EdDSA access token");
-
-        assert_eq!(access_claims.sub, user_id.to_string());
-        assert_eq!(access_claims.username, "eddsa_user");
-        assert_eq!(access_claims.role, UserRole::Admin);
-        assert_eq!(access_claims.session_id, session_id.to_string());
-        assert_eq!(access_claims.token_type, TokenType::Access);
-
-        // リフレッシュトークンも検証
-        let refresh_claims = service
-            .verify_refresh_token(&token_pair.refresh_token)
-            .expect("Failed to verify EdDSA refresh token");
-
-        assert_eq!(refresh_claims.token_type, TokenType::Refresh);
-    }
-
-    #[test]
-    fn test_eddsa_invalid_signature() {
-        let service = create_eddsa_test_service();
         
-        // 別のEdDSA鍵で署名されたトークン（不正）
-        let another_service = create_eddsa_test_service();
-        let user_id = Uuid::new_v4();
-        let session_id = SessionId::new();
-
-        let token_pair = another_service
-            .generate_token_pair(
-                user_id,
-                "attacker".to_string(),
-                UserRole::Admin,
-                session_id,
-                false,
-            )
-            .expect("Failed to generate token");
-
-        // 異なる鍵でトークンを改ざん
-        let mut tampered_token = token_pair.access_token.clone();
-        tampered_token.push_str("tampered");
-
-        let result = service.verify_access_token(&tampered_token);
-        assert!(matches!(result, Err(AuthError::InvalidToken)));
+        // 不正な形式
+        let result = service.verify_access_token("invalid.token");
+        assert!(matches!(result, Err(AuthError::InvalidTokenFormat)));
     }
-
+    
     #[test]
-    fn test_eddsa_token_format() {
-        let service = create_eddsa_test_service();
+    fn test_tampered_token() {
+        let service = create_test_service();
         let user_id = Uuid::new_v4();
         let session_id = SessionId::new();
-
+        
         let token_pair = service
             .generate_token_pair(
                 user_id,
-                "format_test".to_string(),
+                "testuser".to_string(),
                 UserRole::Editor,
                 session_id,
                 false,
             )
-            .expect("Failed to generate token");
-
-        // JWT形式確認: "header.payload.signature"
-        let parts: Vec<&str> = token_pair.access_token.split('.').collect();
-        assert_eq!(parts.len(), 3, "JWT should have 3 parts");
-
-        // ヘッダーをデコードしてEdDSAアルゴリズム確認
-        use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-        let header_json = URL_SAFE_NO_PAD.decode(parts[0])
-            .expect("Failed to decode header");
-        let header: serde_json::Value = serde_json::from_slice(&header_json)
-            .expect("Failed to parse header");
+            .expect("Failed to generate token pair");
         
-        assert_eq!(header["alg"], "EdDSA");
-        assert_eq!(header["typ"], "JWT");
+        // トークンを改ざん
+        let mut tampered = token_pair.access_token.clone();
+        tampered.push_str("tampered");
+        
+        let result = service.verify_access_token(&tampered);
+        assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_remember_me_expiry() {
+        let service = create_test_service();
+        let user_id = Uuid::new_v4();
+        let session_id = SessionId::new();
+        
+        // Remember Me なし
+        let normal_pair = service
+            .generate_token_pair(
+                user_id,
+                "testuser".to_string(),
+                UserRole::Editor,
+                session_id.clone(),
+                false,
+            )
+            .expect("Failed to generate token pair");
+        
+        // Remember Me あり
+        let remember_pair = service
+            .generate_token_pair(
+                user_id,
+                "testuser".to_string(),
+                UserRole::Editor,
+                session_id,
+                true,
+            )
+            .expect("Failed to generate token pair");
+        
+        // Remember Me の方が有効期限が長いことを確認
+        assert!(remember_pair.expires_at > normal_pair.expires_at);
     }
 }
