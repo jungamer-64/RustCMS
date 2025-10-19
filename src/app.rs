@@ -902,64 +902,14 @@ impl AppState {
     }
 
     /// Helper: obtain a CreateUser use-case instance.
-    /// Prefers the centrally-constructed AppContainer; if absent constructs
-    /// a short-lived adapter/use-case for backward compatibility.
-    #[cfg(feature = "database")]
-    #[must_use]
-    pub fn get_create_user_uc(
-        &self,
-    ) -> std::sync::Arc<
-        crate::application::use_cases::CreateUserUseCase<
-            crate::infrastructure::repositories::DieselUserRepository,
-        >,
-    > {
-        if let Some(container) = self.container.as_ref() {
-            return container.create_user();
-        }
-        let repo =
-            crate::infrastructure::repositories::DieselUserRepository::new(self.database.clone());
-        std::sync::Arc::new(crate::application::use_cases::CreateUserUseCase::new(
-            std::sync::Arc::new(repo),
-        ))
-    }
-
-    #[cfg(feature = "database")]
-    #[must_use]
-    pub fn get_user_by_id_uc(
-        &self,
-    ) -> std::sync::Arc<
-        crate::application::use_cases::GetUserByIdUseCase<
-            crate::infrastructure::repositories::DieselUserRepository,
-        >,
-    > {
-        if let Some(container) = self.container.as_ref() {
-            return container.get_user_by_id();
-        }
-        let repo =
-            crate::infrastructure::repositories::DieselUserRepository::new(self.database.clone());
-        std::sync::Arc::new(crate::application::use_cases::GetUserByIdUseCase::new(
-            std::sync::Arc::new(repo),
-        ))
-    }
-
-    #[cfg(feature = "database")]
-    #[must_use]
-    pub fn get_update_user_uc(
-        &self,
-    ) -> std::sync::Arc<
-        crate::application::use_cases::UpdateUserUseCase<
-            crate::infrastructure::repositories::DieselUserRepository,
-        >,
-    > {
-        if let Some(container) = self.container.as_ref() {
-            return container.update_user();
-        }
-        let repo =
-            crate::infrastructure::repositories::DieselUserRepository::new(self.database.clone());
-        std::sync::Arc::new(crate::application::use_cases::UpdateUserUseCase::new(
-            std::sync::Arc::new(repo),
-        ))
-    }
+    // ============================================================================
+    // Phase 4: Legacy Use Case helpers removed
+    // ============================================================================
+    // Note: get_create_user_uc, get_user_by_id_uc, get_update_user_uc were removed
+    // in Phase 4.1/4.2 along with infrastructure/repositories/ and application/use_cases/
+    //
+    // New approach: Use application::user::RegisterUserUseCase etc. directly
+    // through dependency injection, not through AppState helpers.
 
     // Note: Post-related use-cases (CreatePostUseCase, UpdatePostUseCase, etc.) are not currently
     // implemented in the application layer. They remain available through direct database calls
