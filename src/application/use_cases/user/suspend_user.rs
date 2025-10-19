@@ -6,7 +6,7 @@
 use crate::application::dto::user::UserDto;
 use crate::application::ports::repositories::UserRepository;
 use crate::common::types::{ApplicationError, ApplicationResult};
-use crate::domain::user::UserId;
+use crate::domain::user::{UserId, UserRole};
 use crate::infrastructure::events::bus::{AppEvent, UserEventData};
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -198,7 +198,17 @@ mod tests {
         let username = Username::new("testuser".to_string()).unwrap();
         let email = Email::new("test@example.com".to_string()).unwrap();
         let user_id = UserId::new();
-        let user = User::restore(user_id, username, email, false); // 非アクティブで復元
+        let now = chrono::Utc::now();
+        let user = User::restore(
+            user_id,
+            username,
+            email,
+            Some("hashed_password".to_string()),
+            UserRole::Subscriber, // 購読者ロール
+            false,                // 非アクティブで復元
+            now,
+            now,
+        );
 
         let mock_user_for_find = user.clone();
         mock_repo

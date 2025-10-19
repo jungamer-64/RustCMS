@@ -217,7 +217,7 @@ impl DieselUnitOfWork {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::schema::users;
+    use crate::infrastructure::database::schema::users;
     use diesel::r2d2::{self, ConnectionManager};
 
     /// テスト用のコネクションプールを作成
