@@ -50,6 +50,9 @@ pub struct UnifiedAuthContext {
     /// セッションID (JWT カスタムクレーム)
     pub session_id: SessionId,
 
+    /// セッションバージョン (JWT カスタムクレーム)
+    pub session_version: u32,
+
     /// JWT トークンの有効期限 (Unix timestamp)
     pub jwt_exp: i64,
 
@@ -75,8 +78,9 @@ impl UnifiedAuthContext {
         Ok(Self {
             user_id,
             username: claims.username.clone(),
-            role: claims.role.clone(),
+            role: claims.role,
             session_id,
+            session_version: claims.session_version(),
             jwt_exp: claims.exp,
             permissions: Vec::new(),
             biscuit_token: None,
@@ -152,6 +156,7 @@ mod tests {
             username: "testuser".to_string(),
             role: UserRole::Editor,
             session_id: SessionId::new().as_ref().to_string(), // .to_string() を .as_ref().to_string() に修正
+            session_version: 1,
             exp: (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp(),
             iat: chrono::Utc::now().timestamp(),
             token_type: TokenType::Access,
@@ -165,6 +170,7 @@ mod tests {
 
         assert_eq!(context.username, "testuser");
         assert_eq!(context.role, UserRole::Editor);
+        assert_eq!(context.session_version, 1);
         assert!(context.permissions.is_empty());
     }
 

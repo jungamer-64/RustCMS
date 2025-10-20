@@ -341,6 +341,11 @@ impl AppStateBuilder {
         #[cfg(feature = "cache")]
         let cache = Arc::new(RwLock::new(HashMap::new()));
 
+        #[cfg(feature = "auth")]
+        let session_store = self
+            .session_store
+            .unwrap_or_else(|| Arc::new(InMemorySessionStore::new()) as Arc<dyn SessionStore>);
+
         let state = AppState {
             config: self.config,
             event_bus,
@@ -351,7 +356,7 @@ impl AppStateBuilder {
             #[cfg(feature = "auth")]
             jwt_service: self.jwt_service,
             #[cfg(feature = "auth")]
-            session_store: self.session_store,
+            session_store: Some(session_store),
         };
 
         info!("AppState built successfully");

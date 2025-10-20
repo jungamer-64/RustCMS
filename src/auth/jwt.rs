@@ -51,6 +51,8 @@ pub struct JwtClaims {
     pub role: UserRole,
     /// セッションID
     pub session_id: String,
+    /// セッションバージョン
+    pub session_version: u32,
     /// 有効期限 (Unix timestamp)
     pub exp: i64,
     /// 発行時刻 (Unix timestamp)
@@ -69,6 +71,12 @@ impl JwtClaims {
     /// セッションIDを取得
     pub fn session_id(&self) -> SessionId {
         SessionId::from(self.session_id.clone())
+    }
+
+    /// セッションバージョンを取得
+    #[must_use]
+    pub fn session_version(&self) -> u32 {
+        self.session_version
     }
 }
 
@@ -131,6 +139,7 @@ impl JwtService {
         username: String,
         role: UserRole,
         session_id: SessionId,
+        session_version: u32,
         remember_me: bool,
     ) -> Result<JwtTokenPair, AuthError> {
         let now = Utc::now();
@@ -149,8 +158,9 @@ impl JwtService {
         let access_claims = JwtClaims {
             sub: user_id.to_string(),
             username: username.clone(),
-            role: role.clone(),
+            role,
             session_id: session_id.to_string(),
+            session_version,
             exp: access_exp.timestamp(),
             iat: now.timestamp(),
             token_type: TokenType::Access,
@@ -162,6 +172,7 @@ impl JwtService {
             username,
             role,
             session_id: session_id.to_string(),
+            session_version,
             exp: refresh_exp.timestamp(),
             iat: now.timestamp(),
             token_type: TokenType::Refresh,
@@ -314,6 +325,7 @@ mod tests {
         let service = create_test_service();
         let user_id = Uuid::new_v4();
         let session_id = SessionId::new();
+        let session_version = 1;
 
         let token_pair = service
             .generate_token_pair(
@@ -321,6 +333,7 @@ mod tests {
                 "testuser".to_string(),
                 UserRole::Editor,
                 session_id.clone(),
+                session_version,
                 false,
             )
             .expect("Failed to generate token pair");
@@ -333,6 +346,7 @@ mod tests {
         assert_eq!(access_claims.sub, user_id.to_string());
         assert_eq!(access_claims.username, "testuser");
         assert_eq!(access_claims.session_id, session_id.as_ref());
+        assert_eq!(access_claims.session_version, session_version);
         assert_eq!(access_claims.token_type, TokenType::Access);
 
         // リフレッシュトークンの検証
@@ -348,6 +362,7 @@ mod tests {
         let service = create_test_service();
         let user_id = Uuid::new_v4();
         let session_id = SessionId::new();
+        let session_version = 1;
 
         let token_pair = service
             .generate_token_pair(
@@ -355,6 +370,7 @@ mod tests {
                 "testuser".to_string(),
                 UserRole::Subscriber,
                 session_id,
+                session_version,
                 false,
             )
             .expect("Failed to generate token pair");
@@ -378,6 +394,7 @@ mod tests {
         let service = create_test_service();
         let user_id = Uuid::new_v4();
         let session_id = SessionId::new();
+        let session_version = 1;
 
         let token_pair = service
             .generate_token_pair(
@@ -385,6 +402,7 @@ mod tests {
                 "testuser".to_string(),
                 UserRole::Editor,
                 session_id,
+                session_version,
                 false,
             )
             .expect("Failed to generate token pair");
@@ -402,6 +420,7 @@ mod tests {
         let service = create_test_service();
         let user_id = Uuid::new_v4();
         let session_id = SessionId::new();
+        let session_version = 1;
 
         // Remember Me なし
         let normal_pair = service
@@ -410,6 +429,7 @@ mod tests {
                 "testuser".to_string(),
                 UserRole::Editor,
                 session_id.clone(),
+                session_version,
                 false,
             )
             .expect("Failed to generate token pair");
@@ -421,6 +441,7 @@ mod tests {
                 "testuser".to_string(),
                 UserRole::Editor,
                 session_id,
+                session_version,
                 true,
             )
             .expect("Failed to generate token pair");

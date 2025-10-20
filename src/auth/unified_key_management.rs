@@ -7,7 +7,7 @@
 //! - 環境変数 > ファイル の優先順位
 //! - 自動鍵生成は開発環境のみ（本番では明示的な鍵必須）
 
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use biscuit_auth::Algorithm as BiscuitAlgorithm;
 use biscuit_auth::{
     KeyPair as BiscuitKeyPair, PrivateKey as BiscuitPrivateKey, PublicKey as BiscuitPublicKey,
@@ -85,7 +85,7 @@ impl UnifiedKeyPair {
     /// 新しい鍵ペアを生成
     pub fn generate() -> Result<Self, AuthError> {
         use rand::RngCore;
-        let mut csprng = rand::thread_rng();
+        let mut csprng = rand::rng();
         let mut secret_bytes = [0u8; Self::SEED_LENGTH];
         csprng.fill_bytes(&mut secret_bytes);
 

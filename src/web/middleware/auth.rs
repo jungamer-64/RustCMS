@@ -37,7 +37,7 @@ enum AuthorizationScheme<'a> {
 /// サポートされるスキーム:
 /// - `Bearer <jwt_token>` - JWT 認証 (推奨)
 /// - `Biscuit <biscuit_token>` - Biscuit 認可 (将来の拡張用)
-fn parse_authorization_header(value: &str) -> Option<AuthorizationScheme> {
+fn parse_authorization_header(value: &str) -> Option<AuthorizationScheme<'_>> {
     let trimmed = value.trim_start();
 
     if let Some(token) = trimmed.strip_prefix("Bearer ") {
@@ -122,10 +122,10 @@ pub async fn auth_middleware(
         let session_id = context.session_id.clone();
         let now = Utc::now();
 
-        // セッションを検証 (version は JWT に含まれていないので 0 を使用)
+        // セッションを検証 (JWT に含まれるセッションバージョンを使用)
         if let Err(e) = session_store
             .as_ref()
-            .validate_access(session_id, 0, now)
+            .validate_access(session_id, context.session_version, now)
             .await
         {
             warn!("Session validation failed: {:?}", e);

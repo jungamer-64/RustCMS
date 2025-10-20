@@ -264,6 +264,7 @@ impl AuthService {
         remember_me: bool,
     ) -> Result<AuthResponse> {
         let session_id = SessionId::new();
+        let session_version = 1;
 
         // JWTトークンペアの生成
         let token_pair = self.jwt_service.generate_token_pair(
@@ -271,6 +272,7 @@ impl AuthService {
             user.username().as_str().to_string(),
             user.role(),
             session_id.clone(),
+            session_version,
             remember_me,
         )?;
 
@@ -283,7 +285,7 @@ impl AuthService {
             expires_at: token_pair.expires_at
                 + ChronoDuration::seconds(self.config.refresh_token_ttl_secs as i64),
             last_accessed: Utc::now(),
-            refresh_version: 1,
+            refresh_version: session_version,
         };
 
         // セッションを保存
@@ -330,7 +332,7 @@ impl AuthService {
         // セッションのバージョンを確認・更新
         let new_version = self
             .session_store
-            .validate_and_bump_refresh(session_id.clone(), 1, Utc::now())
+            .validate_and_bump_refresh(session_id.clone(), claims.session_version(), Utc::now())
             .await?;
 
         // ユーザー情報を取得
@@ -353,6 +355,7 @@ impl AuthService {
             user.username().as_str().to_string(),
             user.role(),
             session_id.clone(),
+            new_version,
             false, // リフレッシュ時はremember_meを引き継がない
         )?;
 
@@ -390,7 +393,7 @@ impl AuthService {
 
         // セッションの有効性を確認
         self.session_store
-            .validate_access(session_id.clone(), 1, Utc::now())
+            .validate_access(session_id.clone(), claims.session_version(), Utc::now())
             .await?;
 
         // 権限を取得
@@ -517,18 +520,6 @@ fn mask_session_id(sid: &SessionId) -> String {
         return "***".to_string();
     }
     format!("{}…{}", &s[..3], &s[s.len() - 3..])
-}
-
-/// 管理者権限が必要な場面でのヘルパー関数
-pub fn require_admin_permission(ctx: &AuthContext) -> Result<()> {
-    if matches!(ctx.role, UserRole::Admin) || ctx.permissions.iter().any(|p| p == "admin") {
-        Ok(())
-    } else {
-        Err(AuthError::InsufficientPermissions {
-            required: "admin".to_string(),
-        }
-        .into())
-    }
 }
 
 #[cfg(test)]

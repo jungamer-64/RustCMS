@@ -104,8 +104,9 @@ pub async fn refresh_token(
         .generate_token_pair(
             user_id,
             claims.username.clone(),
-            claims.role.clone(),
+            claims.role,
             SessionId::from(claims.session_id.clone()),
+            claims.session_version(),
             false, // remember_me は false (通常のリフレッシュ)
         )
         .map_err(|e| {
