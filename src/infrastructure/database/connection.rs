@@ -16,10 +16,10 @@
 //! let pool = DatabasePool::new("postgresql://user:pass@localhost/mydb")?;
 //! ```
 
-use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
-use diesel::PgConnection;
-use std::sync::Arc;
 use crate::common::types::InfrastructureError;
+use diesel::PgConnection;
+use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
+use std::sync::Arc;
 
 /// ポーリングコネクションの型エイリアス
 pub type DbConnection = PooledConnection<ConnectionManager<PgConnection>>;
@@ -48,15 +48,15 @@ impl DatabasePool {
     /// ```
     pub fn new(database_url: &str) -> Result<Self, InfrastructureError> {
         let manager = ConnectionManager::<PgConnection>::new(database_url);
-        
+
         let pool = Pool::builder()
-            .max_size(32)  // 最大コネクション数
+            .max_size(32) // 最大コネクション数
             // Diesel 2.x: NopErrorHandler または LoggingErrorHandler を使用
             // クロージャーは非対応
             .build(manager)
-            .map_err(|e| InfrastructureError::DatabaseError(
-                format!("接続プール初期化失敗: {}", e)
-            ))?;
+            .map_err(|e| {
+                InfrastructureError::DatabaseError(format!("接続プール初期化失敗: {}", e))
+            })?;
 
         Ok(Self {
             pool: Arc::new(pool),
@@ -74,9 +74,9 @@ impl DatabasePool {
     ///
     /// 利用可能な接続がない場合、`InfrastructureError` を返す
     pub fn get_connection(&self) -> Result<DbConnection, InfrastructureError> {
-        self.pool.get().map_err(|e| InfrastructureError::DatabaseError(
-            format!("接続取得失敗: {}", e)
-        ))
+        self.pool
+            .get()
+            .map_err(|e| InfrastructureError::DatabaseError(format!("接続取得失敗: {}", e)))
     }
 
     /// 接続プールのヘルスチェック
@@ -86,15 +86,13 @@ impl DatabasePool {
     /// `Ok(())` - 接続が正常
     /// `Err(InfrastructureError)` - 接続が失敗
     pub fn health_check(&self) -> Result<(), InfrastructureError> {
-        use diesel::sql_query;
         use diesel::RunQueryDsl;
+        use diesel::sql_query;
 
         let mut conn = self.get_connection()?;
-        sql_query("SELECT 1")
-            .execute(&mut conn)
-            .map_err(|e| InfrastructureError::DatabaseError(
-                format!("ヘルスチェック失敗: {}", e)
-            ))?;
+        sql_query("SELECT 1").execute(&mut conn).map_err(|e| {
+            InfrastructureError::DatabaseError(format!("ヘルスチェック失敗: {}", e))
+        })?;
         Ok(())
     }
 

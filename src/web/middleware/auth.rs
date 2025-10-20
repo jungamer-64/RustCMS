@@ -10,7 +10,7 @@
 //! 3. Biscuit トークンを検証して権限情報を抽出
 //! 4. 統合認証コンテキストを生成して request extensions に格納
 
-use crate::auth::{UnifiedAuthContext, AuthError, SessionStore};
+use crate::auth::{AuthError, UnifiedAuthContext};
 use crate::error::AppError;
 use crate::infrastructure::app_state::AppState;
 use axum::{
@@ -39,15 +39,15 @@ enum AuthorizationScheme<'a> {
 /// - `Biscuit <biscuit_token>` - Biscuit 認可 (将来の拡張用)
 fn parse_authorization_header(value: &str) -> Option<AuthorizationScheme> {
     let trimmed = value.trim_start();
-    
+
     if let Some(token) = trimmed.strip_prefix("Bearer ") {
         return Some(AuthorizationScheme::Bearer(token.trim()));
     }
-    
+
     if let Some(token) = trimmed.strip_prefix("Biscuit ") {
         return Some(AuthorizationScheme::Biscuit(token.trim()));
     }
-    
+
     None
 }
 
@@ -81,22 +81,19 @@ pub async fn auth_middleware(
         })?;
 
     // 2. ヘッダーをパース
-    let auth_scheme = parse_authorization_header(auth_header)
-        .ok_or_else(|| {
-            warn!("Invalid authorization scheme");
-            AppError::Authentication("Invalid authorization scheme".to_string())
-        })?;
+    let auth_scheme = parse_authorization_header(auth_header).ok_or_else(|| {
+        warn!("Invalid authorization scheme");
+        AppError::Authentication("Invalid authorization scheme".to_string())
+    })?;
 
     // 3. JWT トークンを検証
     let mut context = match auth_scheme {
-        AuthorizationScheme::Bearer(jwt_token) => {
-            verify_jwt_token(&state, jwt_token).await?
-        }
+        AuthorizationScheme::Bearer(jwt_token) => verify_jwt_token(&state, jwt_token).await?,
         AuthorizationScheme::Biscuit(_biscuit_token) => {
             // Biscuit 単体での認証は未サポート
             warn!("Biscuit-only authentication is not yet implemented");
             return Err(AppError::Authentication(
-                "Biscuit-only authentication is not yet supported".to_string()
+                "Biscuit-only authentication is not yet supported".to_string(),
             ));
         }
     };
@@ -104,7 +101,9 @@ pub async fn auth_middleware(
     // 4. オプションで Biscuit トークンから権限を抽出 (Phase 5.4.4)
     if let Some(biscuit_header) = req.headers().get("X-Biscuit-Token") {
         if let Ok(biscuit_token) = biscuit_header.to_str() {
-            if let Some(biscuit_scheme) = parse_authorization_header(&format!("Biscuit {}", biscuit_token)) {
+            if let Some(biscuit_scheme) =
+                parse_authorization_header(&format!("Biscuit {}", biscuit_token))
+            {
                 if let AuthorizationScheme::Biscuit(token) = biscuit_scheme {
                     // Biscuit トークンから権限を抽出
                     // TODO: 実際の Biscuit 検証とパーミッション抽出
@@ -119,20 +118,25 @@ pub async fn auth_middleware(
     // 5. セッションの有効性をチェック (Phase 5.5.2)
     if let Some(session_store) = state.session_store() {
         use chrono::Utc;
-        use crate::common::type_utils::common_types::SessionId;
-        
-        let session_id = SessionId::from(context.session_id.to_string());
+
+        let session_id = context.session_id.clone();
         let now = Utc::now();
-        
+
         // セッションを検証 (version は JWT に含まれていないので 0 を使用)
-        if let Err(e) = session_store.validate_access(session_id, 0, now).await {
+        if let Err(e) = session_store
+            .as_ref()
+            .validate_access(session_id, 0, now)
+            .await
+        {
             warn!("Session validation failed: {:?}", e);
-            return Err(AppError::Authentication("Session is invalid or expired".to_string()));
+            return Err(AppError::Authentication(
+                "Session is invalid or expired".to_string(),
+            ));
         }
-        
+
         debug!("Session validated successfully");
     }
-    
+
     debug!(
         user_id = %context.user_id,
         username = %context.username,
@@ -149,48 +153,36 @@ pub async fn auth_middleware(
 }
 
 /// JWT トークンを検証して認証コンテキストを生成 (Phase 5.4.3 更新)
-async fn verify_jwt_token(
-    state: &AppState,
-    token: &str,
-) -> Result<UnifiedAuthContext, AppError> {
+async fn verify_jwt_token(state: &AppState, token: &str) -> Result<UnifiedAuthContext, AppError> {
     // JWT サービスを AppState から取得 (Phase 5.4.3)
-    let jwt_service = state.jwt_service()
-        .ok_or_else(|| {
-            error!("JWT service not initialized in AppState");
-            AppError::Internal("JWT service not available".to_string())
-        })?;
+    let jwt_service = state.jwt_service().ok_or_else(|| {
+        error!("JWT service not initialized in AppState");
+        AppError::Internal("JWT service not available".to_string())
+    })?;
 
     // JWT トークンを検証
     let claims = jwt_service
         .verify_access_token(token)
-        .map_err(|e| {
-            match e {
-                AuthError::TokenExpired => {
-                    debug!("JWT token expired");
-                    AppError::Authentication("Token expired".to_string())
-                }
-                AuthError::InvalidTokenFormat | AuthError::InvalidTokenSignature => {
-                    warn!("Invalid JWT token: {:?}", e);
-                    AppError::Authentication("Invalid token".to_string())
-                }
-                #[allow(deprecated)]
-                AuthError::InvalidToken => {
-                    warn!("Invalid JWT token (deprecated path)");
-                    AppError::Authentication("Invalid token".to_string())
-                }
-                _ => {
-                    error!("JWT verification error: {:?}", e);
-                    AppError::Authentication("Authentication failed".to_string())
-                }
+        .map_err(|e| match e {
+            AuthError::TokenExpired => {
+                debug!("JWT token expired");
+                AppError::Authentication("Token expired".to_string())
+            }
+            AuthError::InvalidTokenFormat | AuthError::InvalidTokenSignature => {
+                warn!("Invalid JWT token: {:?}", e);
+                AppError::Authentication("Invalid token".to_string())
+            }
+            _ => {
+                error!("JWT verification error: {:?}", e);
+                AppError::Authentication("Authentication failed".to_string())
             }
         })?;
 
     // 統合認証コンテキストを生成
-    let context = UnifiedAuthContext::from_jwt(&claims)
-        .map_err(|e| {
-            error!("Failed to create auth context: {:?}", e);
-            AppError::Internal("Failed to create auth context".to_string())
-        })?;
+    let context = UnifiedAuthContext::from_jwt(&claims).map_err(|e| {
+        error!("Failed to create auth context: {:?}", e);
+        AppError::Internal("Failed to create auth context".to_string())
+    })?;
 
     // TODO Phase 5.4.4: Biscuit 権限を追加
     // if let Some(biscuit_token) = extract_biscuit_from_header() {
@@ -207,13 +199,19 @@ mod tests {
     #[test]
     fn test_parse_authorization_header_bearer() {
         let result = parse_authorization_header("Bearer mytoken123");
-        assert!(matches!(result, Some(AuthorizationScheme::Bearer("mytoken123"))));
+        assert!(matches!(
+            result,
+            Some(AuthorizationScheme::Bearer("mytoken123"))
+        ));
     }
 
     #[test]
     fn test_parse_authorization_header_biscuit() {
         let result = parse_authorization_header("Biscuit mytoken456");
-        assert!(matches!(result, Some(AuthorizationScheme::Biscuit("mytoken456"))));
+        assert!(matches!(
+            result,
+            Some(AuthorizationScheme::Biscuit("mytoken456"))
+        ));
     }
 
     #[test]

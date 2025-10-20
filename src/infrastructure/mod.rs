@@ -81,8 +81,7 @@ pub use auth::*;
 
 // Phase 9: New Repository implementations (audited structure)
 #[cfg(all(feature = "restructure_domain", feature = "database"))]
-pub use database::{DieselUserRepository, DieselPostRepository, DieselCommentRepository};
+pub use database::{DieselCommentRepository, DieselPostRepository, DieselUserRepository};
 
 #[cfg(all(feature = "restructure_domain", feature = "database"))]
 pub use database::DieselUnitOfWork;
-

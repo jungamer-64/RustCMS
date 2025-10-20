@@ -2,8 +2,8 @@
 //!
 //! User エンティティと HTTP レスポンス/リクエストの間のデータ変換
 
-use crate::domain::user::{Email, User, Username};
 use crate::common::types::DomainError;
+use crate::domain::user::{Email, User, Username};
 use serde::{Deserialize, Serialize};
 
 // ============================================================================

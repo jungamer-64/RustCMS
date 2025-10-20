@@ -7,9 +7,9 @@ pub mod common;
 
 #[cfg(all(test, feature = "database"))]
 pub mod integration {
-    use diesel::r2d2::{ConnectionManager, Pool};
     use diesel::PgConnection;
-    use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+    use diesel::r2d2::{ConnectionManager, Pool};
+    use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
     use std::env;
     use std::sync::Arc;
 
@@ -24,9 +24,8 @@ pub mod integration {
     /// # Panics
     /// - データベース接続プールの作成に失敗した場合
     pub fn create_test_pool() -> Arc<Pool<ConnectionManager<PgConnection>>> {
-        let database_url = env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
-            "postgres://postgres:postgres@localhost:5432/cms_test".to_string()
-        });
+        let database_url = env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/cms_test".to_string());
 
         let manager = ConnectionManager::<PgConnection>::new(&database_url);
         let pool = Pool::builder()
@@ -67,8 +66,8 @@ pub mod integration {
     /// # Panics
     /// - TRUNCATE 実行に失敗した場合
     pub fn cleanup_database(pool: &Pool<ConnectionManager<PgConnection>>) {
-        use diesel::sql_query;
         use diesel::RunQueryDsl;
+        use diesel::sql_query;
 
         let mut conn = pool.get().expect("Failed to get connection from pool");
 

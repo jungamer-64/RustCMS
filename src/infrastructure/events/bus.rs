@@ -23,7 +23,7 @@
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
-use crate::infrastructure::database::models::{DbUser, DbPost};
+use crate::infrastructure::database::models::{DbPost, DbUser};
 
 /// Type alias for the broadcast sender.
 ///
@@ -445,20 +445,20 @@ mod tests {
         let comment_id = Uuid::new_v4();
         let post_id = Uuid::new_v4();
         let author_id = Uuid::new_v4();
-        
+
         let created_event = AppEvent::CommentCreated {
             comment_id: comment_id.to_string(),
             post_id: post_id.to_string(),
             author_id: author_id.to_string(),
             text: "Test comment".to_string(),
         };
-        
+
         let published_event = AppEvent::CommentPublished {
             comment_id: comment_id.to_string(),
             post_id: post_id.to_string(),
             author_id: author_id.to_string(),
         };
-        
+
         let updated_event = AppEvent::CommentUpdated(comment_id);
         let deleted_event = AppEvent::CommentDeleted(comment_id);
 

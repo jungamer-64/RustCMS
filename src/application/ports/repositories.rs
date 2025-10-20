@@ -11,13 +11,13 @@ use crate::domain::post::PostId;
 use crate::domain::user::UserId;
 
 #[cfg(feature = "restructure_domain")]
-use crate::domain::post::Post;
-#[cfg(feature = "restructure_domain")]
-use crate::domain::user::{Email, User, Username};
-#[cfg(feature = "restructure_domain")]
 use crate::domain::category::{Category, CategoryId, CategorySlug};
 #[cfg(feature = "restructure_domain")]
+use crate::domain::post::Post;
+#[cfg(feature = "restructure_domain")]
 use crate::domain::tag::{Tag, TagId, TagName};
+#[cfg(feature = "restructure_domain")]
+use crate::domain::user::{Email, User, Username};
 
 // ============================================================================
 // Type Aliases for cleaner signatures
@@ -57,8 +57,12 @@ pub trait PostRepository: Send + Sync {
     async fn find_by_slug(&self, slug: &str) -> RepoResult<Option<Post>>;
     async fn delete(&self, id: PostId) -> RepoResult<()>;
     async fn list_all(&self, limit: i64, offset: i64) -> RepoResult<Vec<Post>>;
-    async fn find_by_author(&self, author_id: UserId, limit: i64, offset: i64)
-        -> RepoResult<Vec<Post>>;
+    async fn find_by_author(
+        &self,
+        author_id: UserId,
+        limit: i64,
+        offset: i64,
+    ) -> RepoResult<Vec<Post>>;
 }
 
 // ============================================================================
@@ -70,10 +74,18 @@ pub trait PostRepository: Send + Sync {
 pub trait CommentRepository: Send + Sync {
     async fn save(&self, comment: Comment) -> RepoResult<()>;
     async fn find_by_id(&self, id: CommentId) -> RepoResult<Option<Comment>>;
-    async fn find_by_post(&self, post_id: PostId, limit: i64, offset: i64)
-        -> RepoResult<Vec<Comment>>;
-    async fn find_by_author(&self, author_id: UserId, limit: i64, offset: i64)
-        -> RepoResult<Vec<Comment>>;
+    async fn find_by_post(
+        &self,
+        post_id: PostId,
+        limit: i64,
+        offset: i64,
+    ) -> RepoResult<Vec<Comment>>;
+    async fn find_by_author(
+        &self,
+        author_id: UserId,
+        limit: i64,
+        offset: i64,
+    ) -> RepoResult<Vec<Comment>>;
     async fn delete(&self, id: CommentId) -> RepoResult<()>;
     async fn list_all(&self, limit: i64, offset: i64) -> RepoResult<Vec<Comment>>;
 }
@@ -83,6 +95,7 @@ pub trait CommentRepository: Send + Sync {
 // ============================================================================
 
 #[cfg(feature = "restructure_domain")]
+#[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait TagRepository: Send + Sync {
     async fn save(&self, tag: Tag) -> RepoResult<()>;
@@ -98,6 +111,7 @@ pub trait TagRepository: Send + Sync {
 // ============================================================================
 
 #[cfg(feature = "restructure_domain")]
+#[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait CategoryRepository: Send + Sync {
     async fn save(&self, category: Category) -> RepoResult<()>;

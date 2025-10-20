@@ -86,22 +86,14 @@ impl PostFilter {
     }
 
     /// Add date range filter (creation date)
-    pub fn created_between(
-        mut self,
-        after: DateTime<Utc>,
-        before: DateTime<Utc>,
-    ) -> Self {
+    pub fn created_between(mut self, after: DateTime<Utc>, before: DateTime<Utc>) -> Self {
         self.created_after = Some(after);
         self.created_before = Some(before);
         self
     }
 
     /// Add date range filter (publish date)
-    pub fn published_between(
-        mut self,
-        after: DateTime<Utc>,
-        before: DateTime<Utc>,
-    ) -> Self {
+    pub fn published_between(mut self, after: DateTime<Utc>, before: DateTime<Utc>) -> Self {
         self.published_after = Some(after);
         self.published_before = Some(before);
         self

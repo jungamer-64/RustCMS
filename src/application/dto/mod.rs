@@ -8,12 +8,12 @@
 //! - シリアライズ/デシリアライズの責務を担う
 //! - バリデーションはValue Objectsで実施済み
 
-pub mod common;
-pub mod user;
-pub mod post;
 pub mod comment;
+pub mod common;
+pub mod post;
+pub mod user;
 
-pub use common::*;
-pub use user::*;
-pub use post::*;
 pub use comment::*;
+pub use common::*;
+pub use post::*;
+pub use user::*;

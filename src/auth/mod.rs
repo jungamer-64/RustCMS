@@ -34,11 +34,11 @@
 
 mod biscuit;
 pub mod error;
-pub mod jwt;              // Phase 5.3: JWT 認証サービス（EdDSA版にリファクタ）
+pub mod jwt; // Phase 5.3: JWT 認証サービス（EdDSA版にリファクタ）
 pub mod password_service; // パスワード検証サービス（新規追加）
 mod service;
 pub mod session;
-pub mod unified_context;  // Phase 5.3: JWT + Biscuit 統合コンテキスト
+pub mod unified_context; // Phase 5.3: JWT + Biscuit 統合コンテキスト
 pub mod unified_key_management; // 統合Ed25519鍵管理（JWT + Biscuit共通）
 
 pub use error::AuthError;
@@ -47,7 +47,7 @@ pub use password_service::PasswordService;
 pub use service::{AuthContext, AuthService, LoginRequest};
 pub use session::{InMemorySessionStore, SessionData, SessionStore};
 pub use unified_context::UnifiedAuthContext;
-pub use unified_key_management::{UnifiedKeyPair, KeyLoadConfig};
+pub use unified_key_management::{KeyLoadConfig, UnifiedKeyPair};
 
 use crate::common::type_utils::common_types::{AuthResponse, SessionId};
 
@@ -77,8 +77,9 @@ pub fn require_admin_permission(ctx: &AuthContext) -> crate::Result<()> {
     if matches!(ctx.role, UserRole::Admin) || ctx.permissions.iter().any(|p| p == "admin") {
         Ok(())
     } else {
-        Err(AuthError::InsufficientPermissions { 
-            required: "admin".to_string() 
-        }.into())
+        Err(AuthError::InsufficientPermissions {
+            required: "admin".to_string(),
+        }
+        .into())
     }
 }

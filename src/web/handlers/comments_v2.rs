@@ -5,10 +5,10 @@
 //! Comment Commands/Queriesを呼び出す薄い層（Phase 4）
 
 use axum::{
+    Json,
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

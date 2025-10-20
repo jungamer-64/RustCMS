@@ -83,9 +83,9 @@ impl From<PostId> for Uuid {
 
 impl PostId {
     /// Phase 6-C: Parse PostId from string
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Returns `DomainError::InvalidPostId` if the string is not a valid UUID
     pub fn from_string(s: &str) -> Result<Self, crate::common::error_types::DomainError> {
         use crate::common::error_types::DomainError;
@@ -653,7 +653,7 @@ impl Post {
     }
 
     // Phase 6-C: Handler compatibility aliases
-    
+
     /// タイトルを更新する（change_title のエイリアス）
     pub fn update_title(&mut self, new_title: Title) {
         self.change_title(new_title);

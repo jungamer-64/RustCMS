@@ -139,8 +139,12 @@ impl From<crate::application::ports::repositories::RepositoryError> for Applicat
             RE::NotFound(msg) => ApplicationError::NotFound(msg),
             RE::Duplicate(msg) => ApplicationError::Conflict(msg),
             RE::ValidationError(msg) => ApplicationError::ValidationError(msg),
-            RE::ConversionError(msg) => ApplicationError::ValidationError(format!("Conversion error: {}", msg)),
-            RE::ConnectionError(msg) => ApplicationError::RepositoryError(format!("Connection error: {}", msg)),
+            RE::ConversionError(msg) => {
+                ApplicationError::ValidationError(format!("Conversion error: {}", msg))
+            }
+            RE::ConnectionError(msg) => {
+                ApplicationError::RepositoryError(format!("Connection error: {}", msg))
+            }
             RE::DatabaseError(msg) | RE::Unknown(msg) => ApplicationError::RepositoryError(msg),
         }
     }

@@ -2,7 +2,7 @@
 //!
 //! Kubernetes/負荷分散器用のヘルスチェックエンドポイント
 
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use serde::Serialize;
 
 #[cfg(feature = "restructure_domain")]
@@ -43,7 +43,9 @@ pub async fn health_check() -> impl IntoResponse {
 ///
 /// GET /api/v2/health
 #[cfg(feature = "restructure_domain")]
-pub async fn detailed_health_check(State(state): State<std::sync::Arc<AppState>>) -> impl IntoResponse {
+pub async fn detailed_health_check(
+    State(state): State<std::sync::Arc<AppState>>,
+) -> impl IntoResponse {
     // Get health status from AppState
     let health = match state.health_check().await {
         Ok(h) => h,

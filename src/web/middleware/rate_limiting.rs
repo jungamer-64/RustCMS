@@ -8,16 +8,20 @@
 //! - 新しい `Arc<AppState>` 構造に対応
 //! - キャッシュベースのレート制限 (Phase 5.3 で完全実装)
 
-use crate::web::middleware::common::{forward_poll_ready, BoxServiceFuture};
-use axum::{extract::Request, http::StatusCode, response::{IntoResponse, Response}};
+use crate::web::middleware::common::{BoxServiceFuture, forward_poll_ready};
+use axum::{
+    extract::Request,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
 use std::net::IpAddr;
 use tower::{Layer, Service};
 use tracing::warn;
 
 use crate::infrastructure::app_state::AppState;
-use std::sync::Arc;
 #[cfg(feature = "monitoring")]
 use metrics::{counter, gauge};
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct RateLimitLayer;
@@ -73,13 +77,13 @@ where
 
         // Pull state extension
         let state_opt = request.extensions().get::<Arc<AppState>>().cloned();
-        
+
         // TODO Phase 5.3: キャッシュベースのレート制限を実装
         // let allowed = state_opt.as_ref().map_or(true, |s| s.check_rate_limit(&ip));
-        
+
         // 暫定: 常に許可 (Phase 5.3 で実装)
         let allowed = true;
-        
+
         if !allowed {
             warn!("Rate limit would block IP: {}", ip);
         }

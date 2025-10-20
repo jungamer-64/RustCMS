@@ -136,10 +136,7 @@ impl DieselUnitOfWork {
     ///     Ok(())
     /// })
     /// ```
-    pub fn with_savepoint<F, R>(
-        conn: &mut PgConnection,
-        f: F,
-    ) -> Result<R, RepositoryError>
+    pub fn with_savepoint<F, R>(conn: &mut PgConnection, f: F) -> Result<R, RepositoryError>
     where
         F: FnOnce(&mut PgConnection) -> Result<R, RepositoryError>,
     {
@@ -270,6 +267,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Requires a running Postgres instance; ignore in local/dev CI
     fn test_unit_of_work_creation() {
         let pool = create_test_pool();
         let _uow = DieselUnitOfWork::new(pool);
@@ -297,7 +295,11 @@ mod tests {
 
         assert!(result.is_ok(), "Two operations should succeed");
         if let Ok((r1, r2)) = result {
-            assert_eq!(r1 + 1, r2, "Second operation should return incremented value");
+            assert_eq!(
+                r1 + 1,
+                r2,
+                "Second operation should return incremented value"
+            );
         }
     }
 

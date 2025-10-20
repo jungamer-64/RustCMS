@@ -1,16 +1,13 @@
-// src/application/category.rs
 //! Category Application Layer - CQRS統合
 //!
-//! Phase 6-D: Legacy application layer (disabled with restructure_domain)
-//! Commands + Queries + DTOs を単一ファイルに統合（監査推奨パターン）
-#![cfg(not(feature = "restructure_domain"))]
-
-use std::sync::Arc;
+//! Commands + Queries + DTOs を単一ファイルに統合
 
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "restructure_domain")]
-use crate::domain::category::{Category, CategoryDescription, CategoryId, CategoryName, CategorySlug};
+use crate::domain::category::{
+    Category, CategoryDescription, CategoryId, CategoryName, CategorySlug,
+};
 
 #[cfg(feature = "restructure_domain")]
 use crate::application::ports::repositories::{CategoryRepository, RepositoryError};
@@ -19,32 +16,29 @@ use crate::application::ports::repositories::{CategoryRepository, RepositoryErro
 // DTOs
 // ============================================================================
 
-/// カテゴリ作成リクエスト
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateCategoryRequest {
     pub name: String,
-    pub description: String, // Made mandatory
-    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: String,
+    #[serde(default)]
     pub slug: Option<String>,
 }
 
-/// カテゴリ更新リクエスト
 #[derive(Debug, Clone, Deserialize)]
 pub struct UpdateCategoryRequest {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub description: Option<String>,
 }
 
-/// カテゴリレスポンス
 #[derive(Debug, Clone, Serialize)]
 pub struct CategoryDto {
     pub id: String,
     pub name: String,
     pub slug: String,
     pub description: String,
-    pub post_count: i64, // Changed from i32 to i64
+    pub post_count: i64,
     pub is_active: bool,
     pub created_at: String,
     pub updated_at: String,
@@ -57,8 +51,8 @@ impl From<Category> for CategoryDto {
             id: category.id().to_string(),
             name: category.name().to_string(),
             slug: category.slug().to_string(),
-            description: category.description().to_string(), // to_string() instead of map()
-            post_count: category.post_count(), // Already i64
+            description: category.description().to_string(),
+            post_count: category.post_count(),
             is_active: category.is_active(),
             created_at: category.created_at().to_rfc3339(),
             updated_at: category.updated_at().to_rfc3339(),
@@ -70,15 +64,14 @@ impl From<Category> for CategoryDto {
 // Commands
 // ============================================================================
 
-/// カテゴリ作成コマンド
 #[cfg(feature = "restructure_domain")]
-pub struct CreateCategory {
-    repo: Arc<dyn CategoryRepository>,
+pub struct CreateCategory<'a> {
+    repo: &'a dyn CategoryRepository,
 }
 
 #[cfg(feature = "restructure_domain")]
-impl CreateCategory {
-    pub fn new(repo: Arc<dyn CategoryRepository>) -> Self {
+impl<'a> CreateCategory<'a> {
+    pub const fn new(repo: &'a dyn CategoryRepository) -> Self {
         Self { repo }
     }
 
@@ -86,7 +79,6 @@ impl CreateCategory {
         &self,
         request: CreateCategoryRequest,
     ) -> Result<CategoryDto, RepositoryError> {
-        // 1. Value Objects 作成
         let name = CategoryName::new(request.name)
             .map_err(|e| RepositoryError::ValidationError(e.to_string()))?;
 
@@ -95,12 +87,13 @@ impl CreateCategory {
                 .map_err(|e| RepositoryError::ValidationError(e.to_string()))?
         } else {
             CategorySlug::from_name(name.as_str())
+                .map_err(|e| RepositoryError::ValidationError(e.to_string()))?
         };
 
         let description = CategoryDescription::new(request.description)
             .map_err(|e| RepositoryError::ValidationError(e.to_string()))?;
 
-        // 2. スラッグ重複チェック
+        // スラッグ重複チェック
         if self.repo.find_by_slug(&slug).await?.is_some() {
             return Err(RepositoryError::Duplicate(format!(
                 "Category slug '{}' already exists",
@@ -108,26 +101,23 @@ impl CreateCategory {
             )));
         }
 
-        // 3. ドメインエンティティ作成
         let category = Category::new(name, slug, description)
             .map_err(|e| RepositoryError::ValidationError(e.to_string()))?;
 
-        // 4. 永続化
         self.repo.save(category.clone()).await?;
 
         Ok(CategoryDto::from(category))
     }
 }
 
-/// カテゴリ更新コマンド
 #[cfg(feature = "restructure_domain")]
-pub struct UpdateCategory {
-    repo: Arc<dyn CategoryRepository>,
+pub struct UpdateCategory<'a> {
+    repo: &'a dyn CategoryRepository,
 }
 
 #[cfg(feature = "restructure_domain")]
-impl UpdateCategory {
-    pub fn new(repo: Arc<dyn CategoryRepository>) -> Self {
+impl<'a> UpdateCategory<'a> {
+    pub const fn new(repo: &'a dyn CategoryRepository) -> Self {
         Self { repo }
     }
 
@@ -140,18 +130,18 @@ impl UpdateCategory {
             .repo
             .find_by_id(category_id)
             .await?
-            .ok_or_else(|| RepositoryError::NotFound(format!("Category {}", category_id)))?;
+            .ok_or_else(|| RepositoryError::NotFound(format!("Category {category_id}")))?;
 
         if let Some(new_name) = request.name {
             let name = CategoryName::new(new_name)
                 .map_err(|e| RepositoryError::ValidationError(e.to_string()))?;
-            category
-                .update_name(name)
-                .map_err(|e| RepositoryError::ValidationError(e.to_string()))?;
+            category.update_name(name);
         }
 
         if let Some(new_description) = request.description {
-            category.update_description(Some(new_description));
+            let desc = CategoryDescription::new(new_description)
+                .map_err(|e| RepositoryError::ValidationError(e.to_string()))?;
+            category.update_description(desc);
         }
 
         self.repo.save(category.clone()).await?;
@@ -160,15 +150,14 @@ impl UpdateCategory {
     }
 }
 
-/// カテゴリ非アクティブ化コマンド
 #[cfg(feature = "restructure_domain")]
-pub struct DeactivateCategory {
-    repo: Arc<dyn CategoryRepository>,
+pub struct DeactivateCategory<'a> {
+    repo: &'a dyn CategoryRepository,
 }
 
 #[cfg(feature = "restructure_domain")]
-impl DeactivateCategory {
-    pub fn new(repo: Arc<dyn CategoryRepository>) -> Self {
+impl<'a> DeactivateCategory<'a> {
+    pub const fn new(repo: &'a dyn CategoryRepository) -> Self {
         Self { repo }
     }
 
@@ -177,11 +166,10 @@ impl DeactivateCategory {
             .repo
             .find_by_id(category_id)
             .await?
-            .ok_or_else(|| RepositoryError::NotFound(format!("Category {}", category_id)))?;
+            .ok_or_else(|| RepositoryError::NotFound(format!("Category {category_id}")))?;
 
-        category
-            .deactivate()
-            .map_err(|e| RepositoryError::ValidationError(e.to_string()))?;
+        // deactivate is a void method per domain model
+        category.deactivate();
 
         self.repo.save(category.clone()).await?;
 
@@ -193,15 +181,14 @@ impl DeactivateCategory {
 // Queries
 // ============================================================================
 
-/// カテゴリ取得クエリ
 #[cfg(feature = "restructure_domain")]
-pub struct GetCategoryById {
-    repo: Arc<dyn CategoryRepository>,
+pub struct GetCategoryById<'a> {
+    repo: &'a dyn CategoryRepository,
 }
 
 #[cfg(feature = "restructure_domain")]
-impl GetCategoryById {
-    pub fn new(repo: Arc<dyn CategoryRepository>) -> Self {
+impl<'a> GetCategoryById<'a> {
+    pub const fn new(repo: &'a dyn CategoryRepository) -> Self {
         Self { repo }
     }
 
@@ -209,20 +196,22 @@ impl GetCategoryById {
         &self,
         category_id: CategoryId,
     ) -> Result<Option<CategoryDto>, RepositoryError> {
-        let category = self.repo.find_by_id(category_id).await?;
-        Ok(category.map(CategoryDto::from))
+        Ok(self
+            .repo
+            .find_by_id(category_id)
+            .await?
+            .map(CategoryDto::from))
     }
 }
 
-/// カテゴリ一覧取得クエリ
 #[cfg(feature = "restructure_domain")]
-pub struct ListCategories {
-    repo: Arc<dyn CategoryRepository>,
+pub struct ListCategories<'a> {
+    repo: &'a dyn CategoryRepository,
 }
 
 #[cfg(feature = "restructure_domain")]
-impl ListCategories {
-    pub fn new(repo: Arc<dyn CategoryRepository>) -> Self {
+impl<'a> ListCategories<'a> {
+    pub const fn new(repo: &'a dyn CategoryRepository) -> Self {
         Self { repo }
     }
 
@@ -243,28 +232,21 @@ impl ListCategories {
 #[cfg(all(test, feature = "restructure_domain"))]
 mod tests {
     use super::*;
-    #[allow(unused_imports)]
-    use crate::application::ports::repositories::{MockCategoryRepository, RepositoryError};
+    use crate::application::ports::repositories::MockCategoryRepository;
 
     #[tokio::test]
     async fn test_create_category_success() {
         let mut mock_repo = MockCategoryRepository::new();
 
-        // スラッグ重複チェック: None
-        mock_repo
-            .expect_find_by_slug()
-            .returning(|_| Box::pin(async { Ok(None) }));
+        mock_repo.expect_find_by_slug().returning(|_| Ok(None));
+        mock_repo.expect_save().returning(|_| Ok(()));
 
-        mock_repo
-            .expect_save()
-            .returning(|_| Box::pin(async { Ok(()) }));
-
-        let use_case = CreateCategory::new(Arc::new(mock_repo));
+        let use_case = CreateCategory::new(&mock_repo);
 
         let request = CreateCategoryRequest {
-            name: "Technology".to_string(),
-            description: "Tech articles".to_string(),
-            slug: Some("tech".to_string()),
+            name: "Technology".into(),
+            description: "Tech articles".into(),
+            slug: Some("tech".into()),
         };
 
         let result = use_case.execute(request).await;
@@ -279,23 +261,23 @@ mod tests {
     async fn test_create_category_duplicate_slug() {
         let mut mock_repo = MockCategoryRepository::new();
 
-        let existing_cat = Category::new(
-            CategoryName::new("Existing".to_string()).unwrap(),
-            CategorySlug::new("tech".to_string()).unwrap(),
-            CategoryDescription::new("Description".to_string()).unwrap(),
+        let existing = Category::new(
+            CategoryName::new("Existing".into()).unwrap(),
+            CategorySlug::new("tech".into()).unwrap(),
+            CategoryDescription::new("Description".into()).unwrap(),
         )
         .unwrap();
 
         mock_repo
             .expect_find_by_slug()
-            .returning(move |_| Box::pin(async move { Ok(Some(existing_cat.clone())) }));
+            .returning(move |_| Ok(Some(existing.clone())));
 
-        let use_case = CreateCategory::new(Arc::new(mock_repo));
+        let use_case = CreateCategory::new(&mock_repo);
 
         let request = CreateCategoryRequest {
-            name: "Technology".to_string(),
-            description: "New description".to_string(),
-            slug: Some("tech".to_string()),
+            name: "Technology".into(),
+            description: "New description".into(),
+            slug: Some("tech".into()),
         };
 
         let result = use_case.execute(request).await;

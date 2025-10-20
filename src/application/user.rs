@@ -73,9 +73,10 @@ impl<'a> RegisterUser<'a> {
 
         // メール重複チェック
         if self.repo.find_by_email(&email).await?.is_some() {
-            return Err(RepositoryError::Duplicate(
-                format!("Email '{}' is already in use", email)
-            ));
+            return Err(RepositoryError::Duplicate(format!(
+                "Email '{}' is already in use",
+                email
+            )));
         }
 
         // ドメインエンティティ作成
@@ -119,9 +120,10 @@ impl<'a> UpdateUser<'a> {
             // 重複チェック（他のユーザーが使用していないか）
             if let Some(existing) = self.repo.find_by_email(&email).await? {
                 if existing.id() != user.id() {
-                    return Err(RepositoryError::Duplicate(
-                        format!("Email '{}' is already in use", email)
-                    ));
+                    return Err(RepositoryError::Duplicate(format!(
+                        "Email '{}' is already in use",
+                        email
+                    )));
                 }
             }
 
@@ -198,11 +200,7 @@ impl<'a> ListUsers<'a> {
         Self { repo }
     }
 
-    pub async fn execute(
-        &self,
-        limit: i64,
-        offset: i64,
-    ) -> Result<Vec<UserDto>, RepositoryError> {
+    pub async fn execute(&self, limit: i64, offset: i64) -> Result<Vec<UserDto>, RepositoryError> {
         let users = self.repo.list_all(limit, offset).await?;
         Ok(users.into_iter().map(UserDto::from).collect())
     }

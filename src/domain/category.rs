@@ -221,7 +221,7 @@ impl From<CategorySlug> for String {
 
 impl CategorySlug {
     /// Phase 6-C: Create CategorySlug from name (auto-slugify)
-    /// 
+    ///
     /// Converts a category name to a URL-safe slug
     pub fn from_name(name: &str) -> Result<Self, DomainError> {
         let slug = name

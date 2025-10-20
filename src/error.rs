@@ -355,7 +355,9 @@ impl From<crate::application::ports::repositories::RepositoryError> for AppError
             RE::Duplicate(msg) => Self::Conflict(msg),
             RE::ValidationError(msg) => Self::BadRequest(msg),
             RE::ConversionError(msg) => Self::BadRequest(format!("Conversion error: {}", msg)),
-            RE::ConnectionError(msg) => Self::Internal(format!("Database connection error: {}", msg)),
+            RE::ConnectionError(msg) => {
+                Self::Internal(format!("Database connection error: {}", msg))
+            }
             RE::DatabaseError(msg) | RE::Unknown(msg) => Self::Internal(msg),
         }
     }

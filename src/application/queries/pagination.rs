@@ -14,7 +14,7 @@ pub struct PaginationParams {
 
 impl PaginationParams {
     /// 新しいページネーションパラメータを作成
-    /// 
+    ///
     /// limit は 1-100 にクランプされます
     pub fn new(limit: i64, offset: i64) -> Self {
         Self {

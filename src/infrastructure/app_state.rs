@@ -29,13 +29,13 @@ use crate::infrastructure::database::connection::DatabasePool;
 
 // Cache support
 #[cfg(feature = "cache")]
-use std::collections::HashMap;
-#[cfg(feature = "cache")]
 use parking_lot::RwLock;
+#[cfg(feature = "cache")]
+use std::collections::HashMap;
 
 // Auth support (Phase 5.5)
 #[cfg(feature = "auth")]
-use crate::auth::SessionStore;
+use crate::auth::{InMemorySessionStore, SessionStore};
 
 // Events module location depends on feature flag
 #[cfg(not(feature = "restructure_domain"))]
@@ -77,7 +77,7 @@ pub struct AppState {
 
     /// Session store (Phase 5.5)
     #[cfg(feature = "auth")]
-    session_store: Option<Arc<crate::auth::InMemorySessionStore>>,
+    session_store: Option<Arc<dyn SessionStore>>,
 }
 
 impl AppState {
@@ -112,7 +112,7 @@ impl AppState {
 
     /// Get reference to session store (Phase 5.5)
     #[cfg(feature = "auth")]
-    pub fn session_store(&self) -> Option<&Arc<crate::auth::InMemorySessionStore>> {
+    pub fn session_store(&self) -> Option<&Arc<dyn SessionStore>> {
         self.session_store.as_ref()
     }
 
@@ -125,9 +125,9 @@ impl AppState {
     /// Get database pool or return error
     #[cfg(feature = "database")]
     pub fn database_required(&self) -> Result<&DatabasePool> {
-        self.database.as_ref().ok_or_else(|| {
-            AppError::Internal("Database not initialized".to_string())
-        })
+        self.database
+            .as_ref()
+            .ok_or_else(|| AppError::Internal("Database not initialized".to_string()))
     }
 
     /// Get cache reference (if available)
@@ -152,7 +152,9 @@ impl AppState {
 
     /// Get user repository
     #[cfg(all(feature = "database", feature = "restructure_domain"))]
-    pub fn user_repository(&self) -> Result<crate::infrastructure::database::repositories::DieselUserRepository> {
+    pub fn user_repository(
+        &self,
+    ) -> Result<crate::infrastructure::database::repositories::DieselUserRepository> {
         use crate::infrastructure::database::repositories::DieselUserRepository;
         let pool = self.database_required()?.get_pool();
         Ok(DieselUserRepository::new(pool))
@@ -160,7 +162,9 @@ impl AppState {
 
     /// Get post repository
     #[cfg(all(feature = "database", feature = "restructure_domain"))]
-    pub fn post_repository(&self) -> Result<crate::infrastructure::database::repositories::DieselPostRepository> {
+    pub fn post_repository(
+        &self,
+    ) -> Result<crate::infrastructure::database::repositories::DieselPostRepository> {
         use crate::infrastructure::database::repositories::DieselPostRepository;
         let pool = self.database_required()?.get_pool();
         Ok(DieselPostRepository::new(pool))
@@ -168,7 +172,9 @@ impl AppState {
 
     /// Get comment repository
     #[cfg(all(feature = "database", feature = "restructure_domain"))]
-    pub fn comment_repository(&self) -> Result<crate::infrastructure::database::repositories::DieselCommentRepository> {
+    pub fn comment_repository(
+        &self,
+    ) -> Result<crate::infrastructure::database::repositories::DieselCommentRepository> {
         use crate::infrastructure::database::repositories::DieselCommentRepository;
         let pool = self.database_required()?.get_pool();
         Ok(DieselCommentRepository::new(pool))
@@ -204,7 +210,7 @@ impl AppState {
     /// Graceful shutdown - cleanup resources
     pub async fn shutdown(&self) {
         info!("Starting AppState shutdown...");
-        
+
         // Future: Add cleanup for background tasks, connections, etc.
         #[cfg(feature = "database")]
         if self.database.is_some() {
@@ -216,18 +222,18 @@ impl AppState {
     }
 
     /// Start background session cleanup task (Phase 5.5.3)
-    /// 
+    ///
     /// Spawns a background task that periodically removes expired sessions.
     /// The task runs every hour.
     #[cfg(feature = "auth")]
     pub fn start_session_cleanup(&self) {
         if let Some(session_store) = self.session_store.clone() {
             tokio::spawn(async move {
-                use tokio::time::{interval, Duration};
                 use chrono::Utc;
-                
+                use tokio::time::{Duration, interval};
+
                 let mut cleanup_interval = interval(Duration::from_secs(3600)); // 1 hour
-                
+
                 loop {
                     cleanup_interval.tick().await;
                     let now = Utc::now();
@@ -256,7 +262,7 @@ pub struct HealthStatus {
 /// Phase 5.5: セッションストアを統合
 pub struct AppStateBuilder {
     config: Arc<Config>,
-    
+
     #[cfg(feature = "database")]
     database: Option<DatabasePool>,
 
@@ -264,7 +270,7 @@ pub struct AppStateBuilder {
     jwt_service: Option<Arc<crate::auth::JwtService>>,
 
     #[cfg(feature = "auth")]
-    session_store: Option<Arc<crate::auth::InMemorySessionStore>>,
+    session_store: Option<Arc<dyn SessionStore>>,
 }
 
 impl AppStateBuilder {
@@ -272,12 +278,12 @@ impl AppStateBuilder {
     #[cfg(feature = "database")]
     pub fn with_database(mut self) -> Result<Self> {
         use secrecy::ExposeSecret;
-        
+
         info!("Initializing database connection pool...");
-        
+
         // Get database URL from config
         let database_url = self.config.database.url.expose_secret();
-        
+
         match DatabasePool::new(database_url) {
             Ok(pool) => {
                 info!("Database pool initialized successfully");
@@ -302,10 +308,25 @@ impl AppStateBuilder {
 
     /// Initialize session store (Phase 5.5)
     #[cfg(feature = "auth")]
-    pub fn with_session_store(mut self, session_store: crate::auth::InMemorySessionStore) -> Self {
+    pub fn with_session_store_arc(mut self, session_store: Arc<dyn SessionStore>) -> Self {
         info!("Initializing session store...");
-        self.session_store = Some(Arc::new(session_store));
+        self.session_store = Some(session_store);
         self
+    }
+
+    /// Initialize session store from concrete implementation
+    #[cfg(feature = "auth")]
+    pub fn with_session_store<S>(self, session_store: S) -> Self
+    where
+        S: SessionStore + 'static,
+    {
+        self.with_session_store_arc(Arc::new(session_store))
+    }
+
+    /// Initialize in-memory session store (convenience)
+    #[cfg(feature = "auth")]
+    pub fn with_in_memory_session_store(self) -> Self {
+        self.with_session_store(InMemorySessionStore::new())
     }
 
     /// Build AppState
@@ -347,7 +368,9 @@ mod tests {
         let config = Config::default();
         let builder = AppState::builder(config);
         // Builder should be created successfully
-        assert!(builder.config.server.host == "127.0.0.1" || builder.config.server.host == "0.0.0.0");
+        assert!(
+            builder.config.server.host == "127.0.0.1" || builder.config.server.host == "0.0.0.0"
+        );
     }
 
     #[test]
@@ -355,16 +378,18 @@ mod tests {
         let config = Config::default();
         let builder = AppState::builder(config);
         let state = builder.build().unwrap();
-        
+
         // AppState should be built successfully
         // Config default host can be either 127.0.0.1 or 0.0.0.0 depending on environment
-        assert!(state.config().server.host == "127.0.0.1" || state.config().server.host == "0.0.0.0");
+        assert!(
+            state.config().server.host == "127.0.0.1" || state.config().server.host == "0.0.0.0"
+        );
     }
 
     #[test]
     fn test_event_bus_creation() {
         let (_event_bus, _rx) = broadcast::channel::<AppEvent>(10);
-        
+
         // Channel should be created successfully
         // Note: Actual event sending/receiving tested elsewhere
     }

@@ -64,9 +64,9 @@ pub async fn csrf_protection_middleware(
     //     }
     //     None => Err((StatusCode::FORBIDDEN, Json(json!({ ... }))))
     // }
-    
+
     warn!("CSRF protection is using temporary implementation. Phase 5.3 で完全実装予定。");
-    
+
     match csrf_token {
         Some(_token) => {
             // 暫定: トークンがあれば通過
@@ -95,7 +95,7 @@ pub async fn csrf_protection_middleware(
 pub async fn get_csrf_token(State(_state): State<Arc<AppState>>) -> impl IntoResponse {
     // TODO Phase 5.3: 実際のトークン生成ロジック
     let token = uuid::Uuid::new_v4().to_string();
-    
+
     warn!("CSRF token generation is using temporary implementation.");
 
     Json(json!({

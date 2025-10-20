@@ -75,9 +75,9 @@ impl From<UserId> for Uuid {
 
 impl UserId {
     /// Phase 6-C: Parse UserId from string
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Returns `DomainError::InvalidUserId` if the string is not a valid UUID
     pub fn from_string(s: &str) -> Result<Self, crate::common::error_types::DomainError> {
         use crate::common::error_types::DomainError;
@@ -216,7 +216,7 @@ pub enum UsernameError {
 /// ユーザーロール（権限レベル）
 ///
 /// システム内でのユーザーの権限レベルを表します。
-/// 
+///
 /// # 不変条件
 /// - 各ロールは明確に定義された権限セットを持つ
 /// - ロール変更はビジネスルールに従って行われる
@@ -330,7 +330,7 @@ pub struct User {
     is_active: bool,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
-    last_login: Option<chrono::DateTime<chrono::Utc>>,  // Phase 9: 最終ログイン日時
+    last_login: Option<chrono::DateTime<chrono::Utc>>, // Phase 9: 最終ログイン日時
 }
 
 impl User {
@@ -357,7 +357,7 @@ impl User {
             is_active: true,
             created_at: now,
             updated_at: now,
-            last_login: None,  // Phase 9: 初回ログインは未実施
+            last_login: None, // Phase 9: 初回ログインは未実施
         }
     }
 
@@ -372,7 +372,7 @@ impl User {
         is_active: bool,
         created_at: chrono::DateTime<chrono::Utc>,
         updated_at: chrono::DateTime<chrono::Utc>,
-        last_login: Option<chrono::DateTime<chrono::Utc>>,  // Phase 9: 最終ログイン日時
+        last_login: Option<chrono::DateTime<chrono::Utc>>, // Phase 9: 最終ログイン日時
     ) -> Self {
         Self {
             id,
@@ -697,7 +697,7 @@ mod tests {
                 false,
                 now,
                 now,
-                None,  // Phase 9: last_login
+                None, // Phase 9: last_login
             );
 
             assert_eq!(user.id(), id);

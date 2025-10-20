@@ -2,17 +2,13 @@
 //!
 //! JWT トークンのリフレッシュエンドポイントを提供します。
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    Json,
-};
+use axum::{Json, extract::State, http::StatusCode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, error, info};
 
 use crate::{
-    auth::{JwtService, AuthError},
+    auth::{AuthError, JwtService},
     common::type_utils::common_types::SessionId,
     error::AppError,
     infrastructure::app_state::AppState,
@@ -68,29 +64,26 @@ pub async fn refresh_token(
     info!("Refresh token request received");
 
     // JWT サービスを取得
-    let jwt_service = state.jwt_service()
-        .ok_or_else(|| {
-            error!("JWT service not initialized in AppState");
-            AppError::Internal("JWT service not available".to_string())
-        })?;
+    let jwt_service = state.jwt_service().ok_or_else(|| {
+        error!("JWT service not initialized in AppState");
+        AppError::Internal("JWT service not available".to_string())
+    })?;
 
     // リフレッシュトークンを検証
     let claims = jwt_service
         .verify_refresh_token(&payload.refresh_token)
-        .map_err(|e| {
-            match e {
-                AuthError::TokenExpired => {
-                    debug!("Refresh token expired");
-                    AppError::Authentication("Refresh token expired".to_string())
-                }
-                AuthError::InvalidTokenFormat | AuthError::InvalidTokenSignature => {
-                    debug!("Invalid refresh token");
-                    AppError::Authentication("Invalid refresh token".to_string())
-                }
-                _ => {
-                    error!("Refresh token verification error: {:?}", e);
-                    AppError::Authentication("Token verification failed".to_string())
-                }
+        .map_err(|e| match e {
+            AuthError::TokenExpired => {
+                debug!("Refresh token expired");
+                AppError::Authentication("Refresh token expired".to_string())
+            }
+            AuthError::InvalidTokenFormat | AuthError::InvalidTokenSignature => {
+                debug!("Invalid refresh token");
+                AppError::Authentication("Invalid refresh token".to_string())
+            }
+            _ => {
+                error!("Refresh token verification error: {:?}", e);
+                AppError::Authentication("Token verification failed".to_string())
             }
         })?;
 

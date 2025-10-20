@@ -2,7 +2,7 @@
 // Repository実装（監査済み構造: 単一ファイル統合パターン）
 //
 // Pattern: Multiple Repository implementations in a single file
-// Rationale: 
+// Rationale:
 // - High cohesion (all Diesel implementations in one place)
 // - Reduced import statements
 // - < 1000 lines total is acceptable for combined repositories
@@ -18,12 +18,14 @@ use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use std::sync::Arc;
 
 use crate::application::ports::repositories::{
-    RepositoryError, UserRepository, PostRepository, CommentRepository,
+    CommentRepository, PostRepository, RepositoryError, UserRepository,
 };
-use crate::domain::user::{User, UserId, Email, Username};
-use crate::domain::post::{Post, PostId, Slug, Content};
-use crate::domain::comment::{Comment, CommentId, CommentText, CommentStatus};
-use crate::infrastructure::database::models::{DbUser, NewDbUser, DbPost, NewDbPost, DbComment, NewDbComment};
+use crate::domain::comment::{Comment, CommentId, CommentStatus, CommentText};
+use crate::domain::post::{Content, Post, PostId, Slug};
+use crate::domain::user::{Email, User, UserId, Username};
+use crate::infrastructure::database::models::{
+    DbComment, DbPost, DbUser, NewDbComment, NewDbPost, NewDbUser,
+};
 use crate::infrastructure::database::schema;
 
 // ============================================================================
@@ -500,7 +502,12 @@ impl PostRepository for DieselPostRepository {
         .map_err(|e| RepositoryError::DatabaseError(format!("Task join error: {}", e)))?
     }
 
-    async fn find_by_author(&self, author_id: UserId, limit: i64, offset: i64) -> Result<Vec<Post>, RepositoryError> {
+    async fn find_by_author(
+        &self,
+        author_id: UserId,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Post>, RepositoryError> {
         let pool = Arc::clone(&self.pool);
         let author_uuid = *author_id.as_uuid();
 
@@ -551,7 +558,7 @@ impl DieselCommentRepository {
             .map_err(|e| RepositoryError::ConversionError(format!("Invalid content: {}", e)))?;
 
         let parent_id = db_comment.parent_id.map(CommentId::from_uuid);
-        
+
         // Convert is_approved to CommentStatus
         let status = if db_comment.is_approved {
             CommentStatus::Published
@@ -685,7 +692,12 @@ impl CommentRepository for DieselCommentRepository {
         .map_err(|e| RepositoryError::DatabaseError(format!("Task join error: {}", e)))?
     }
 
-    async fn find_by_post(&self, post_id: PostId, limit: i64, offset: i64) -> Result<Vec<Comment>, RepositoryError> {
+    async fn find_by_post(
+        &self,
+        post_id: PostId,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Comment>, RepositoryError> {
         let pool = Arc::clone(&self.pool);
         let post_uuid = *post_id.as_uuid();
 
@@ -711,7 +723,12 @@ impl CommentRepository for DieselCommentRepository {
         .map_err(|e| RepositoryError::DatabaseError(format!("Task join error: {}", e)))?
     }
 
-    async fn find_by_author(&self, author_id: UserId, limit: i64, offset: i64) -> Result<Vec<Comment>, RepositoryError> {
+    async fn find_by_author(
+        &self,
+        author_id: UserId,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Comment>, RepositoryError> {
         let pool = Arc::clone(&self.pool);
         let author_uuid = *author_id.as_uuid();
 

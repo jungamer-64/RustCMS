@@ -68,10 +68,10 @@ impl From<Post> for PostListDto {
 pub struct CreatePostRequest {
     #[validate(length(min = 1, max = 200))]
     pub title: String,
-    
+
     #[validate(length(min = 10, max = 100000))]
     pub content: String,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     #[validate(length(min = 3, max = 50))]
     pub slug: Option<String>, // Optional: 未指定の場合はtitleから自動生成
@@ -83,7 +83,7 @@ pub struct UpdatePostRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[validate(length(min = 1, max = 200))]
     pub title: Option<String>,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     #[validate(length(min = 10, max = 100000))]
     pub content: Option<String>,
@@ -119,8 +119,9 @@ mod tests {
         let author_id = UserId::new();
         let title = Title::new("Test Post".to_string()).unwrap();
         let slug = Slug::new("test-post".to_string()).unwrap();
-        let content = Content::new("This is test content that is long enough.".to_string()).unwrap();
-        
+        let content =
+            Content::new("This is test content that is long enough.".to_string()).unwrap();
+
         let post = Post::new(author_id, title, slug, content);
 
         let dto = PostDto::from(post.clone());
@@ -136,8 +137,9 @@ mod tests {
         let author_id = UserId::new();
         let title = Title::new("Test Post".to_string()).unwrap();
         let slug = Slug::new("test-post".to_string()).unwrap();
-        let content = Content::new("This is test content that is long enough.".to_string()).unwrap();
-        
+        let content =
+            Content::new("This is test content that is long enough.".to_string()).unwrap();
+
         let post = Post::new(author_id, title, slug, content);
 
         let dto = PostListDto::from(post);
@@ -158,7 +160,10 @@ mod tests {
         let request: CreatePostRequest = serde_json::from_str(json).unwrap();
 
         assert_eq!(request.title, "New Post");
-        assert_eq!(request.content, "Post content here that is long enough for validation");
+        assert_eq!(
+            request.content,
+            "Post content here that is long enough for validation"
+        );
         assert_eq!(request.slug, Some("new-post".to_string()));
     }
 

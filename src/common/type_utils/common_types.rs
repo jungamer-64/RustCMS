@@ -54,8 +54,9 @@ pub struct UserInfo {
 impl From<&crate::domain::user::User> for UserInfo {
     fn from(user: &crate::domain::user::User) -> Self {
         use uuid::Uuid;
+        let id: Uuid = user.id().into();
         Self {
-            id: Uuid::from(user.id()).to_string(),
+            id: id.to_string(),
             username: user.username().as_str().to_string(),
             email: user.email().as_str().to_string(),
             first_name: None, // TODO: Add to domain::user::User if needed
@@ -63,9 +64,9 @@ impl From<&crate::domain::user::User> for UserInfo {
             role: user.role().as_str().to_string(),
             is_active: user.is_active(),
             email_verified: false, // TODO: Add to domain::user::User if needed
-            last_login: None,      // TODO: Add to domain::user::User if needed
-            created_at: chrono::Utc::now(), // TODO: Add timestamps to domain::user::User
-            updated_at: chrono::Utc::now(), // TODO: Add timestamps to domain::user::User
+            last_login: user.last_login(),
+            created_at: user.created_at(),
+            updated_at: user.updated_at(),
         }
     }
 }

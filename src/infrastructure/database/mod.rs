@@ -50,20 +50,13 @@ pub mod unit_of_work;
 
 // モデルのエクスポート
 pub use models::{
-    DbUser, NewDbUser,
-    DbPost, NewDbPost,
-    DbComment, NewDbComment,
-    DbCategory, NewDbCategory,
-    DbTag, NewDbTag,
+    DbCategory, DbComment, DbPost, DbTag, DbUser, NewDbCategory, NewDbComment, NewDbPost, NewDbTag,
+    NewDbUser,
 };
 
 // Repository exports
 #[cfg(feature = "database")]
-pub use repositories::{
-    DieselUserRepository,
-    DieselPostRepository,
-    DieselCommentRepository,
-};
+pub use repositories::{DieselCommentRepository, DieselPostRepository, DieselUserRepository};
 
 #[cfg(feature = "restructure_domain")]
 pub use unit_of_work::DieselUnitOfWork;

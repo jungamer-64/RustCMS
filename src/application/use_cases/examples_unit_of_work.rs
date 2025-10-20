@@ -67,7 +67,7 @@ impl PublishPostWithStatsUseCase {
             .execute_in_transaction(|_conn| {
                 // Phase 3: Repository はまだ connection を受け取らない
                 // Phase 4 で Repository メソッドに &mut PgConnection を追加予定
-                
+
                 // 現在の実装では、Repository は内部で connection pool を使用
                 // 将来的には以下のように書ける:
                 // let post = self.post_repository.find_by_id_with_connection(conn, post_id)?;
@@ -135,7 +135,7 @@ impl BulkPublishPostsUseCase {
                         // let post = self.post_repository.find_by_id_with_connection(inner_conn, post_id)?;
                         // post.publish();
                         // self.post_repository.save_with_connection(inner_conn, post)?;
-                        
+
                         // Phase 3 プレースホルダー
                         Ok(())
                     });
@@ -161,8 +161,8 @@ mod tests {
     use super::*;
     use crate::application::ports::repositories::MockPostRepository;
     use crate::application::ports::repositories::MockUserRepository;
-    use diesel::r2d2::{self, ConnectionManager};
     use diesel::PgConnection;
+    use diesel::r2d2::{self, ConnectionManager};
 
     fn create_test_pool() -> Arc<diesel::r2d2::Pool<ConnectionManager<PgConnection>>> {
         let database_url = std::env::var("DATABASE_URL")
@@ -178,18 +178,19 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_publish_post_with_stats_use_case_creation() {
         let pool = create_test_pool();
         let unit_of_work = Arc::new(DieselUnitOfWork::new(pool));
         let post_repo = Arc::new(MockPostRepository::new());
         let user_repo = Arc::new(MockUserRepository::new());
 
-        let _use_case =
-            PublishPostWithStatsUseCase::new(post_repo, user_repo, unit_of_work);
+        let _use_case = PublishPostWithStatsUseCase::new(post_repo, user_repo, unit_of_work);
         // 作成できることを確認
     }
 
     #[test]
+    #[ignore]
     fn test_bulk_publish_posts_use_case_creation() {
         let pool = create_test_pool();
         let unit_of_work = Arc::new(DieselUnitOfWork::new(pool));

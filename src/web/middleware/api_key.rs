@@ -1,7 +1,7 @@
 //! API Key 認証ミドルウェア (Phase 5.2 - 新AppState対応版)
 //!
 //! このモジュールはリクエストヘッダ `X-API-Key` による API キー認証を行います。
-//! 
+//!
 //! Phase 5.2 での変更点:
 //! - 新しい `Arc<AppState>` 構造に対応
 //! - State<Arc<AppState>> からの抽出に変更
@@ -65,7 +65,7 @@ pub async fn api_key_auth_layer(
     let Some(header_val) = req.headers().get(HEADER_NAME) else {
         return Err((StatusCode::UNAUTHORIZED, "API key missing"));
     };
-    
+
     let Ok(raw_key) = header_val.to_str() else {
         return Err((StatusCode::BAD_REQUEST, "Invalid header"));
     };
@@ -79,10 +79,10 @@ pub async fn api_key_auth_layer(
     // 現時点では暫定的にダミー情報を格納
     // let api_key_repo = state.api_key_repository()?;
     // let api_key = api_key_repo.find_by_lookup_hash(&lookup_hash).await?;
-    
+
     debug!("API key authentication requested (暫定実装)");
     warn!("API key authentication is not fully implemented yet. Phase 5.3 で完全実装予定。");
-    
+
     // 暫定: 開発中はヘッダがあれば通過させる (本番では削除すること)
     // TODO Phase 5.3: 実際の検証ロジックを実装
     let dummy_info = ApiKeyAuthInfo {
@@ -90,7 +90,7 @@ pub async fn api_key_auth_layer(
         user_id: uuid::Uuid::new_v4(),
         permissions: vec!["read:all".to_string()],
     };
-    
+
     req.extensions_mut().insert(dummy_info);
     Ok(next.run(req).await)
 }

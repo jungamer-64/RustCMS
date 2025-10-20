@@ -5,10 +5,10 @@
 //! Post Commands/Queriesを呼び出す薄い層（Phase 4）
 
 use axum::{
+    Json,
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -194,8 +194,7 @@ mod tests {
 
     #[test]
     fn test_pagination_defaults() {
-        let params: PaginationParams =
-            serde_json::from_str("{}").expect("Failed to deserialize");
+        let params: PaginationParams = serde_json::from_str("{}").expect("Failed to deserialize");
         assert_eq!(params.page, 1);
         assert_eq!(params.per_page, 20);
     }

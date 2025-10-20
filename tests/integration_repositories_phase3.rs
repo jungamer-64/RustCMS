@@ -45,20 +45,19 @@ async fn test_user_repository_save_and_find_by_id() {
     let repo = DieselUserRepository::new(pool.clone());
 
     // テストユーザー作成
-    let user = User::new("testuser".to_string(), "test@example.com".to_string(), "hashedpw")
-        .expect("Failed to create user");
+    let user = User::new(
+        "testuser".to_string(),
+        "test@example.com".to_string(),
+        "hashedpw",
+    )
+    .expect("Failed to create user");
     let user_id = user.id();
 
     // 保存
-    repo.save(user.clone())
-        .await
-        .expect("Failed to save user");
+    repo.save(user.clone()).await.expect("Failed to save user");
 
     // ID で検索
-    let found = repo
-        .find_by_id(user_id)
-        .await
-        .expect("Failed to find user");
+    let found = repo.find_by_id(user_id).await.expect("Failed to find user");
 
     assert!(found.is_some());
     let found_user = found.unwrap();
@@ -84,13 +83,11 @@ async fn test_user_repository_find_by_email() {
     )
     .expect("Failed to create user");
 
-    repo.save(user.clone())
-        .await
-        .expect("Failed to save user");
+    repo.save(user.clone()).await.expect("Failed to save user");
 
     // Email で検索
-    let email = cms_backend::domain::user::Email::new("email@test.com".to_string())
-        .expect("Invalid email");
+    let email =
+        cms_backend::domain::user::Email::new("email@test.com".to_string()).expect("Invalid email");
     let found = repo
         .find_by_email(email)
         .await
@@ -154,10 +151,7 @@ async fn test_user_repository_delete() {
     repo.delete(user_id).await.expect("Failed to delete user");
 
     // 削除確認
-    let found = repo
-        .find_by_id(user_id)
-        .await
-        .expect("Failed to find user");
+    let found = repo.find_by_id(user_id).await.expect("Failed to find user");
     assert!(found.is_none());
 
     cleanup_database(&*pool);
@@ -178,10 +172,7 @@ async fn test_post_repository_save_and_find_by_id() {
     let author = User::new("author".to_string(), "author@test.com".to_string(), "pw")
         .expect("Failed to create author");
     let author_id = author.id();
-    user_repo
-        .save(author)
-        .await
-        .expect("Failed to save author");
+    user_repo.save(author).await.expect("Failed to save author");
 
     // 投稿作成
     let post = Post::new(
@@ -242,8 +233,8 @@ async fn test_post_repository_find_by_slug() {
     post_repo.save(post).await.expect("Failed to save post");
 
     // Slug で検索
-    let slug = cms_backend::domain::post::Slug::new("unique-slug".to_string())
-        .expect("Invalid slug");
+    let slug =
+        cms_backend::domain::post::Slug::new("unique-slug".to_string()).expect("Invalid slug");
     let found = post_repo
         .find_by_slug(slug)
         .await
@@ -296,7 +287,10 @@ async fn test_post_repository_list_all() {
     post_repo.save(post2).await.expect("Failed to save post2");
 
     // 全件取得
-    let posts = post_repo.list_all().await.expect("Failed to list all posts");
+    let posts = post_repo
+        .list_all()
+        .await
+        .expect("Failed to list all posts");
 
     assert_eq!(posts.len(), 2);
     assert!(posts.iter().any(|p| p.title().as_str() == "Post 1"));
@@ -450,20 +444,10 @@ async fn test_comment_repository_find_by_post_id() {
         .expect("Failed to save post");
 
     // 複数コメント作成
-    let comment1 = Comment::new(
-        post.id(),
-        user.id(),
-        "First comment".to_string(),
-        None,
-    )
-    .expect("Failed to create comment1");
-    let comment2 = Comment::new(
-        post.id(),
-        user.id(),
-        "Second comment".to_string(),
-        None,
-    )
-    .expect("Failed to create comment2");
+    let comment1 = Comment::new(post.id(), user.id(), "First comment".to_string(), None)
+        .expect("Failed to create comment1");
+    let comment2 = Comment::new(post.id(), user.id(), "Second comment".to_string(), None)
+        .expect("Failed to create comment2");
 
     comment_repo
         .save(comment1)
@@ -481,12 +465,16 @@ async fn test_comment_repository_find_by_post_id() {
         .expect("Failed to find comments by post_id");
 
     assert_eq!(comments.len(), 2);
-    assert!(comments
-        .iter()
-        .any(|c| c.content().as_str() == "First comment"));
-    assert!(comments
-        .iter()
-        .any(|c| c.content().as_str() == "Second comment"));
+    assert!(
+        comments
+            .iter()
+            .any(|c| c.content().as_str() == "First comment")
+    );
+    assert!(
+        comments
+            .iter()
+            .any(|c| c.content().as_str() == "Second comment")
+    );
 
     cleanup_database(&*pool);
 }
@@ -524,13 +512,8 @@ async fn test_comment_repository_delete() {
         .expect("Failed to save post");
 
     // コメント作成
-    let comment = Comment::new(
-        post.id(),
-        user.id(),
-        "Comment to delete".to_string(),
-        None,
-    )
-    .expect("Failed to create comment");
+    let comment = Comment::new(post.id(), user.id(), "Comment to delete".to_string(), None)
+        .expect("Failed to create comment");
     let comment_id = comment.id();
     comment_repo
         .save(comment)
@@ -570,8 +553,8 @@ async fn test_transaction_rollback_on_error() {
     let result = uow
         .execute_in_transaction(|conn| {
             use cms_backend::application::ports::repositories::RepositoryError;
-            use diesel::prelude::*;
             use diesel::RunQueryDsl;
+            use diesel::prelude::*;
 
             // ユーザーをDBに直接挿入
             diesel::sql_query(
@@ -590,8 +573,8 @@ async fn test_transaction_rollback_on_error() {
     assert!(result.is_err());
 
     // ロールバック確認: ユーザーが保存されていないことを確認
-    let email = cms_backend::domain::user::Email::new("tx@test.com".to_string())
-        .expect("Invalid email");
+    let email =
+        cms_backend::domain::user::Email::new("tx@test.com".to_string()).expect("Invalid email");
     let found = user_repo
         .find_by_email(email)
         .await
@@ -613,8 +596,8 @@ async fn test_transaction_commit_on_success() {
     // トランザクション内で操作を実行し、成功させる
     let result = uow
         .execute_in_transaction(|conn| {
-            use diesel::prelude::*;
             use diesel::RunQueryDsl;
+            use diesel::prelude::*;
 
             diesel::sql_query(
                 "INSERT INTO users (id, username, email, password_hash, created_at, updated_at) \
@@ -635,10 +618,7 @@ async fn test_transaction_commit_on_success() {
         .find_by_email(email)
         .await
         .expect("Failed to find user");
-    assert!(
-        found.is_some(),
-        "User should exist after successful commit"
-    );
+    assert!(found.is_some(), "User should exist after successful commit");
 
     cleanup_database(&*pool);
 }

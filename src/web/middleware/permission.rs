@@ -16,9 +16,10 @@ pub fn require_permission(auth_context: &AuthContext, permission: &str) -> crate
     if auth_context.permissions.iter().any(|p| p == permission) {
         Ok(())
     } else {
-        Err(AuthError::InsufficientPermissions { 
-            required: permission.to_string() 
-        }.into())
+        Err(AuthError::InsufficientPermissions {
+            required: permission.to_string(),
+        }
+        .into())
     }
 }
 
@@ -90,9 +91,10 @@ where
                     if required.iter().any(|p| ctx.permissions.contains(p)) {
                         inner.call(req).await
                     } else {
-                        Ok(AppError::from(AuthError::InsufficientPermissions { 
-                            required: required.join(", ") 
-                        }).into_response())
+                        Ok(AppError::from(AuthError::InsufficientPermissions {
+                            required: required.join(", "),
+                        })
+                        .into_response())
                     }
                 }
                 None => Ok(

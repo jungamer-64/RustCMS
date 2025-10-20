@@ -61,9 +61,7 @@ pub async fn require_auth(
     next: Next,
 ) -> Result<Response, AppError> {
     // 1. Authorization ヘッダを取得
-    let auth_header = headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok());
+    let auth_header = headers.get("authorization").and_then(|v| v.to_str().ok());
 
     match auth_header {
         None => {
@@ -94,9 +92,7 @@ pub async fn require_auth(
                     token_len = token.len(),
                     "トークン長が不足"
                 );
-                return Err(AppError::Authorization(
-                    "トークン検証失敗".to_string(),
-                ));
+                return Err(AppError::Authorization("トークン検証失敗".to_string()));
             }
 
             // 4. ユーザーIDを取得（テスト用に簡易実装）
@@ -272,7 +268,7 @@ mod tests {
     async fn test_require_auth_valid_token() {
         // 有効なトークン（24文字以上）を生成
         let valid_token = "a".repeat(32); // 32文字のトークン
-        
+
         // トークンが24文字以上であることを確認
         assert!(valid_token.len() >= 24, "トークンは24文字以上であるべき");
     }
@@ -281,7 +277,7 @@ mod tests {
     fn test_require_auth_no_header() {
         // Authorization ヘッダなし → 401 Unauthorized
         let headers = HeaderMap::new();
-        
+
         // ヘッダがないことを確認
         assert!(headers.get("authorization").is_none());
     }
@@ -294,10 +290,8 @@ mod tests {
             HeaderValue::from_static("InvalidFormat token"),
         );
 
-        let auth_header = headers
-            .get("authorization")
-            .and_then(|v| v.to_str().ok());
-        
+        let auth_header = headers.get("authorization").and_then(|v| v.to_str().ok());
+
         // "Bearer " 形式でないことを確認
         if let Some(header) = auth_header {
             assert!(header.strip_prefix("Bearer ").is_none());
@@ -313,9 +307,7 @@ mod tests {
             HeaderValue::from_str(&format!("Bearer {}", short_token)).unwrap(),
         );
 
-        let auth_header = headers
-            .get("authorization")
-            .and_then(|v| v.to_str().ok());
+        let auth_header = headers.get("authorization").and_then(|v| v.to_str().ok());
 
         if let Some(header) = auth_header {
             if let Some(token) = header.strip_prefix("Bearer ") {
@@ -329,7 +321,7 @@ mod tests {
         use std::net::{IpAddr, Ipv4Addr};
 
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
-        
+
         // IP アドレスが取得可能であることを確認
         assert_eq!(addr.ip().to_string(), "127.0.0.1");
     }
@@ -348,7 +340,7 @@ mod tests {
     fn test_request_logging_info_level() {
         // 2xx/3xx レスポンス → INFO ログ
         let status_code = 200;
-        
+
         // INFO レベルであることを確認
         assert!((200..=399).contains(&status_code));
     }
@@ -357,7 +349,7 @@ mod tests {
     fn test_request_logging_warn_level() {
         // 4xx レスポンス → WARN ログ
         let status_code = 404;
-        
+
         // WARN レベルであることを確認
         assert!((400..=499).contains(&status_code));
     }
@@ -366,7 +358,7 @@ mod tests {
     fn test_request_logging_error_level() {
         // 5xx レスポンス → ERROR ログ
         let status_code = 500;
-        
+
         // ERROR レベルであることを確認
         assert!(status_code >= 500);
     }

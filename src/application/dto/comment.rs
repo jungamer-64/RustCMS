@@ -66,7 +66,7 @@ impl From<Comment> for CommentListDto {
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct CreateCommentRequest {
     pub post_id: String,
-    
+
     #[validate(length(min = 1, max = 2000))]
     pub text: String,
 }
@@ -95,7 +95,7 @@ mod tests {
         let post_id = PostId::new();
         let author_id = UserId::new();
         let text = CommentText::new("Test comment".to_string()).unwrap();
-        
+
         let comment = Comment::new(post_id, author_id, text).unwrap();
 
         let dto = CommentDto::from(comment.clone());
@@ -111,7 +111,7 @@ mod tests {
         let post_id = PostId::new();
         let author_id = UserId::new();
         let text = CommentText::new("Test comment".to_string()).unwrap();
-        
+
         let comment = Comment::new(post_id, author_id, text).unwrap();
 
         let dto = CommentListDto::from(comment);
@@ -123,10 +123,13 @@ mod tests {
     #[test]
     fn test_create_comment_request_deserialization() {
         let post_id = PostId::new();
-        let json = format!(r#"{{
+        let json = format!(
+            r#"{{
             "post_id": "{}",
             "text": "New comment"
-        }}"#, post_id);
+        }}"#,
+            post_id
+        );
 
         let request: CreateCommentRequest = serde_json::from_str(&json).unwrap();
 

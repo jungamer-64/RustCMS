@@ -152,11 +152,11 @@ pub use error::{AppError, Result};
 #[cfg(feature = "restructure_domain")]
 pub mod models {
     //! Legacy models module - re-exports domain entities for backward compatibility
-    pub use crate::domain::user::{User, UserId, UserRole};
-    pub use crate::domain::post::{Post, PostId, PostStatus};
-    pub use crate::domain::comment::{Comment, CommentId, CommentStatus};
     pub use crate::domain::category::{Category, CategoryId};
+    pub use crate::domain::comment::{Comment, CommentId, CommentStatus};
+    pub use crate::domain::post::{Post, PostId, PostStatus};
     pub use crate::domain::tag::{Tag, TagId};
+    pub use crate::domain::user::{User, UserId, UserRole};
 }
 
 /// Build information endpoint
