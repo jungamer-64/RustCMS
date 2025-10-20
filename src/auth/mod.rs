@@ -41,7 +41,6 @@ pub mod session;
 pub mod unified_context;  // Phase 5.3: JWT + Biscuit 統合コンテキスト
 pub mod unified_key_management; // 統合Ed25519鍵管理（JWT + Biscuit共通）
 
-pub use ed25519_keys::Ed25519KeyPair;
 pub use error::AuthError;
 pub use jwt::{JwtClaims, JwtConfig, JwtService, JwtTokenPair, TokenType};
 pub use password_service::PasswordService;
