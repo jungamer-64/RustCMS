@@ -330,6 +330,7 @@ pub struct User {
     is_active: bool,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
+    last_login: Option<chrono::DateTime<chrono::Utc>>,  // Phase 9: 最終ログイン日時
 }
 
 impl User {
@@ -356,6 +357,7 @@ impl User {
             is_active: true,
             created_at: now,
             updated_at: now,
+            last_login: None,  // Phase 9: 初回ログインは未実施
         }
     }
 
@@ -370,6 +372,7 @@ impl User {
         is_active: bool,
         created_at: chrono::DateTime<chrono::Utc>,
         updated_at: chrono::DateTime<chrono::Utc>,
+        last_login: Option<chrono::DateTime<chrono::Utc>>,  // Phase 9: 最終ログイン日時
     ) -> Self {
         Self {
             id,
@@ -380,6 +383,7 @@ impl User {
             is_active,
             created_at,
             updated_at,
+            last_login,
         }
     }
 
@@ -457,6 +461,32 @@ impl User {
     #[must_use]
     pub const fn updated_at(&self) -> chrono::DateTime<chrono::Utc> {
         self.updated_at
+    }
+
+    /// Phase 9: 最終ログイン日時を取得
+    #[must_use]
+    pub const fn last_login(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+        self.last_login
+    }
+
+    // ========================================================================
+    // Phase 9: 認証関連メソッド
+    // ========================================================================
+
+    /// パスワードハッシュを設定
+    ///
+    /// ビジネスルール: パスワードは既にハッシュ化されている必要がある
+    pub fn set_password_hash(&mut self, hash: String) {
+        self.password_hash = Some(hash);
+        self.updated_at = chrono::Utc::now();
+    }
+
+    /// 最終ログイン日時を更新
+    ///
+    /// ビジネスルール: ログイン成功時に呼び出される
+    pub fn update_last_login(&mut self) {
+        self.last_login = Some(chrono::Utc::now());
+        self.updated_at = chrono::Utc::now();
     }
 
     // ========================================================================
@@ -667,12 +697,14 @@ mod tests {
                 false,
                 now,
                 now,
+                None,  // Phase 9: last_login
             );
 
             assert_eq!(user.id(), id);
             assert_eq!(user.username(), &username);
             assert_eq!(user.role(), role);
             assert!(!user.is_active());
+            assert!(user.last_login().is_none());
         }
 
         /// ⚠️ 追加エッジケーステスト
@@ -782,6 +814,73 @@ mod tests {
                 let restored: UserId = serde_json::from_str(&json).unwrap();
                 assert_eq!(original, restored);
             }
+        }
+
+        // ====================================================================
+        // Phase 9: 認証関連テスト
+        // ====================================================================
+
+        #[test]
+        fn test_set_password_hash() {
+            let username = Username::new("testuser".to_string()).unwrap();
+            let email = Email::new("test@example.com".to_string()).unwrap();
+            let mut user = User::new(username, email);
+
+            assert!(user.password_hash().is_none());
+
+            let hash = "hashed_password_123".to_string();
+            user.set_password_hash(hash.clone());
+
+            assert_eq!(user.password_hash(), Some(&hash));
+        }
+
+        #[test]
+        fn test_update_last_login() {
+            let username = Username::new("testuser".to_string()).unwrap();
+            let email = Email::new("test@example.com".to_string()).unwrap();
+            let mut user = User::new(username, email);
+
+            // 初期状態ではNone
+            assert!(user.last_login().is_none());
+
+            // 最初のログイン
+            user.update_last_login();
+            let first_login = user.last_login();
+            assert!(first_login.is_some());
+
+            // 少し待ってから再ログイン
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            user.update_last_login();
+            let second_login = user.last_login();
+            assert!(second_login.is_some());
+
+            // 最終ログイン日時が更新されている
+            assert!(second_login > first_login);
+        }
+
+        #[test]
+        fn test_restore_with_last_login() {
+            let id = UserId::new();
+            let username = Username::new("testuser".to_string()).unwrap();
+            let email = Email::new("test@example.com".to_string()).unwrap();
+            let role = UserRole::Author;
+            let now = chrono::Utc::now();
+            let last_login_time = Some(now - chrono::Duration::days(1));
+
+            let user = User::restore(
+                id,
+                username.clone(),
+                email.clone(),
+                Some("hashed_password".to_string()),
+                role,
+                true,
+                now - chrono::Duration::days(7),
+                now,
+                last_login_time,
+            );
+
+            assert_eq!(user.last_login(), last_login_time);
+            assert_eq!(user.password_hash(), Some(&"hashed_password".to_string()));
         }
     }
 }

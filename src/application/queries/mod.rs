@@ -1,3 +1,4 @@
+// src/application/queries/mod.rs
 /// CQRS Queries - Read-only query objects for data retrieval
 ///
 /// This module implements the Query side of CQRS (Command Query Responsibility Segregation).

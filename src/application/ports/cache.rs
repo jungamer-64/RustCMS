@@ -1,3 +1,4 @@
+// src/application/ports/cache.rs
 //! Cache Service Port (インターフェース定義)
 //!
 //! キャッシュサービスの Port/Adapter パターンによるインターフェース定義です。

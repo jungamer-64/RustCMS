@@ -205,48 +205,44 @@ impl AuthService {
         self.verify_user_password(&user, &request.password).await?;
         
         // ログイン時刻の更新
-        self.update_last_login(&user).await?;
+        self.update_user_last_login(user.id()).await?;
         
         info!(target: "auth", user_id = %user.id(), "Login successful");
         Ok(user)
     }
     
-    /// パスワードを検証
+    /// Phase 9: パスワードを検証（完全実装）
     async fn verify_user_password(&self, user: &User, password: &str) -> Result<()> {
-        // TODO: Phase 9 - User entityにpassword_hashフィールドを追加
-        // 現在は一時的な実装
+        // パスワードハッシュを取得
+        let hash = user.password_hash()
+            .ok_or_else(|| {
+                warn!(target: "auth", user_id = %user.id(), "User has no password hash");
+                AuthError::InvalidCredentials
+            })?;
         
-        // 実装例（User entityが拡張された後）:
-        // let hash = user.password_hash()
-        //     .ok_or(AuthError::InvalidCredentials)?;
-        // 
-        // self.password_service
-        //     .verify_password(password, hash)
-        //     .map_err(|e| {
-        //         warn!(target: "auth", user_id = %user.id(), "Password verification failed");
-        //         AuthError::InvalidPassword
-        //     })?;
+        // パスワードを検証
+        self.password_service
+            .verify_password(password, hash)
+            .map_err(|e| {
+                warn!(target: "auth", user_id = %user.id(), error = ?e, "Password verification failed");
+                AuthError::InvalidPassword
+            })?;
         
-        // 一時的な実装: 警告を出す
-        warn!(
-            target: "auth",
-            user_id = %user.id(),
-            "Password verification not implemented - SECURITY RISK"
-        );
-        
-        // TODO: Phase 9でUser entityを拡張後、上記のコメントアウトを解除して
-        // この行を削除すること
+        debug!(target: "auth", user_id = %user.id(), "Password verified successfully");
         Ok(())
     }
     
-    /// ログイン時刻を更新
-    async fn update_last_login(&self, user: &User) -> Result<()> {
-        // TODO: Phase 9 - UserRepositoryにupdate_last_loginメソッドを追加
-        warn!(
-            target: "auth",
-            user_id = %user.id(),
-            "Last login update not implemented"
-        );
+    /// Phase 9: 最終ログイン日時を更新
+    pub async fn update_user_last_login(&self, user_id: crate::domain::user::UserId) -> Result<()> {
+        self.user_repo
+            .update_last_login(user_id)
+            .await
+            .map_err(|e| {
+                error!(target: "auth", user_id = %user_id, error = ?e, "Failed to update last login");
+                AppError::Internal(format!("Failed to update last login: {e}"))
+            })?;
+        
+        debug!(target: "auth", user_id = %user_id, "Last login updated");
         Ok(())
     }
     
@@ -563,6 +559,21 @@ mod tests {
         
         async fn list_all(&self, _limit: i64, _offset: i64) -> std::result::Result<Vec<User>, crate::application::ports::repositories::RepositoryError> {
             Ok(self.users.values().cloned().collect())
+        }
+        
+        async fn update_password_hash(
+            &self,
+            _user_id: crate::domain::user::UserId,
+            _password_hash: String,
+        ) -> std::result::Result<(), crate::application::ports::repositories::RepositoryError> {
+            Ok(())
+        }
+        
+        async fn update_last_login(
+            &self,
+            _user_id: crate::domain::user::UserId,
+        ) -> std::result::Result<(), crate::application::ports::repositories::RepositoryError> {
+            Ok(())
         }
     }
     

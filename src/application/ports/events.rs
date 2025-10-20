@@ -1,3 +1,4 @@
+// src/application/ports/events.rs
 //! Event Publisher Port (インターフェース定義)
 //!
 //! イベント発行サービスの Port/Adapter パターンによるインターフェース定義です。

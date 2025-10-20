@@ -1,3 +1,4 @@
+// src/application/comment.rs
 //! Comment Application Layer - CQRS統合
 //!
 //! Commands + Queries + DTOs を単一ファイルに統合（監査推奨パターン）

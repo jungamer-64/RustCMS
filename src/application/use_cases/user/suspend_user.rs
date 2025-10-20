@@ -1,4 +1,5 @@
 // src/application/use_cases/user/suspend_user.rs
+// src/application/use_cases/user/suspend_user.rs
 //! SuspendUserUseCase - ユーザー停止 Use Case
 //!
 //! Phase 3 Week 8-9: Use Case 実装

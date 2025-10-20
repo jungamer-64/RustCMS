@@ -1,3 +1,4 @@
+// src/application/category.rs
 //! Category Application Layer - CQRS統合
 //!
 //! Phase 6-D: Legacy application layer (disabled with restructure_domain)

@@ -1,3 +1,4 @@
+// src/application/queries/post_queries.rs
 /// Post Queries - Read-only queries for post data retrieval
 ///
 /// Implements CQRS Query pattern for post-related data access.

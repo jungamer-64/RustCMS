@@ -1,20 +1,8 @@
+// src/application/user.rs
 //! User Application Layer - CQRS統合
 //!
-//! Commands + Queries + DTOs を単一ファイルに統合（監査推奨パターン）
-//!
-//! ## 構造
-//! - DTOs: リクエスト/レスポンス型
-//! - Commands: 書き込み操作（RegisterUser, UpdateUser等）
-//! - Queries: 読み取り操作（GetUserById, ListUsers等）
-//!
-//! ## 設計原則
-//! - 500行未満は単一ファイル推奨（監査ガイドライン）
-//! - Use Case は Application Service として実装
-//! - Repository Port への依存性注入
+//! Commands + Queries + DTOs を単一ファイルに統合
 
-use std::sync::Arc;
-
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "restructure_domain")]
@@ -27,25 +15,20 @@ use crate::application::ports::repositories::{RepositoryError, UserRepository};
 // DTOs - Data Transfer Objects
 // ============================================================================
 
-/// ユーザー登録リクエスト
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateUserRequest {
     pub username: String,
     pub email: String,
-    // Note: display_name removed - not in current User domain model
 }
 
-/// ユーザー更新リクエスト
 #[derive(Debug, Clone, Deserialize)]
 pub struct UpdateUserRequest {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub username: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub email: Option<String>,
-    // Note: display_name removed - not in current User domain model
 }
 
-/// ユーザーレスポンス（公開用DTO）
 #[derive(Debug, Clone, Serialize)]
 pub struct UserDto {
     pub id: String,
@@ -70,59 +53,49 @@ impl From<User> for UserDto {
 // Commands - 書き込み操作
 // ============================================================================
 
-/// ユーザー登録コマンド (Use Case)
 #[cfg(feature = "restructure_domain")]
-pub struct RegisterUser {
-    repo: Arc<dyn UserRepository>,
+pub struct RegisterUser<'a> {
+    repo: &'a dyn UserRepository,
 }
 
 #[cfg(feature = "restructure_domain")]
-impl RegisterUser {
-    pub fn new(repo: Arc<dyn UserRepository>) -> Self {
+impl<'a> RegisterUser<'a> {
+    pub const fn new(repo: &'a dyn UserRepository) -> Self {
         Self { repo }
     }
 
-    /// ユーザーを登録する
-    ///
-    /// # Errors
-    ///
-    /// - バリデーションエラー（無効なメールアドレス等）
-    /// - データベースエラー
     pub async fn execute(&self, request: CreateUserRequest) -> Result<UserDto, RepositoryError> {
-        // 1. Value Objects 作成（検証済み）
+        // Value Objects 作成
         let username = Username::new(request.username)
             .map_err(|e| RepositoryError::ValidationError(e.to_string()))?;
         let email = Email::new(request.email)
             .map_err(|e| RepositoryError::ValidationError(e.to_string()))?;
 
-        // 2. メール重複チェック
+        // メール重複チェック
         if self.repo.find_by_email(&email).await?.is_some() {
-            return Err(RepositoryError::Duplicate(format!(
-                "Email '{}' is already in use",
-                email
-            )));
+            return Err(RepositoryError::Duplicate(
+                format!("Email '{}' is already in use", email)
+            ));
         }
 
-        // 3. ドメインエンティティ作成
+        // ドメインエンティティ作成
         let user = User::new(username, email);
 
-        // 4. 永続化
+        // 永続化
         self.repo.save(user.clone()).await?;
 
-        // 5. DTOに変換して返却
         Ok(UserDto::from(user))
     }
 }
 
-/// ユーザー更新コマンド
 #[cfg(feature = "restructure_domain")]
-pub struct UpdateUser {
-    repo: Arc<dyn UserRepository>,
+pub struct UpdateUser<'a> {
+    repo: &'a dyn UserRepository,
 }
 
 #[cfg(feature = "restructure_domain")]
-impl UpdateUser {
-    pub fn new(repo: Arc<dyn UserRepository>) -> Self {
+impl<'a> UpdateUser<'a> {
+    pub const fn new(repo: &'a dyn UserRepository) -> Self {
         Self { repo }
     }
 
@@ -131,54 +104,52 @@ impl UpdateUser {
         user_id: UserId,
         request: UpdateUserRequest,
     ) -> Result<UserDto, RepositoryError> {
-        // 1. ユーザー取得
+        // ユーザー取得
         let mut user = self
             .repo
             .find_by_id(user_id)
             .await?
-            .ok_or_else(|| RepositoryError::NotFound(format!("User {}", user_id)))?;
+            .ok_or_else(|| RepositoryError::NotFound(format!("User {user_id}")))?;
 
-        // 2. メールアドレス変更
+        // メールアドレス変更
         if let Some(new_email) = request.email {
             let email = Email::new(new_email)
                 .map_err(|e| RepositoryError::ValidationError(e.to_string()))?;
 
-            // 重複チェック
+            // 重複チェック（他のユーザーが使用していないか）
             if let Some(existing) = self.repo.find_by_email(&email).await? {
                 if existing.id() != user.id() {
-                    return Err(RepositoryError::Duplicate(format!(
-                        "Email '{}' is already in use",
-                        email
-                    )));
+                    return Err(RepositoryError::Duplicate(
+                        format!("Email '{}' is already in use", email)
+                    ));
                 }
             }
 
             user.change_email(email);
         }
 
-        // 3. ユーザー名変更
+        // ユーザー名変更
         if let Some(new_username) = request.username {
             let username = Username::new(new_username)
                 .map_err(|e| RepositoryError::ValidationError(e.to_string()))?;
             user.change_username(username);
         }
 
-        // 4. 永続化
+        // 永続化
         self.repo.save(user.clone()).await?;
 
         Ok(UserDto::from(user))
     }
 }
 
-/// ユーザー停止コマンド
 #[cfg(feature = "restructure_domain")]
-pub struct SuspendUser {
-    repo: Arc<dyn UserRepository>,
+pub struct SuspendUser<'a> {
+    repo: &'a dyn UserRepository,
 }
 
 #[cfg(feature = "restructure_domain")]
-impl SuspendUser {
-    pub fn new(repo: Arc<dyn UserRepository>) -> Self {
+impl<'a> SuspendUser<'a> {
+    pub const fn new(repo: &'a dyn UserRepository) -> Self {
         Self { repo }
     }
 
@@ -187,10 +158,9 @@ impl SuspendUser {
             .repo
             .find_by_id(user_id)
             .await?
-            .ok_or_else(|| RepositoryError::NotFound(format!("User {}", user_id)))?;
+            .ok_or_else(|| RepositoryError::NotFound(format!("User {user_id}")))?;
 
         user.deactivate();
-
         self.repo.save(user.clone()).await?;
 
         Ok(UserDto::from(user))
@@ -201,33 +171,30 @@ impl SuspendUser {
 // Queries - 読み取り操作
 // ============================================================================
 
-/// ユーザー取得クエリ
 #[cfg(feature = "restructure_domain")]
-pub struct GetUserById {
-    repo: Arc<dyn UserRepository>,
+pub struct GetUserById<'a> {
+    repo: &'a dyn UserRepository,
 }
 
 #[cfg(feature = "restructure_domain")]
-impl GetUserById {
-    pub fn new(repo: Arc<dyn UserRepository>) -> Self {
+impl<'a> GetUserById<'a> {
+    pub const fn new(repo: &'a dyn UserRepository) -> Self {
         Self { repo }
     }
 
     pub async fn execute(&self, user_id: UserId) -> Result<Option<UserDto>, RepositoryError> {
-        let user = self.repo.find_by_id(user_id).await?;
-        Ok(user.map(UserDto::from))
+        Ok(self.repo.find_by_id(user_id).await?.map(UserDto::from))
     }
 }
 
-/// ユーザー一覧取得クエリ
 #[cfg(feature = "restructure_domain")]
-pub struct ListUsers {
-    repo: Arc<dyn UserRepository>,
+pub struct ListUsers<'a> {
+    repo: &'a dyn UserRepository,
 }
 
 #[cfg(feature = "restructure_domain")]
-impl ListUsers {
-    pub fn new(repo: Arc<dyn UserRepository>) -> Self {
+impl<'a> ListUsers<'a> {
+    pub const fn new(repo: &'a dyn UserRepository) -> Self {
         Self { repo }
     }
 
@@ -254,21 +221,14 @@ mod tests {
     async fn test_register_user_success() {
         let mut mock_repo = MockUserRepository::new();
 
-        // メール重複チェック: None（存在しない）
-        mock_repo
-            .expect_find_by_email()
-            .returning(|_| Ok(None));
+        mock_repo.expect_find_by_email().returning(|_| Ok(None));
+        mock_repo.expect_save().returning(|_| Ok(()));
 
-        // 保存成功
-        mock_repo
-            .expect_save()
-            .returning(|_| Ok(()));
-
-        let use_case = RegisterUser::new(Arc::new(mock_repo));
+        let use_case = RegisterUser::new(&mock_repo);
 
         let request = CreateUserRequest {
-            username: "testuser".to_string(),
-            email: "test@example.com".to_string(),
+            username: "testuser".into(),
+            email: "test@example.com".into(),
         };
 
         let result = use_case.execute(request).await;
@@ -283,24 +243,51 @@ mod tests {
     async fn test_register_user_duplicate_email() {
         let mut mock_repo = MockUserRepository::new();
 
-        // メール重複あり
-        let existing_user = User::new(
-            Username::new("existing".to_string()).unwrap(),
-            Email::new("test@example.com".to_string()).unwrap(),
+        let existing = User::new(
+            Username::new("existing".into()).unwrap(),
+            Email::new("test@example.com".into()).unwrap(),
         );
 
         mock_repo
             .expect_find_by_email()
-            .returning(move |_| Ok(Some(existing_user.clone())));
+            .returning(move |_| Ok(Some(existing.clone())));
 
-        let use_case = RegisterUser::new(Arc::new(mock_repo));
+        let use_case = RegisterUser::new(&mock_repo);
 
         let request = CreateUserRequest {
-            username: "newuser".to_string(),
-            email: "test@example.com".to_string(),
+            username: "newuser".into(),
+            email: "test@example.com".into(),
         };
 
         let result = use_case.execute(request).await;
         assert!(matches!(result, Err(RepositoryError::Duplicate(_))));
+    }
+
+    #[tokio::test]
+    async fn test_update_user_email() {
+        let mut mock_repo = MockUserRepository::new();
+
+        let user = User::new(
+            Username::new("testuser".into()).unwrap(),
+            Email::new("old@example.com".into()).unwrap(),
+        );
+        let user_id = user.id();
+
+        mock_repo
+            .expect_find_by_id()
+            .returning(move |_| Ok(Some(user.clone())));
+        mock_repo.expect_find_by_email().returning(|_| Ok(None));
+        mock_repo.expect_save().returning(|_| Ok(()));
+
+        let use_case = UpdateUser::new(&mock_repo);
+
+        let request = UpdateUserRequest {
+            username: None,
+            email: Some("new@example.com".into()),
+        };
+
+        let result = use_case.execute(user_id, request).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().email, "new@example.com");
     }
 }

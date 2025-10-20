@@ -78,6 +78,7 @@ impl DieselUserRepository {
             db_user.is_active,
             db_user.created_at,
             db_user.updated_at,
+            db_user.last_login,
         ))
     }
 
@@ -248,6 +249,58 @@ impl UserRepository for DieselUserRepository {
                 Some(db) => Self::db_to_domain(db).map(Some),
                 None => Ok(None),
             }
+        })
+        .await
+        .map_err(|e| RepositoryError::DatabaseError(format!("Task join error: {}", e)))?
+    }
+
+    /// Phase 9: パスワードハッシュを更新
+    async fn update_password_hash(
+        &self,
+        user_id: UserId,
+        password_hash: String,
+    ) -> Result<(), RepositoryError> {
+        let pool = Arc::clone(&self.pool);
+        let id = *user_id.as_uuid();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+
+            diesel::update(schema::users::table.find(id))
+                .set((
+                    schema::users::password_hash.eq(Some(password_hash)),
+                    schema::users::updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)
+                .map_err(RepositoryError::from)?;
+
+            Ok(())
+        })
+        .await
+        .map_err(|e| RepositoryError::DatabaseError(format!("Task join error: {}", e)))?
+    }
+
+    /// Phase 9: 最終ログイン日時を更新
+    async fn update_last_login(&self, user_id: UserId) -> Result<(), RepositoryError> {
+        let pool = Arc::clone(&self.pool);
+        let id = *user_id.as_uuid();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+
+            diesel::update(schema::users::table.find(id))
+                .set((
+                    schema::users::last_login.eq(Some(Utc::now())),
+                    schema::users::updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)
+                .map_err(RepositoryError::from)?;
+
+            Ok(())
         })
         .await
         .map_err(|e| RepositoryError::DatabaseError(format!("Task join error: {}", e)))?

@@ -1,3 +1,4 @@
+// src/application/ports/search.rs
 //! Search Service Port (インターフェース定義)
 //!
 //! 全文検索サービスの Port/Adapter パターンによるインターフェース定義です。

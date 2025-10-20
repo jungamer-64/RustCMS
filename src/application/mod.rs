@@ -1,3 +1,4 @@
+// src/application/mod.rs
 //! アプリケーション層 (Application Layer) - 監査済み構造
 //!
 //! Commands + Queries + DTOs を統合した CQRS パターンを採用します。

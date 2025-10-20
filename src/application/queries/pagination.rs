@@ -1,21 +1,11 @@
-/// Pagination - Common pagination types for CQRS queries
-///
-/// Provides reusable pagination parameters and result wrappers.
+//! Pagination - Common pagination types for CQRS queries
+
 use serde::{Deserialize, Serialize};
 
-/// Pagination parameters for queries
-///
-/// Used across all list queries to provide consistent pagination behavior.
-///
-/// # Examples
-///
-/// ```
-/// use cms_backend::application::queries::PaginationParams;
-///
-/// let params = PaginationParams::new(20, 0); // 20 items, page 1
-/// assert_eq!(params.limit(), 20);
-/// assert_eq!(params.offset(), 0);
-/// ```
+// ============================================================================
+// PaginationParams
+// ============================================================================
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PaginationParams {
     limit: i64,
@@ -23,89 +13,82 @@ pub struct PaginationParams {
 }
 
 impl PaginationParams {
-    /// Create new pagination parameters
-    ///
-    /// # Arguments
-    /// * `limit` - Maximum number of items to return (clamped to 1-100)
-    /// * `offset` - Number of items to skip
+    /// 新しいページネーションパラメータを作成
+    /// 
+    /// limit は 1-100 にクランプされます
     pub fn new(limit: i64, offset: i64) -> Self {
         Self {
-            limit: limit.clamp(1, 100), // Enforce reasonable limits
-            offset: offset.max(0),       // No negative offsets
+            limit: limit.clamp(1, 100),
+            offset: offset.max(0),
         }
     }
 
-    /// Create pagination for first page
-    pub fn first_page(limit: i64) -> Self {
-        Self::new(limit, 0)
+    pub const fn first_page(limit: i64) -> Self {
+        Self { limit, offset: 0 }
     }
 
-    /// Create pagination for specific page number (1-indexed)
+    /// ページ番号（1-indexed）からページネーションを作成
     pub fn page(page_number: i64, page_size: i64) -> Self {
         let offset = (page_number - 1).max(0) * page_size;
         Self::new(page_size, offset)
     }
 
-    /// Get limit
-    pub fn limit(&self) -> i64 {
+    pub const fn limit(self) -> i64 {
         self.limit
     }
 
-    /// Get offset
-    pub fn offset(&self) -> i64 {
+    pub const fn offset(self) -> i64 {
         self.offset
     }
 
-    /// Calculate page number (1-indexed)
-    pub fn page_number(&self) -> i64 {
+    /// 現在のページ番号を計算（1-indexed）
+    pub const fn page_number(self) -> i64 {
         if self.limit == 0 {
             return 1;
         }
         (self.offset / self.limit) + 1
     }
 
-    /// Get next page parameters
-    pub fn next_page(&self) -> Self {
-        Self::new(self.limit, self.offset + self.limit)
+    pub const fn next_page(self) -> Self {
+        Self {
+            limit: self.limit,
+            offset: self.offset + self.limit,
+        }
     }
 
-    /// Get previous page parameters (if exists)
-    pub fn prev_page(&self) -> Option<Self> {
+    pub const fn prev_page(self) -> Option<Self> {
         if self.offset == 0 {
             return None;
         }
-        let new_offset = (self.offset - self.limit).max(0);
-        Some(Self::new(self.limit, new_offset))
+        let diff = self.offset - self.limit;
+        let new_offset = if diff > 0 { diff } else { 0 };
+        Some(Self {
+            limit: self.limit,
+            offset: new_offset,
+        })
     }
 }
 
 impl Default for PaginationParams {
     fn default() -> Self {
-        Self::new(20, 0) // Default: 20 items, first page
+        Self::new(20, 0)
     }
 }
 
-/// Paginated result wrapper
-///
-/// Contains items and pagination metadata.
-///
-/// # Type Parameters
-/// * `T` - Type of items in the result
+// ============================================================================
+// PaginationResult
+// ============================================================================
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PaginationResult<T> {
-    /// Items in current page
     pub items: Vec<T>,
-    /// Total number of items (across all pages)
     pub total: i64,
-    /// Current limit
     pub limit: i64,
-    /// Current offset
     pub offset: i64,
 }
 
 impl<T> PaginationResult<T> {
-    /// Create new pagination result
-    pub fn new(items: Vec<T>, total: i64, params: PaginationParams) -> Self {
+    pub const fn new(items: Vec<T>, total: i64, params: PaginationParams) -> Self {
         Self {
             items,
             total,
@@ -114,33 +97,29 @@ impl<T> PaginationResult<T> {
         }
     }
 
-    /// Check if there is a next page
-    pub fn has_next_page(&self) -> bool {
+    pub const fn has_next_page(&self) -> bool {
         self.offset + self.limit < self.total
     }
 
-    /// Check if there is a previous page
-    pub fn has_prev_page(&self) -> bool {
+    pub const fn has_prev_page(&self) -> bool {
         self.offset > 0
     }
 
-    /// Get total number of pages
-    pub fn total_pages(&self) -> i64 {
+    pub const fn total_pages(&self) -> i64 {
         if self.limit == 0 {
             return 1;
         }
         (self.total + self.limit - 1) / self.limit
     }
 
-    /// Get current page number (1-indexed)
-    pub fn current_page(&self) -> i64 {
+    pub const fn current_page(&self) -> i64 {
         if self.limit == 0 {
             return 1;
         }
         (self.offset / self.limit) + 1
     }
 
-    /// Map items to a different type
+    /// アイテムを別の型にマップ
     pub fn map<U, F>(self, f: F) -> PaginationResult<U>
     where
         F: FnMut(T) -> U,
@@ -150,6 +129,16 @@ impl<T> PaginationResult<T> {
             total: self.total,
             limit: self.limit,
             offset: self.offset,
+        }
+    }
+
+    /// 空の結果を作成
+    pub const fn empty(params: PaginationParams) -> Self {
+        Self {
+            items: Vec::new(),
+            total: 0,
+            limit: params.limit(),
+            offset: params.offset(),
         }
     }
 }
@@ -171,15 +160,15 @@ mod tests {
 
     #[test]
     fn test_pagination_params_clamping() {
-        // Limit too high
+        // Limit が大きすぎる
         let params = PaginationParams::new(200, 0);
         assert_eq!(params.limit(), 100);
 
-        // Limit too low
+        // Limit が小さすぎる
         let params = PaginationParams::new(0, 0);
         assert_eq!(params.limit(), 1);
 
-        // Negative offset
+        // Offset が負
         let params = PaginationParams::new(20, -10);
         assert_eq!(params.offset(), 0);
     }
@@ -194,27 +183,27 @@ mod tests {
 
     #[test]
     fn test_pagination_params_page() {
-        let params = PaginationParams::page(3, 20); // Page 3, 20 items per page
+        let params = PaginationParams::page(3, 20);
         assert_eq!(params.limit(), 20);
-        assert_eq!(params.offset(), 40); // Skip first 2 pages (40 items)
+        assert_eq!(params.offset(), 40);
         assert_eq!(params.page_number(), 3);
     }
 
     #[test]
-    fn test_pagination_params_next_prev() {
-        let params = PaginationParams::new(20, 20); // Page 2
+    fn test_pagination_params_navigation() {
+        let params = PaginationParams::new(20, 20);
 
-        // Next page
+        // 次のページ
         let next = params.next_page();
         assert_eq!(next.offset(), 40);
         assert_eq!(next.page_number(), 3);
 
-        // Previous page
+        // 前のページ
         let prev = params.prev_page().unwrap();
         assert_eq!(prev.offset(), 0);
         assert_eq!(prev.page_number(), 1);
 
-        // No previous for first page
+        // 最初のページには前ページなし
         let first = PaginationParams::first_page(20);
         assert!(first.prev_page().is_none());
     }
@@ -236,7 +225,7 @@ mod tests {
     #[test]
     fn test_pagination_result_last_page() {
         let items = vec![21, 22, 23];
-        let params = PaginationParams::new(10, 20); // Page 3
+        let params = PaginationParams::new(10, 20);
         let result = PaginationResult::new(items, 23, params);
 
         assert_eq!(result.current_page(), 3);
@@ -254,5 +243,23 @@ mod tests {
         let mapped = result.map(|x| x * 2);
         assert_eq!(mapped.items, vec![2, 4, 6]);
         assert_eq!(mapped.total, 10);
+    }
+
+    #[test]
+    fn test_pagination_result_empty() {
+        let params = PaginationParams::default();
+        let result: PaginationResult<String> = PaginationResult::empty(params);
+
+        assert!(result.items.is_empty());
+        assert_eq!(result.total, 0);
+        assert!(!result.has_next_page());
+        assert!(!result.has_prev_page());
+    }
+
+    #[test]
+    fn test_pagination_default() {
+        let params = PaginationParams::default();
+        assert_eq!(params.limit(), 20);
+        assert_eq!(params.offset(), 0);
     }
 }

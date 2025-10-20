@@ -1,3 +1,4 @@
+// src/application/ports/post_repository.rs
 use crate::domain::value_objects::{PostId, UserId};
 use async_trait::async_trait;
 

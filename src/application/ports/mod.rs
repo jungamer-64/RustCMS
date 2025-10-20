@@ -1,3 +1,4 @@
+// src/application/ports/mod.rs
 //! Application Ports (ポート定義) - 監査推奨構造
 //!
 //! Port/Adapter パターンのPort定義を集約します。
