@@ -95,6 +95,8 @@ toml = "0.9"
 
 # ===== DOMAIN LAYER (Phase 1-2) =====
 derive_more = { version = "2.0", features = ["full"] }
+domain = { path = "crates/domain" }
+application = { path = "crates/application" }
 
 # ===== APPLICATION LAYER (Phase 3) =====
 mockall = { version = "0.13", optional = true }
@@ -375,6 +377,13 @@ codegen-units = 1    # 最大限の最適化
 # ===== CARGO CONFIGURATION =====
 [workspace]
 resolver = "2"
+members = [
+    "crates/domain",
+    "crates/application",
+    "crates/infrastructure",
+    "crates/presentation",
+    "crates/server",
+]
 
 # ===== METADATA =====
 [package.metadata.docs.rs]

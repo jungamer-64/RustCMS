@@ -36,9 +36,9 @@ pub mod telemetry;
 // Re-structured layer entry points (incremental, re-exports existing modules)
 // Phase 6-A: New DDD structure (activated with --features "restructure_domain")
 #[cfg(feature = "restructure_domain")]
-pub mod application;
+pub use ::application as application;
 #[cfg(feature = "restructure_domain")]
-pub mod domain;
+pub use ::domain as domain;
 #[cfg(feature = "restructure_domain")]
 pub mod infrastructure;
 

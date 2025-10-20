@@ -157,6 +157,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
+name = "application"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "diesel",
+ "domain",
+ "mockall",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "utoipa",
+ "uuid",
+ "validator",
+]
+
+[[package]]
 name = "arbitrary"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -922,6 +940,7 @@ version = "3.0.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
+ "application",
  "argon2",
  "assert_cmd",
  "assert_fs",
@@ -944,6 +963,7 @@ dependencies = [
  "diesel",
  "diesel-derive-enum",
  "diesel_migrations",
+ "domain",
  "dotenvy",
  "ed25519-dalek",
  "flate2",
@@ -1030,6 +1050,13 @@ dependencies = [
  "uuid",
  "validator",
  "wiremock",
+]
+
+[[package]]
+name = "cms-server"
+version = "0.1.0"
+dependencies = [
+ "presentation",
 ]
 
 [[package]]
@@ -1752,6 +1779,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95249b50c6c185bee49034bcb378a49dc2b5dff0be90ff6616d31d64febab05d"
 dependencies = [
  "litrs",
+]
+
+[[package]]
+name = "domain"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "serde",
+ "thiserror 1.0.69",
+ "uuid",
 ]
 
 [[package]]
@@ -2812,6 +2850,13 @@ dependencies = [
  "hashbrown 0.16.0",
  "serde",
  "serde_core",
+]
+
+[[package]]
+name = "infrastructure"
+version = "0.1.0"
+dependencies = [
+ "application",
 ]
 
 [[package]]
@@ -3876,6 +3921,13 @@ checksum = "72dd2d6d381dfb73a193c7fca536518d7caee39fc8503f74e7dc0be0531b425c"
 dependencies = [
  "predicates-core",
  "termtree",
+]
+
+[[package]]
+name = "presentation"
+version = "0.1.0"
+dependencies = [
+ "application",
 ]
 
 [[package]]

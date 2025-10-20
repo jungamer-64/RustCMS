@@ -13,87 +13,13 @@ use thiserror::Error;
 /// ドメイン層のエラー
 ///
 /// ビジネスルール違反や不正な状態遷移を表現します。
-#[derive(Debug, Error, Clone, PartialEq)]
-pub enum DomainError {
-    #[error("Invalid user ID: {0}")]
-    InvalidUserId(String),
-    #[error("Invalid email: {0}")]
-    InvalidEmail(String),
-    #[error("Invalid username: {0}")]
-    InvalidUsername(String),
-    #[error("Invalid post ID: {0}")]
-    InvalidPostId(String),
-    #[error("Invalid slug: {0}")]
-    InvalidSlug(String),
-    #[error("Invalid title: {0}")]
-    InvalidTitle(String),
-    #[error("Invalid content: {0}")]
-    InvalidContent(String),
-    #[error("Invalid published at: {0}")]
-    InvalidPublishedAt(String),
-    #[error("Invalid post status: {0}")]
-    InvalidPostStatus(String),
-    #[error("Invalid comment text: {0}")]
-    InvalidCommentText(String),
-    #[error("Invalid comment author: {0}")]
-    InvalidCommentAuthor(String),
-    #[error("Invalid comment post: {0}")]
-    InvalidCommentPost(String),
-    #[error("Invalid comment status: {0}")]
-    InvalidCommentStatus(String),
-    #[error("Invalid state transition: {0}")]
-    InvalidStateTransition(String),
-    #[error("Invalid tag name: {0}")]
-    InvalidTagName(String),
-    #[error("Invalid tag description: {0}")]
-    InvalidTagDescription(String),
-    #[error("Invalid tag status: {0}")]
-    InvalidTagStatus(String),
-    #[error("Invalid category name: {0}")]
-    InvalidCategoryName(String),
-    #[error("Invalid category slug: {0}")]
-    InvalidCategorySlug(String),
-    #[error("Invalid category description: {0}")]
-    InvalidCategoryDescription(String),
-    #[error("Invalid category status: {0}")]
-    InvalidCategoryStatus(String),
-    #[error("Unknown domain error: {0}")]
-    Unknown(String),
-}
+pub use domain::common::{DomainError, DomainResult};
 
 // ============================================================================
 // Application Layer Errors
 // ============================================================================
 
-/// アプリケーション層のエラー
-///
-/// ユースケース実行時のエラーを表現します。
-#[derive(Debug, Error, Clone)]
-pub enum ApplicationError {
-    #[error("Domain error: {0}")]
-    DomainError(#[from] DomainError),
-
-    #[error("Repository error: {0}")]
-    RepositoryError(String),
-
-    #[error("Use case validation failed: {0}")]
-    ValidationError(String),
-
-    #[error("Invalid UUID: {0}")]
-    InvalidUuid(String),
-
-    #[error("Conflict: {0}")]
-    Conflict(String),
-
-    #[error("Not found: {0}")]
-    NotFound(String),
-
-    #[error("Authorization failed: {0}")]
-    Unauthorized(String),
-
-    #[error("Unknown application error: {0}")]
-    Unknown(String),
-}
+pub use application::common::types::{ApplicationError, ApplicationResult};
 
 // ============================================================================
 // Infrastructure Layer Errors
@@ -124,50 +50,6 @@ pub enum InfrastructureError {
 
     #[error("Unknown infrastructure error: {0}")]
     Unknown(String),
-}
-
-// ============================================================================
-// Error Conversions (ApplicationError)
-// ============================================================================
-
-/// Convert RepositoryError from ports module to ApplicationError
-#[cfg(feature = "restructure_domain")]
-impl From<crate::application::ports::repositories::RepositoryError> for ApplicationError {
-    fn from(err: crate::application::ports::repositories::RepositoryError) -> Self {
-        use crate::application::ports::repositories::RepositoryError as RE;
-        match err {
-            RE::NotFound(msg) => ApplicationError::NotFound(msg),
-            RE::Duplicate(msg) => ApplicationError::Conflict(msg),
-            RE::ValidationError(msg) => ApplicationError::ValidationError(msg),
-            RE::ConversionError(msg) => {
-                ApplicationError::ValidationError(format!("Conversion error: {}", msg))
-            }
-            RE::ConnectionError(msg) => {
-                ApplicationError::RepositoryError(format!("Connection error: {}", msg))
-            }
-            RE::DatabaseError(msg) | RE::Unknown(msg) => ApplicationError::RepositoryError(msg),
-        }
-    }
-}
-
-// ============================================================================
-// Error Conversions (Value Object Errors → DomainError)
-// ============================================================================
-
-/// Convert EmailError to DomainError
-#[cfg(feature = "restructure_domain")]
-impl From<crate::domain::user::EmailError> for DomainError {
-    fn from(err: crate::domain::user::EmailError) -> Self {
-        DomainError::InvalidEmail(err.to_string())
-    }
-}
-
-/// Convert UsernameError to DomainError
-#[cfg(feature = "restructure_domain")]
-impl From<crate::domain::user::UsernameError> for DomainError {
-    fn from(err: crate::domain::user::UsernameError) -> Self {
-        DomainError::InvalidUsername(err.to_string())
-    }
 }
 
 // ============================================================================
@@ -228,12 +110,6 @@ impl From<InfrastructureError> for AppError {
 // ============================================================================
 // Result Types
 // ============================================================================
-
-/// ドメイン層のResult型
-pub type DomainResult<T> = std::result::Result<T, DomainError>;
-
-/// アプリケーション層のResult型
-pub type ApplicationResult<T> = std::result::Result<T, ApplicationError>;
 
 /// インフラストラクチャ層のResult型
 pub type InfrastructureResult<T> = std::result::Result<T, InfrastructureError>;
