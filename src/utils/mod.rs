@@ -7,8 +7,6 @@ pub mod deprecation;
 // Phase 9: dto module removed (legacy code deleted in Phase 7)
 // pub mod dto;
 // pub mod error; // Removed in Phase 7
-pub mod init; // Phase 4: AppState initialization helpers for bin/ files
-pub mod response_ext;
 // Phase 9: search_index module removed (legacy code deleted in Phase 7)
 // pub mod search_index;
 pub mod security_validation;

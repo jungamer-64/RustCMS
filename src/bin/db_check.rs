@@ -23,7 +23,7 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     // Initialize common app state (includes database)
-    let state = cms_backend::utils::init::init_app_state().await?;
+    let state = init_app_state().await?;
 
     // If delete_post provided, attempt deletion and exit
     if let Some(id_str) = args.delete_post {
@@ -94,4 +94,27 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn init_env() {
+    if let Err(e) = dotenvy::dotenv() {
+        eprintln!("Warning: Could not load .env file: {}", e);
+    }
+}
+
+#[cfg(feature = "restructure_domain")]
+async fn init_app_state() -> cms_backend::Result<std::sync::Arc<cms_backend::AppState>> {
+    use cms_backend::infrastructure::app_state::AppState;
+    use std::sync::Arc;
+
+    init_env();
+    let config = cms_backend::Config::from_env()?;
+    let mut builder = AppState::builder(config);
+
+    #[cfg(feature = "database")]
+    {
+        builder = builder.with_database()?;
+    }
+
+    Ok(Arc::new(builder.build()?))
 }

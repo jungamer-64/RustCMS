@@ -20,7 +20,6 @@
 
 use chrono::Utc;
 use clap::Parser;
-use cms_backend::utils::init::init_env;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Backfill/inspect api_key lookup hash state", long_about=None)]
@@ -68,7 +67,7 @@ async fn main() -> anyhow::Result<()> {
 
     #[cfg(all(feature = "database", feature = "auth"))]
     {
-        let state = cms_backend::utils::init::init_app_state().await?;
+        let state = init_app_state().await?;
 
         // Fetch rows with an empty lookup_hash via AppState wrapper
         let rows: Vec<cms_backend::models::ApiKey> =
@@ -103,4 +102,27 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+fn init_env() {
+    if let Err(e) = dotenvy::dotenv() {
+        eprintln!("Warning: Could not load .env file: {}", e);
+    }
+}
+
+#[cfg(feature = "restructure_domain")]
+async fn init_app_state() -> cms_backend::Result<std::sync::Arc<cms_backend::AppState>> {
+    use cms_backend::infrastructure::app_state::AppState;
+    use std::sync::Arc;
+
+    init_env();
+    let config = cms_backend::Config::from_env()?;
+    let mut builder = AppState::builder(config);
+
+    #[cfg(feature = "database")]
+    {
+        builder = builder.with_database()?;
+    }
+
+    Ok(Arc::new(builder.build()?))
 }

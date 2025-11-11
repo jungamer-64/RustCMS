@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing
-    cms_backend::utils::init::init_env();
+    init_env();
 
     // Simple health check endpoint
     let app = Router::new()
@@ -35,4 +35,10 @@ async fn root() -> Json<serde_json::Value> {
         "version": env!("CARGO_PKG_VERSION"),
         "endpoints": ["/health"]
     }))
+}
+
+fn init_env() {
+    if let Err(e) = dotenvy::dotenv() {
+        eprintln!("Warning: Could not load .env file: {}", e);
+    }
 }

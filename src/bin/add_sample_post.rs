@@ -7,7 +7,7 @@ use cms_backend::{
 #[tokio::main]
 async fn main() -> cms_backend::Result<()> {
     // Load config and initialize database; propagate errors to the caller
-    let cfg = cms_backend::utils::init::init_logging_and_config()?;
+    let cfg = init_logging_and_config()?;
     let db = Database::new(&cfg.database).await?;
 
     // Build a minimal CreatePostRequest
@@ -26,4 +26,22 @@ async fn main() -> cms_backend::Result<()> {
     println!("Inserted sample post: {} (id={})", post.title, post.id);
 
     Ok(())
+}
+
+fn init_env() {
+    if let Err(e) = dotenvy::dotenv() {
+        eprintln!("Warning: Could not load .env file: {}", e);
+    }
+}
+
+fn init_logging_and_config() -> cms_backend::Result<cms_backend::Config> {
+    init_env();
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .init();
+
+    cms_backend::Config::from_env()
 }

@@ -17,7 +17,7 @@ async fn shutdown_signal() {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize full AppState and get config via AppState
-    let app_state = cms_backend::utils::init::init_app_state().await?;
+    let app_state = init_app_state().await?;
     let config = app_state.config.clone();
 
     info!("Starting admin server");
@@ -59,4 +59,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     Ok(())
+}
+
+fn init_env() {
+    if let Err(e) = dotenvy::dotenv() {
+        eprintln!("Warning: Could not load .env file: {}", e);
+    }
+}
+
+#[cfg(feature = "restructure_domain")]
+async fn init_app_state() -> cms_backend::Result<std::sync::Arc<cms_backend::AppState>> {
+    use cms_backend::infrastructure::app_state::AppState;
+    use std::sync::Arc;
+
+    init_env();
+    let config = cms_backend::Config::from_env()?;
+    let mut builder = AppState::builder(config);
+
+    #[cfg(feature = "database")]
+    {
+        builder = builder.with_database()?;
+    }
+
+    Ok(Arc::new(builder.build()?))
 }

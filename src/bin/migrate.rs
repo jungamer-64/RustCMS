@@ -147,15 +147,15 @@ fn initialize_logging(debug: bool) -> Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    init_env();
     let cli = Cli::parse();
 
     initialize_logging(cli.debug)?;
-    let _config = cms_backend::utils::init::init_logging_and_config()?;
 
     print_banner();
     check_dry_run_mode(cli.dry_run);
 
-    let app_state = cms_backend::utils::init::init_app_state().await?;
+    let app_state = init_app_state().await?;
     execute_and_handle_result(&cli, &app_state).await
 }
 
@@ -1031,6 +1031,29 @@ fn restore_backup(_state: &AppState, path: &str) -> Result<()> {
     warn!("💡 Use: psql -h host -U user -d db < {path}");
 
     Ok(())
+}
+
+fn init_env() {
+    if let Err(e) = dotenvy::dotenv() {
+        eprintln!("Warning: Could not load .env file: {}", e);
+    }
+}
+
+#[cfg(feature = "restructure_domain")]
+async fn init_app_state() -> Result<std::sync::Arc<cms_backend::AppState>> {
+    use cms_backend::infrastructure::app_state::AppState;
+    use std::sync::Arc;
+
+    init_env();
+    let config = cms_backend::Config::from_env()?;
+    let mut builder = AppState::builder(config);
+
+    #[cfg(feature = "database")]
+    {
+        builder = builder.with_database()?;
+    }
+
+    Ok(Arc::new(builder.build()?))
 }
 
 #[cfg(test)]

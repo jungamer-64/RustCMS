@@ -1,7 +1,6 @@
 use clap::{Parser, Subcommand};
 use cms_backend::AppState;
 use cms_backend::config::Config;
-use cms_backend::utils::init::init_env;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -69,4 +68,10 @@ async fn main() -> cms_backend::Result<()> {
         }
     }
     Ok(())
+}
+
+fn init_env() {
+    if let Err(e) = dotenvy::dotenv() {
+        eprintln!("Warning: Could not load .env file: {}", e);
+    }
 }

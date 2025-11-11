@@ -31,3 +31,4 @@ hyper = { version = "1.6", features = ["full"] }
 tokio = { version = "1.47", features = ["full"] }
 tracing = "0.1"
 thiserror = "1.0"
+dotenvy = "0.15"

@@ -46,7 +46,7 @@ enum Commands {
 #[tokio::main]
 #[allow(clippy::too_many_lines)]
 async fn main() -> Result<()> {
-    cms_backend::utils::init::init_env();
+    init_env();
     let cli = Cli::parse();
 
     match cli.command {
@@ -57,7 +57,7 @@ async fn main() -> Result<()> {
         } => {
             // Delegate to existing db_check implementation where possible
             // We'll reuse logic from src/bin/db_check.rs but inline minimal code here
-            let state = cms_backend::utils::init::init_app_state().await?;
+            let state = init_app_state().await?;
 
             if let Some(id_str) = delete_post {
                 if let Ok(uuid) = uuid::Uuid::parse_str(&id_str) {
@@ -119,13 +119,36 @@ async fn main() -> Result<()> {
                             "- {} | {} | author={} | {} | {}",
                             p.id, p.title, p.author_id, p.status, p.created_at
                         );
-                    }
-                }
+    }
+}
+
+fn init_env() {
+    if let Err(e) = dotenvy::dotenv() {
+        eprintln!("Warning: Could not load .env file: {}", e);
+    }
+}
+
+#[cfg(feature = "restructure_domain")]
+async fn init_app_state() -> cms_backend::Result<std::sync::Arc<cms_backend::AppState>> {
+    use cms_backend::infrastructure::app_state::AppState;
+    use std::sync::Arc;
+
+    init_env();
+    let config = cms_backend::Config::from_env()?;
+    let mut builder = AppState::builder(config);
+
+    #[cfg(feature = "database")]
+    {
+        builder = builder.with_database()?;
+    }
+
+    Ok(Arc::new(builder.build()?))
+}
             }
         }
 
         Commands::AddSamplePost { title } => {
-            let state = cms_backend::utils::init::init_app_state().await?;
+            let state = init_app_state().await?;
             let sample_post = cms_backend::models::post::CreatePostRequest {
                 title: title.clone(),
                 content: "This is a sample post added by dev-tools".to_string(),

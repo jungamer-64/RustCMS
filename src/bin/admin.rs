@@ -69,7 +69,7 @@ async fn run(cli: Cli) -> Result<()> {
     let start = Instant::now();
 
     // Initialize application state with verbosity control
-    let app_state = cms_backend::utils::init::init_app_state_with_verbose(cli.verbose)
+    let app_state = init_app_state_with_verbose(cli.verbose)
         .await
         .map_err(|e| {
             AppError::Internal(format!("Failed to initialize application state: {}", e))
@@ -172,6 +172,39 @@ async fn validate_prerequisites(app_state: &cms_backend::AppState) -> Result<()>
 
     info!("All prerequisites validated");
     Ok(())
+}
+
+fn init_env() {
+    if let Err(e) = dotenvy::dotenv() {
+        eprintln!("Warning: Could not load .env file: {}", e);
+    }
+}
+
+#[cfg(feature = "restructure_domain")]
+async fn init_app_state_with_verbose(
+    verbose: bool,
+) -> cms_backend::Result<std::sync::Arc<cms_backend::AppState>> {
+    if verbose {
+        tracing::info!("Verbose initialization enabled");
+    }
+    init_app_state().await
+}
+
+#[cfg(feature = "restructure_domain")]
+async fn init_app_state() -> cms_backend::Result<std::sync::Arc<cms_backend::AppState>> {
+    use cms_backend::infrastructure::app_state::AppState;
+    use std::sync::Arc;
+
+    init_env();
+    let config = cms_backend::Config::from_env()?;
+    let mut builder = AppState::builder(config);
+
+    #[cfg(feature = "database")]
+    {
+        builder = builder.with_database()?;
+    }
+
+    Ok(Arc::new(builder.build()?))
 }
 
 #[cfg(test)]

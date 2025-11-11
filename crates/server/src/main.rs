@@ -37,7 +37,7 @@ enum ServerError {
 #[tokio::main]
 async fn main() -> Result<(), ServerError> {
     // Initialize application state (database/cache/auth/search according to features)
-    let state = cms_backend::utils::init::init_app_state().await?;
+    let state = init_app_state().await?;
 
     info!("🚀 Starting Unified CMS Server");
     info!("   Integrating cms-lightweight + cms-simple + cms-unified functionality");
@@ -110,4 +110,27 @@ async fn shutdown_signal() {
     }
 
     info!("🔌 Signal received, starting graceful shutdown");
+}
+
+fn init_env() {
+    if let Err(e) = dotenvy::dotenv() {
+        eprintln!("Warning: Could not load .env file: {}", e);
+    }
+}
+
+#[cfg(feature = "restructure_domain")]
+async fn init_app_state() -> Result<std::sync::Arc<cms_backend::AppState>, BackendAppError> {
+    use cms_backend::infrastructure::app_state::AppState;
+    use std::sync::Arc;
+
+    init_env();
+    let config = cms_backend::Config::from_env()?;
+    let mut builder = AppState::builder(config);
+
+    #[cfg(feature = "database")]
+    {
+        builder = builder.with_database()?;
+    }
+
+    Ok(Arc::new(builder.build()?))
 }
