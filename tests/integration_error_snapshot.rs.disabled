@@ -1,6 +1,7 @@
 use axum::body::to_bytes;
 use axum::{Router, routing::get};
-use cms_backend::{error::AppError, utils::response_ext::ApiOk};
+use cms_backend::error::AppError;
+use shared_core::types::api_types::ApiOk;
 use hyper::{Request, StatusCode};
 use insta::assert_json_snapshot;
 use tower::ServiceExt; // for oneshot

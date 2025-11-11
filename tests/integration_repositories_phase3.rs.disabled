@@ -27,12 +27,23 @@ use cms_backend::application::ports::repositories::{
 };
 use cms_backend::domain::comment::Comment;
 use cms_backend::domain::post::{Post, PostStatus};
-use cms_backend::domain::user::User;
+use cms_backend::domain::user::{User, Username, Email};
 use cms_backend::infrastructure::database::repositories::{
     DieselCommentRepository, DieselPostRepository, DieselUserRepository,
 };
 use helpers::integration::{cleanup_database, setup_test_database};
 use serial_test::serial;
+
+// ============================================================================
+// Test Helpers (Phase 5: User value object API)
+// ============================================================================
+
+/// Helper function to create a test user with the new value object API
+fn create_test_user(username: &str, email: &str) -> User {
+    let username = Username::new(username.to_string()).expect("Invalid username");
+    let email = Email::new(email.to_string()).expect("Invalid email");
+    User::new(username, email)
+}
 
 // ============================================================================
 // User Repository 統合テスト
@@ -44,13 +55,8 @@ async fn test_user_repository_save_and_find_by_id() {
     let pool = setup_test_database();
     let repo = DieselUserRepository::new(pool.clone());
 
-    // テストユーザー作成
-    let user = User::new(
-        "testuser".to_string(),
-        "test@example.com".to_string(),
-        "hashedpw",
-    )
-    .expect("Failed to create user");
+    // Phase 5: Use helper function for new User API
+    let user = create_test_user("testuser", "test@example.com");
     let user_id = user.id();
 
     // 保存
@@ -62,8 +68,8 @@ async fn test_user_repository_save_and_find_by_id() {
     assert!(found.is_some());
     let found_user = found.unwrap();
     assert_eq!(found_user.id(), user_id);
-    assert_eq!(found_user.username().as_str(), "testuser");
-    assert_eq!(found_user.email().as_str(), "test@example.com");
+    assert_eq!(found_user.username().to_string(), "testuser");
+    assert_eq!(found_user.email().to_string(), "test@example.com");
 
     // クリーンアップ
     cleanup_database(&*pool);

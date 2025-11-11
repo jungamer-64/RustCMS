@@ -1,7 +1,7 @@
 #![allow(clippy::option_if_let_else)]
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use utoipa::ToSchema;
 
 /// 標準的なAPIレスポンス構造
@@ -77,6 +77,29 @@ impl ApiResponse<()> {
 }
 
 // Deprecated helpers (ok/ok_message/err) were removed after migration to ApiOk and direct ApiResponse usage.
+
+/// Newtype wrapper enabling `ApiOk(payload)` return style in handlers.
+pub struct ApiOk<T: Serialize>(pub T);
+
+impl<T: Serialize> From<T> for ApiOk<T> {
+    fn from(value: T) -> Self {
+        Self(value)
+    }
+}
+
+#[cfg(feature = "web")]
+impl<T: Serialize> axum::response::IntoResponse for ApiOk<T> {
+    fn into_response(self) -> axum::response::Response {
+        let body: axum::Json<ApiResponse<T>> = axum::Json(ApiResponse::success(self.0));
+        body.into_response()
+    }
+}
+
+/// Convenience helper returning `ApiOk({"message": msg})`.
+#[must_use]
+pub fn ok_message(msg: &str) -> ApiOk<serde_json::Value> {
+    ApiOk(json!({"message": msg}))
+}
 
 /// ページネーション情報
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

@@ -1,7 +1,7 @@
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use cms_backend::utils::api_types::ApiResponse;
-use cms_backend::utils::response_ext::ApiOk;
+use shared_core::types::api_types::ApiOk;
 use serde_json::Value;
 
 #[test]

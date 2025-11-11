@@ -26,15 +26,18 @@ pub trait AdminBackend: Sync + Send {
 #[async_trait]
 impl AdminBackend for AppState {
     async fn list_users(&self, role: Option<&str>, active_only: Option<bool>) -> Result<Vec<User>> {
-        self.database.list_users(role, active_only).await
+        // Phase 2: database field is Option, use database() method
+        self.database().list_users(role, active_only).await
     }
 
     async fn create_user(&self, req: CreateUserRequest) -> Result<User> {
-        self.db_create_user(req).await
+        // Phase 2: db_create_user renamed to create_user
+        self.create_user(req).await
     }
 
     async fn reset_user_password(&self, user_id: uuid::Uuid, new_password: &str) -> Result<()> {
-        self.db_reset_user_password(user_id, new_password).await
+        // Phase 2: db_reset_user_password renamed to reset_user_password
+        self.reset_user_password(user_id, new_password).await
     }
 
     async fn get_user_by_id(&self, id: uuid::Uuid) -> Result<User> {

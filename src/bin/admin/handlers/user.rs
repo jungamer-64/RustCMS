@@ -1,7 +1,7 @@
 // src/bin/admin/handlers/user.rs
 use cms_backend::{
     AppState, Result,
-    models::{CreateUserRequest, UpdateUserRequest, UserRole},
+    models::{CreateUserRequest, UpdateUserRequest},
 };
 use comfy_table::{Cell, Table};
 use secrecy::{ExposeSecret, SecretString};
@@ -9,7 +9,7 @@ use tokio::task;
 use tracing::{info, warn};
 
 use crate::backend::AdminBackend;
-use crate::cli::UserAction;
+use crate::cli::{UserAction, UserRoleArg};
 use crate::util::{
     find_user_by_id_or_username, generate_random_password_with_len, prompt_password_async,
 };
@@ -44,11 +44,15 @@ pub async fn handle_user_action<B: AdminBackend + ?Sized>(
 
 async fn list<B: AdminBackend + ?Sized>(
     backend: &B,
-    role: &Option<UserRole>,
+    role: &Option<UserRoleArg>,
     active_only: bool,
 ) -> Result<()> {
     info!("📊 Listing users...");
-    let role_filter: Option<&str> = role.as_ref().map(|r| r.as_str());
+    let role_filter: Option<&str> = role.as_ref().map(|r| match r {
+        UserRoleArg::Admin => "admin",
+        UserRoleArg::Editor => "editor",
+        UserRoleArg::Subscriber => "subscriber",
+    });
     let active_filter = if active_only { Some(true) } else { None };
     let users = backend.list_users(role_filter, active_filter).await?;
 
@@ -60,13 +64,14 @@ async fn list<B: AdminBackend + ?Sized>(
     let mut table = Table::new();
     table.set_header(vec!["ID", "Username", "Email", "Role", "Active"]);
 
+    // Phase 2: User fields are private, use getters
     for user in users {
         table.add_row(vec![
-            Cell::new(user.id.to_string()),
-            Cell::new(user.username),
-            Cell::new(user.email),
-            Cell::new(user.role),
-            Cell::new(if user.is_active { "Yes" } else { "No" }),
+            Cell::new(user.id().to_string()),
+            Cell::new(user.username().to_string()),
+            Cell::new(user.email().to_string()),
+            Cell::new(format!("{:?}", user.role())),
+            Cell::new(if user.is_active() { "Yes" } else { "No" }),
         ]);
     }
 
@@ -79,7 +84,7 @@ async fn create<B: AdminBackend + ?Sized>(
     backend: &B,
     username: String,
     email: String,
-    role: UserRole,
+    _role: UserRoleArg, // Phase 2: CreateUserRequest doesn't accept role
     generate_password: bool,
 ) -> Result<()> {
     let password = if generate_password {
@@ -95,22 +100,21 @@ async fn create<B: AdminBackend + ?Sized>(
 
     let password_for_request = password.expose_secret().to_owned();
 
+    // Phase 2: CreateUserRequest simplified (no first_name, last_name, role)
     let user = CreateUserRequest {
         username: username.clone(),
         email,
         password: password_for_request,
-        first_name: Some(String::new()),
-        last_name: Some(String::new()),
-        role,
     };
 
     let created_user = backend.create_user(user).await?;
 
+    // Phase 2: User fields are private, use getters
     info!("✅ User created successfully:");
-    println!("  ID: {}", created_user.id);
-    println!("  Username: {}", created_user.username);
-    println!("  Email: {}", created_user.email);
-    println!("  Role: {}", created_user.role);
+    println!("  ID: {}", created_user.id());
+    println!("  Username: {}", created_user.username());
+    println!("  Email: {}", created_user.email());
+    println!("  Role: {:?}", created_user.role());
 
     if generate_password {
         warn!("🔑 A new random password has been generated.");
@@ -125,28 +129,28 @@ async fn update<B: AdminBackend + ?Sized>(
     backend: &B,
     user: String,
     email: Option<String>,
-    role: Option<UserRole>,
-    active: Option<bool>,
+    _role: Option<UserRoleArg>, // Phase 2: UpdateUserRequest API changed
+    _active: Option<bool>,      // Phase 2: UpdateUserRequest API changed
 ) -> Result<()> {
     let existing_user = find_user_by_id_or_username(backend, &user).await?;
 
+    // Phase 2: UpdateUserRequest simplified
     let update = UpdateUserRequest {
         username: None,
         email: email.clone(),
-        first_name: None,
-        last_name: None,
-        role,
-        is_active: active,
+        password: None,
     };
 
-    let updated_user = backend.update_user(existing_user.id, update).await?;
+    // Phase 2: User ID is UserId type, use getter
+    let updated_user = backend.update_user(existing_user.id().into(), update).await?;
 
+    // Phase 2: User fields are private, use getters
     info!("✅ User updated successfully:");
-    println!("  ID: {}", updated_user.id);
-    println!("  Username: {}", updated_user.username);
-    println!("  Email: {}", updated_user.email);
-    println!("  Role: {}", updated_user.role);
-    println!("  Active: {}", updated_user.is_active);
+    println!("  ID: {}", updated_user.id());
+    println!("  Username: {}", updated_user.username());
+    println!("  Email: {}", updated_user.email());
+    println!("  Role: {:?}", updated_user.role());
+    println!("  Active: {}", updated_user.is_active());
 
     Ok(())
 }
@@ -154,10 +158,11 @@ async fn update<B: AdminBackend + ?Sized>(
 async fn delete<B: AdminBackend + ?Sized>(backend: &B, user: String, force: bool) -> Result<()> {
     let existing_user = find_user_by_id_or_username(backend, &user).await?;
 
+    // Phase 2: User fields are private, use getters
     if !force {
         warn!(
             "⚠️  You are about to delete user: {} ({})",
-            existing_user.username, existing_user.email
+            existing_user.username(), existing_user.email()
         );
         warn!("⚠️  This action cannot be undone!");
 
@@ -182,7 +187,8 @@ async fn delete<B: AdminBackend + ?Sized>(backend: &B, user: String, force: bool
         }
     }
 
-    backend.delete_user(existing_user.id).await?;
+    // Phase 2: User ID is UserId type, use getter and convert
+    backend.delete_user(existing_user.id().into()).await?;
     info!("✅ User deleted successfully");
 
     Ok(())
@@ -210,18 +216,20 @@ async fn reset_password<B: AdminBackend + ?Sized>(
         (Some(_), true) => unreachable!(),
     }?;
 
+    // Phase 2: User ID is UserId type, use getter and convert
     backend
-        .reset_user_password(existing_user.id, new_password.expose_secret())
+        .reset_user_password(existing_user.id().into(), new_password.expose_secret())
         .await?;
 
+    // Phase 2: User fields are private, use getters
     info!(
         "✅ Password reset successfully for user: {}",
-        existing_user.username
+        existing_user.username()
     );
     if generate_password {
         warn!(
             "🔑 A new random password has been generated for user: {}",
-            existing_user.username
+            existing_user.username()
         );
         println!("Generated password: {}", new_password.expose_secret());
     }

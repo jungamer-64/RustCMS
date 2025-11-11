@@ -24,15 +24,17 @@ autobins = false
 name = "cms_backend"
 path = "src/lib.rs"
 
-[[bin]]
-name = "cms-migrate"
-path = "src/bin/migrate.rs"
-required-features = ["database"]
+# Phase 2/3: Temporarily disabled - requires application layer integration
+# [[bin]]
+# name = "cms-migrate"
+# path = "src/bin/migrate.rs"
+# required-features = ["database"]
 
-[[bin]]
-name = "cms-admin"
-path = "src/bin/admin.rs"
-required-features = ["database"]
+# Phase 2/3: Temporarily disabled - requires application layer integration
+# [[bin]]
+# name = "cms-admin"
+# path = "src/bin/admin.rs"
+# required-features = ["database"]
 
 [[bin]]
 name = "benchmark-analyzer"
@@ -448,10 +450,11 @@ required-features = ["dev-tools"]
 name = "admin_server"
 path = "src/bin/admin_server.rs"
 
-[[bin]]
-name = "rotate_api_key"
-path = "src/bin/rotate_api_key.rs"
-required-features = ["auth", "database"]
+# Phase 2/3: Temporarily disabled - requires application layer integration
+# [[bin]]
+# name = "rotate_api_key"
+# path = "src/bin/rotate_api_key.rs"
+# required-features = ["auth", "database"]
 
 [[bin]]
 name = "run_with_router"
@@ -463,10 +466,11 @@ name = "simple-server"
 path = "src/bin/simple-server.rs"
 required-features = ["dev-tools"]
 
-[[bin]]
-name = "backfill_api_key_lookup"
-path = "src/bin/backfill_api_key_lookup.rs"
-required-features = ["database", "auth"]
+# Phase 2/3: Temporarily disabled - requires application layer integration
+# [[bin]]
+# name = "backfill_api_key_lookup"
+# path = "src/bin/backfill_api_key_lookup.rs"
+# required-features = ["database", "auth"]
 
 
 [[bin]]
@@ -476,10 +480,10 @@ required-features = ["dev-tools"]
 
 # ===== BENCHMARKS (パフォーマンス測定) =====
 
-# Phase 5-3: Staging Deployment & Canary Release Performance Tests
-[[bench]]
-name = "phase5_3_performance"
-harness = false
+# Phase 2/3: Temporarily disabled - requires events module
+# [[bench]]
+# name = "phase5_3_performance"
+# harness = false
 # uses criterion crate (included in dev-dependencies)
 
 # Phase 1-2: Value Object and Domain Layer Benchmarks
