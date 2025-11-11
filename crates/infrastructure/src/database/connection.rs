@@ -16,7 +16,7 @@
 //! let pool = DatabasePool::new("postgresql://user:pass@localhost/mydb")?;
 //! ```
 
-use crate::common::InfrastructureError;
+use shared_core::error::InfrastructureError;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use std::sync::Arc;

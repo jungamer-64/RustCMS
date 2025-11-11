@@ -194,18 +194,6 @@ impl From<biscuit_auth::error::Token> for AuthError {
     }
 }
 
-// アプリケーションエラーへの変換
-impl From<AuthError> for crate::AppError {
-    fn from(err: AuthError) -> Self {
-        match err {
-            AuthError::InsufficientPermissions { .. } | AuthError::ResourceAccessDenied { .. } => {
-                Self::Authorization(err.to_string())
-            }
-            _ => Self::Authentication(err.to_string()),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

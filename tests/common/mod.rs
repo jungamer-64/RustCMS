@@ -56,8 +56,9 @@ const DUMMY_HASH: &str = "$argon2id$v=19$m=65536,t=3,p=4$YWJj$YWJj";
 #[allow(dead_code)]
 #[cfg(feature = "database")]
 pub async fn build_db_result()
--> Result<Option<cms_backend::database::Database>, cms_backend::AppError> {
+-> Result<Option<cms_backend::infrastructure::database::connection::DatabasePool>, cms_backend::AppError> {
     use cms_backend::config::DatabaseConfig;
+    use secrecy::ExposeSecret;
 
     let url = std::env::var("DATABASE_URL").ok();
     let url = match url {
@@ -76,9 +77,9 @@ pub async fn build_db_result()
         enable_migrations: false,
     };
 
-    match cms_backend::database::Database::new(&cfg).await {
+    match cms_backend::infrastructure::database::connection::DatabasePool::new(cfg.url.expose_secret()) {
         Ok(db) => Ok(Some(db)),
-        Err(e) => Err(e),
+        Err(e) => Err(cms_backend::AppError::Internal(e.to_string())),
     }
 }
 
@@ -86,7 +87,7 @@ pub async fn build_db_result()
 /// database is unavailable and logs any initialization errors.
 #[allow(dead_code)]
 #[cfg(feature = "database")]
-pub async fn build_db() -> Option<cms_backend::database::Database> {
+pub async fn build_db() -> Option<cms_backend::infrastructure::database::connection::DatabasePool> {
     match build_db_result().await {
         Ok(db_opt) => db_opt,
         Err(e) => {
@@ -101,7 +102,7 @@ pub async fn build_db() -> Option<cms_backend::database::Database> {
 #[cfg(all(feature = "auth", feature = "database"))]
 #[allow(dead_code, clippy::unused_async)] // Used by tests, no actual async operations needed
 pub async fn build_auth(
-    db: &cms_backend::database::Database,
+    db: &cms_backend::infrastructure::database::connection::DatabasePool,
     access_ttl: u64,
     refresh_ttl: u64,
 ) -> cms_backend::auth::AuthService {
@@ -125,26 +126,25 @@ pub async fn build_auth(
 #[cfg(all(feature = "auth", feature = "database"))]
 #[allow(dead_code)]
 pub fn dummy_user() -> cms_backend::models::User {
-    // The `User` model stores `role` as `String` (see src/models/user.rs), so
-    // we convert from the `UserRole` enum to the string representation here.
-    // If the model changes to store `UserRole` directly, change this helper
-    // to construct the enum directly instead.
     use chrono::Utc;
-    use cms_backend::models::UserRole;
+    use cms_backend::domain::user::{Email, Username, UserId, UserRole};
+    use uuid::Uuid;
 
+    let username = Username::new(format!("user_{}", Uuid::new_v4().simple()))
+        .expect("Failed to create username");
+    let email = Email::new(format!("test+{}@example.com", Uuid::new_v4()))
+        .expect("Failed to create email");
+    
     let now = Utc::now();
-    cms_backend::models::User {
-        id: Uuid::new_v4(),
-        username: format!("user_{}", Uuid::new_v4().simple()),
-        email: format!("test+{}@example.com", Uuid::new_v4()),
-        password_hash: Some(DUMMY_HASH.into()), // Dummy hash
-        first_name: None,
-        last_name: None,
-        role: UserRole::Subscriber.as_str().to_string(),
-        is_active: true,
-        email_verified: false,
-        last_login: None,
-        created_at: now,
-        updated_at: now,
-    }
+    cms_backend::models::User::restore(
+        UserId::new(),
+        username,
+        email,
+        Some(DUMMY_HASH.into()),
+        UserRole::Subscriber,
+        true,
+        now,
+        now,
+        None,
+    )
 }

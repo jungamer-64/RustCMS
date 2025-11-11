@@ -1,45 +1,29 @@
 //! Common Layer
 //!
-//! レイヤー横断で使用される共通機能です。
-//! - types: 共通型定義（Result型、エラー型階層、DTOs、Pagination等）
-//! - helpers: 純粋関数ユーティリティ（date, hash, text, URL等）
-//! - security: セキュリティ関連ヘルパー（password, validation）
-//! - validation: バリデーション関数
-//! - telemetry: 監視・ロギング（Phase 2+で実装予定）
+//! このモジュールはshared-coreクレートからre-exportし、後方互換性を保ちます。
+//! 新しいコードはshared_coreを直接使用することを推奨します。
 
-// Phase 1 で実装完了: エラー型階層
-pub mod error_types;
+// Re-export everything from shared-core for backward compatibility
+pub use shared_core::error as error_types;
+pub use shared_core::helpers;
+pub use shared_core::security;
+pub use shared_core::types as type_utils;
 
-// Phase 2 で実装完了: Utility type modules (copied from src/shared/)
-// NOTE: types/ subdirectory has its own mod.rs for nested organization
-// types/ は API types, DTOs, Pagination 等のユーティリティ型を含む
-
-// types サブディレクトリは独立したモジュールとして宣言
-pub mod type_utils;
-
-// Helpers, security, validation
-pub mod helpers;
-pub mod security;
+// Validation module (not yet migrated to shared-core)
 pub mod validation;
 
-// Convenience re-exports from error_types (PRIMARY error types)
-pub use error_types::{
-    AppError, ApplicationError, ApplicationResult, DomainError, DomainResult, InfrastructureError,
-    InfrastructureResult, Result,
+// Convenience re-exports (PRIMARY error types)
+pub use shared_core::error::{
+    AppError, ApplicationError, ApplicationResult, DomainError, DomainResult,
+    InfrastructureError, InfrastructureResult, Result,
 };
 
 // types モジュール用のエイリアス (backward compatibility)
 pub mod types {
-    pub use super::error_types::*;
+    pub use shared_core::error::*;
 }
 
 // Prelude for ease of use
 pub mod prelude {
-    pub use super::error_types::*;
-    pub use super::helpers::*;
-    pub use super::security::*;
-    pub use super::validation::*;
+    pub use shared_core::prelude::*;
 }
-
-// Phase 2+ で実装予定
-// pub mod telemetry;

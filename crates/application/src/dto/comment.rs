@@ -3,7 +3,9 @@
 //!
 //! Comment エンティティと HTTP レスポンス/リクエストの間のデータ変換を担当します。
 
-use domain::comment::{Comment, CommentStatus, CommentText};
+use domain::comment::{Comment, CommentStatus};
+#[cfg(test)]
+use domain::comment::CommentText;
 use domain::post::PostId;
 use domain::user::UserId;
 use chrono::{DateTime, Utc};

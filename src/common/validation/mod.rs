@@ -1,14 +1,6 @@
-//! Shared Validation Utilities
+//! Shared Validation Utilities (legacy shim)
 //!
-//! Input validation and sanitization functions.
+//! Restored here as a thin re-export of the canonical implementations living in
+//! the `shared-core` crate.
 
-// Note: validation.rs の内容を直接ここに含めるか、
-// または validation.rs を別名にリネームする必要があります。
-// 今回は validation.rs の内容を再エクスポートします。
-
-// Module inception を避けるため、validation.rs を validators.rs にリネームする
-#[path = "validation.rs"]
-mod validators;
-
-// Re-exports for convenience
-pub use validators::*;
+pub use shared_core::validation::*;

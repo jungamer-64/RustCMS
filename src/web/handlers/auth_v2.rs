@@ -2,13 +2,13 @@
 //!
 //! JWT トークンのリフレッシュエンドポイントを提供します。
 
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, error, info};
 
 use crate::{
-    auth::{AuthError, JwtService},
+    auth::AuthError,
     common::type_utils::common_types::SessionId,
     error::AppError,
     infrastructure::app_state::AppState,

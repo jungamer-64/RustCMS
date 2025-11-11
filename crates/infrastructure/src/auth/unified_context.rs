@@ -27,9 +27,9 @@ use uuid::Uuid;
 use domain::user::UserRole;
 
 #[cfg(not(feature = "restructure_domain"))]
-use crate::models::UserRole;
+use domain::user::UserRole;
 
-use crate::common::type_utils::common_types::SessionId;
+use shared_core::types::common_types::SessionId;
 
 /// 統合認証コンテキスト (JWT + Biscuit)
 ///

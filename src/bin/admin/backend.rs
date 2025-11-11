@@ -38,18 +38,18 @@ impl AdminBackend for AppState {
     }
 
     async fn get_user_by_id(&self, id: uuid::Uuid) -> Result<User> {
-        self.db_get_user_by_id(id).await
+        self.get_user_by_id(id).await
     }
 
     async fn get_user_by_username(&self, username: &str) -> Result<User> {
-        self.db_get_user_by_username(username).await
+        self.get_user_by_username(username).await
     }
 
     async fn update_user(&self, id: uuid::Uuid, req: UpdateUserRequest) -> Result<User> {
-        self.db_update_user(id, req).await
+        self.update_user(id, req).await
     }
 
     async fn delete_user(&self, id: uuid::Uuid) -> Result<()> {
-        self.db_delete_user(id).await
+        self.delete_user(id).await
     }
 }

@@ -148,6 +148,10 @@ pub use infrastructure::app_state::AppState;
 pub use config::Config;
 pub use error::{AppError, Result};
 
+// Re-export infrastructure modules for backward compatibility
+#[cfg(feature = "restructure_domain")]
+pub use infrastructure::events;
+
 // Legacy compatibility: re-export domain entities as "models"
 #[cfg(feature = "restructure_domain")]
 pub mod models {
@@ -157,6 +161,12 @@ pub mod models {
     pub use crate::domain::post::{Post, PostId, PostStatus};
     pub use crate::domain::tag::{Tag, TagId};
     pub use crate::domain::user::{User, UserId, UserRole};
+    
+    // Re-export application DTOs for backward compatibility
+    pub use crate::application::dto::user::{CreateUserRequest, UpdateUserRequest};
+    pub use crate::application::dto::post::CreatePostRequest;
+    
+    // Note: ApiKey should be added when infrastructure is refactored
 }
 
 /// Build information endpoint

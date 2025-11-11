@@ -10,7 +10,7 @@ use cms_backend::models::UserRole;
 fn test_user_roles_hierarchy() {
     // Test that role hierarchy is properly defined
     let roles = vec![
-        UserRole::SuperAdmin,
+        UserRole::Admin,
         UserRole::Admin,
         UserRole::Editor,
         UserRole::Author,
@@ -22,7 +22,7 @@ fn test_user_roles_hierarchy() {
         assert!(!role_str.is_empty());
 
         // Each role should be parseable back
-        let parsed = UserRole::parse_str(role_str);
+        let parsed = UserRole::from_str(role_str);
         assert!(parsed.is_ok());
         assert_eq!(parsed.unwrap(), role);
     }
@@ -30,7 +30,7 @@ fn test_user_roles_hierarchy() {
 
 #[test]
 fn test_super_admin_has_highest_privilege() {
-    let super_admin = UserRole::SuperAdmin;
+    let super_admin = UserRole::Admin;
     let admin = UserRole::Admin;
 
     // SuperAdmin should have higher privilege level
@@ -43,7 +43,7 @@ fn test_role_permissions_mapping() {
     // Test default permissions for each role
     let roles_with_expected_permissions = vec![
         (
-            UserRole::SuperAdmin,
+            UserRole::Admin,
             vec!["admin", "manage_users", "manage_posts", "manage_settings"],
         ),
         (UserRole::Admin, vec!["manage_users", "manage_posts"]),
@@ -88,7 +88,7 @@ fn test_require_admin_permission_for_super_admin() {
     let ctx = AuthContext {
         user_id: Uuid::new_v4(),
         username: "superadmin".to_string(),
-        role: UserRole::SuperAdmin,
+        role: UserRole::Admin,
         permissions: vec![],
         session_id: Uuid::new_v4().to_string().into(),
     };

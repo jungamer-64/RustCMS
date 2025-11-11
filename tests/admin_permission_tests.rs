@@ -2,7 +2,7 @@
 
 use cms_backend::auth::{AuthContext, require_admin_permission};
 use cms_backend::models::UserRole;
-use cms_backend::utils::common_types::SessionId;
+use shared_core::types::common_types::SessionId;
 use uuid::Uuid;
 
 mod common;
@@ -13,7 +13,7 @@ fn test_admin_permission_super_admin() {
     let auth_context = AuthContext {
         user_id: Uuid::new_v4(),
         username: "superadmin".to_string(),
-        role: UserRole::SuperAdmin,
+        role: UserRole::Admin,
         session_id: SessionId("test_session".to_string()),
         permissions: vec![
             "admin".to_string(),

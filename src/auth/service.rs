@@ -146,11 +146,11 @@ impl AuthService {
     /// データベースから認証サービスを作成
     pub fn new(
         config: &AuthConfig,
-        database: &crate::database::connection::DatabasePool,
+        database: &crate::infrastructure::database::connection::DatabasePool,
     ) -> Result<Self> {
         #[cfg(all(feature = "database", feature = "restructure_domain"))]
         {
-            use crate::DieselUserRepository;
+            use crate::infrastructure::DieselUserRepository;
             let repo: Arc<dyn UserRepository> =
                 Arc::new(DieselUserRepository::new(database.get_pool()));
             Self::new_with_repo(config, repo)
@@ -165,6 +165,27 @@ impl AuthService {
 
         #[cfg(not(feature = "database"))]
         compile_error!("auth feature requires database feature");
+    }
+
+    /// Convert domain User to API UserInfo
+    ///
+    /// Maps the domain `User` entity to the API `UserInfo` response type.
+    /// Note: The domain User model does not currently track first_name, last_name,
+    /// or email_verified, so these fields are set to default values.
+    fn user_to_info(user: &User) -> UserInfo {
+        UserInfo {
+            id: user.id().to_string(),
+            username: user.username().as_str().to_string(),
+            email: user.email().as_str().to_string(),
+            first_name: None, // Not tracked in domain::User yet
+            last_name: None,  // Not tracked in domain::User yet
+            role: format!("{:?}", user.role()), // Convert UserRole enum to string
+            is_active: user.is_active(),
+            email_verified: false, // Not tracked in domain::User yet
+            last_login: user.last_login(),
+            created_at: user.created_at(),
+            updated_at: user.updated_at(),
+        }
     }
 
     /// ユーザーを認証
@@ -237,7 +258,7 @@ impl AuthService {
     }
 
     /// Phase 9: 最終ログイン日時を更新
-    pub async fn update_user_last_login(&self, user_id: domain::user::UserId) -> Result<()> {
+    pub async fn update_user_last_login(&self, user_id: crate::domain::user::UserId) -> Result<()> {
         self.user_repo
             .update_last_login(user_id)
             .await
@@ -302,10 +323,12 @@ impl AuthService {
         );
 
         Ok(AuthResponse {
-            user: UserInfo::from(&user),
+            user: Self::user_to_info(&user),
             tokens: AuthTokens {
                 access_token: token_pair.access_token,
                 refresh_token: token_pair.refresh_token,
+                token_type: "Bearer".to_string(),
+                expires_in: 3600, // 1 hour default
             },
         })
     }
@@ -336,7 +359,7 @@ impl AuthService {
             .await?;
 
         // ユーザー情報を取得
-        let user_id_vo = domain::user::UserId::from_uuid(user_id);
+        let user_id_vo = crate::domain::user::UserId::from_uuid(user_id);
         let user = self
             .user_repo
             .find_by_id(user_id_vo)
@@ -371,8 +394,10 @@ impl AuthService {
             AuthTokens {
                 access_token: token_pair.access_token,
                 refresh_token: token_pair.refresh_token,
+                token_type: "Bearer".to_string(),
+                expires_in: 3600, // 1 hour default
             },
-            UserInfo::from(&user),
+            Self::user_to_info(&user),
         ))
     }
 
@@ -537,17 +562,17 @@ mod tests {
         async fn save(
             &self,
             _user: User,
-        ) -> std::result::Result<(), application::ports::repositories::RepositoryError>
+        ) -> std::result::Result<(), crate::application::ports::repositories::RepositoryError>
         {
             unimplemented!("MockUserRepository::save not implemented")
         }
 
         async fn find_by_id(
             &self,
-            id: domain::user::UserId,
+            id: crate::domain::user::UserId,
         ) -> std::result::Result<
             Option<User>,
-            application::ports::repositories::RepositoryError,
+            crate::application::ports::repositories::RepositoryError,
         > {
             Ok(self.users.get(&id.into()).cloned())
         }
@@ -557,7 +582,7 @@ mod tests {
             email: &Email,
         ) -> std::result::Result<
             Option<User>,
-            application::ports::repositories::RepositoryError,
+            crate::application::ports::repositories::RepositoryError,
         > {
             Ok(self
                 .users
@@ -568,18 +593,18 @@ mod tests {
 
         async fn find_by_username(
             &self,
-            _username: &domain::user::Username,
+            _username: &crate::domain::user::Username,
         ) -> std::result::Result<
             Option<User>,
-            application::ports::repositories::RepositoryError,
+            crate::application::ports::repositories::RepositoryError,
         > {
             Ok(None)
         }
 
         async fn delete(
             &self,
-            _id: domain::user::UserId,
-        ) -> std::result::Result<(), application::ports::repositories::RepositoryError>
+            _id: crate::domain::user::UserId,
+        ) -> std::result::Result<(), crate::application::ports::repositories::RepositoryError>
         {
             unimplemented!("MockUserRepository::delete not implemented")
         }
@@ -588,24 +613,24 @@ mod tests {
             &self,
             _limit: i64,
             _offset: i64,
-        ) -> std::result::Result<Vec<User>, application::ports::repositories::RepositoryError>
+        ) -> std::result::Result<Vec<User>, crate::application::ports::repositories::RepositoryError>
         {
             Ok(self.users.values().cloned().collect())
         }
 
         async fn update_password_hash(
             &self,
-            _user_id: domain::user::UserId,
+            _user_id: crate::domain::user::UserId,
             _password_hash: String,
-        ) -> std::result::Result<(), application::ports::repositories::RepositoryError>
+        ) -> std::result::Result<(), crate::application::ports::repositories::RepositoryError>
         {
             Ok(())
         }
 
         async fn update_last_login(
             &self,
-            _user_id: domain::user::UserId,
-        ) -> std::result::Result<(), application::ports::repositories::RepositoryError>
+            _user_id: crate::domain::user::UserId,
+        ) -> std::result::Result<(), crate::application::ports::repositories::RepositoryError>
         {
             Ok(())
         }

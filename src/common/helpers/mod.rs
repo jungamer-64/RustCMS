@@ -1,16 +1,18 @@
-//! Shared Helpers
+//! Shared helper utilities (legacy shim).
 //!
-//! Pure utility functions without external dependencies.
+//! This module now re-exports the canonical helper implementations from the
+//! `shared-core` crate so dependent code can keep using `crate::common::helpers`
+//! paths while the actual logic lives in a single place.
 
-pub mod cache_helpers;
-pub mod date;
-pub mod hash;
-pub mod text;
-pub mod url_encoding;
-pub mod vec_helpers;
+pub use shared_core::helpers::{
+    self,
+    cache_helpers,
+    date,
+    hash,
+    text,
+    url_encoding,
+    vec_helpers,
+};
 
-// Re-exports for convenience
-pub use date::*;
-pub use hash::*;
-pub use text::*;
-pub use url_encoding::*;
+// Keep top-level helper re-exports (now pointing to shared-core)
+pub use shared_core::helpers::*;

@@ -20,18 +20,9 @@ keywords = [
 ]
 categories = ["web-programming", "database"]
 autobins = false
-default-run = "cms-server"
-
-
 [lib]
 name = "cms_backend"
 path = "src/lib.rs"
-
-[[bin]]
-name = "cms-server"
-path = "src/main.rs"
-# NOTE: This unified binary integrates functionality from cms-lightweight, cms-simple, and cms-unified
-# It serves as the single entry point for the RustCMS backend
 
 [[bin]]
 name = "cms-migrate"
@@ -92,6 +83,7 @@ serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
 serde_yaml = "0.9"
 toml = "0.9"
+shared-core = { path = "crates/shared-core" }
 
 # ===== DOMAIN LAYER (Phase 1-2) =====
 derive_more = { version = "2.0", features = ["full"] }
@@ -383,6 +375,7 @@ members = [
     "crates/infrastructure",
     "crates/presentation",
     "crates/server",
+    "crates/shared-core",
 ]
 
 # ===== METADATA =====

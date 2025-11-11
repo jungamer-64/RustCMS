@@ -1,7 +1,36 @@
 // src/bin/admin/cli.rs
 use clap::{Parser, Subcommand, ValueEnum};
-use cms_backend::models::UserRole;
 use std::fmt;
+
+/// CLI-specific user role enum (Phase 2: domain UserRole doesn't implement ValueEnum)
+#[derive(Debug, Clone, Copy, ValueEnum)]
+#[clap(rename_all = "kebab_case")]
+pub enum UserRoleArg {
+    Admin,
+    Editor,
+    Subscriber,
+}
+
+impl fmt::Display for UserRoleArg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let value = match self {
+            UserRoleArg::Admin => "admin",
+            UserRoleArg::Editor => "editor",
+            UserRoleArg::Subscriber => "subscriber",
+        };
+        write!(f, "{}", value)
+    }
+}
+
+impl From<UserRoleArg> for cms_backend::models::UserRole {
+    fn from(role: UserRoleArg) -> Self {
+        match role {
+            UserRoleArg::Admin => cms_backend::models::UserRole::Admin,
+            UserRoleArg::Editor => cms_backend::models::UserRole::Editor,
+            UserRoleArg::Subscriber => cms_backend::models::UserRole::Subscriber,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 #[clap(rename_all = "kebab_case")]
@@ -89,9 +118,9 @@ pub enum Commands {
 pub enum UserAction {
     /// List all users
     List {
-        /// Filter by role (admin, editor, user)
+        /// Filter by role (admin, editor, subscriber)
         #[arg(long, value_enum)]
-        role: Option<UserRole>,
+        role: Option<UserRoleArg>,
         /// Show only active users
         #[arg(long)]
         active_only: bool,
@@ -104,9 +133,9 @@ pub enum UserAction {
         /// Email address
         #[arg(short, long)]
         email: String,
-        /// User role (admin, editor, user)
-        #[arg(short, long, value_enum, default_value_t = UserRole::Subscriber)]
-        role: UserRole,
+        /// User role (admin, editor, subscriber)
+        #[arg(short, long, value_enum, default_value_t = UserRoleArg::Subscriber)]
+        role: UserRoleArg,
         /// Generate random password
         #[arg(long)]
         generate_password: bool,
@@ -120,7 +149,7 @@ pub enum UserAction {
         email: Option<String>,
         /// New role
         #[arg(long, value_enum)]
-        role: Option<UserRole>,
+        role: Option<UserRoleArg>,
         /// Activate/deactivate user
         #[arg(long)]
         active: Option<bool>,

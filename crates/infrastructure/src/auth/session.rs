@@ -1,5 +1,5 @@
 use crate::auth::error::AuthError;
-use crate::common::type_utils::common_types::SessionId;
+use shared_core::types::common_types::SessionId;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ use uuid::Uuid;
 use domain::user::UserRole;
 
 #[cfg(not(feature = "restructure_domain"))]
-use crate::models::UserRole;
+use domain::user::UserRole;
 
 /// Session data
 #[derive(Debug, Clone, Serialize, Deserialize)]

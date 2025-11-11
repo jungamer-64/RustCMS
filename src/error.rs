@@ -7,6 +7,7 @@
 use crate::telemetry::TelemetryError;
 use crate::utils::api_types::{ApiResponse, ValidationError};
 use axum::{Json, http::StatusCode, response::IntoResponse, response::Response};
+use shared_core::error as shared_error;
 use std::fmt;
 use tracing::{debug, error};
 use validator::ValidationErrors;
@@ -21,6 +22,7 @@ pub enum AppError {
     Validation(ValidationErrors),
     Authentication(String),
     Authorization(String),
+    Unauthorized(String), // 未認証エラー
     NotFound(String),
     Conflict(String),
     RateLimit(String),
@@ -78,6 +80,7 @@ impl AppError {
             Self::Validation(err) => format!("Validation error: {err}"),
             Self::Authentication(msg) => format!("Authentication error: {msg}"),
             Self::Authorization(msg) => format!("Authorization error: {msg}"),
+            Self::Unauthorized(msg) => format!("Unauthorized: {msg}"),
             Self::NotFound(msg) => format!("Not found: {msg}"),
             Self::Conflict(msg) => format!("Conflict: {msg}"),
             Self::RateLimit(msg) => format!("Rate limit exceeded: {msg}"),
@@ -373,6 +376,7 @@ impl AppError {
             Self::Validation(_) => "validation error",
             Self::Authentication(_) => "authentication failure",
             Self::Authorization(_) => "authorization failure",
+            Self::Unauthorized(_) => "unauthorized",
             Self::NotFound(_) => "resource not found",
             Self::Conflict(_) => "conflict",
             Self::RateLimit(_) => "rate limited",
@@ -400,6 +404,23 @@ impl AppError {
             Self::ParseError { .. } => "parse error",
             Self::FileError { .. } => "file operation error",
             Self::NetworkError { .. } => "network error",
+        }
+    }
+}
+
+impl From<shared_error::AppError> for AppError {
+    fn from(err: shared_error::AppError) -> Self {
+        use shared_error::AppError as SharedAppError;
+        match err {
+            SharedAppError::Domain(e) => AppError::BadRequest(e.to_string()),
+            SharedAppError::Application(e) => AppError::Internal(e.to_string()),
+            SharedAppError::Infrastructure(e) => AppError::Internal(e.to_string()),
+            SharedAppError::Internal(message) => AppError::Internal(message),
+            SharedAppError::NotFound(message) => AppError::NotFound(message),
+            SharedAppError::Conflict(message) => AppError::Conflict(message),
+            SharedAppError::BadRequest(message) => AppError::BadRequest(message),
+            SharedAppError::Unauthorized(message) => AppError::Unauthorized(message),
+            SharedAppError::NotImplemented(message) => AppError::NotImplemented(message),
         }
     }
 }

@@ -402,7 +402,7 @@ impl Config {
     ///
     /// 設定ファイルの読み込みやデシリアライズに失敗した場合、
     /// もしくは `DATABASE_URL` プレースホルダーが設定内にあり環境変数が未設定の場合にエラーを返します。
-    pub fn from_env() -> Result<Self, crate::AppError> {
+    pub fn from_env() -> Result<Self, shared_core::error::AppError> {
         dotenvy::dotenv().ok();
 
         let profile = read_profile();
@@ -425,10 +425,10 @@ impl Config {
     }
 
     /// 設定値が論理的に正しいか検証します。
-    fn validate(&self) -> Result<(), crate::AppError> {
+    fn validate(&self) -> Result<(), shared_core::error::AppError> {
         #[cfg(feature = "database")]
         if self.database.min_connections > self.database.max_connections {
-            return Err(crate::AppError::ConfigValidationError(
+            return Err(shared_core::error::AppError::ConfigValidationError(
                 "database.min_connections cannot be greater than max_connections".to_string(),
             ));
         }
@@ -436,14 +436,14 @@ impl Config {
         #[cfg(feature = "auth")]
         {
             if !(10..=16).contains(&self.auth.bcrypt_cost) {
-                return Err(crate::AppError::ConfigValidationError(
+                return Err(shared_core::error::AppError::ConfigValidationError(
                     "auth.bcrypt_cost must be between 10 and 16 for security and performance reasons".to_string(),
                 ));
             }
         }
 
         if self.security.rate_limit_window == 0 {
-            return Err(crate::AppError::ConfigValidationError(
+            return Err(shared_core::error::AppError::ConfigValidationError(
                 "security.rate_limit_window must be greater than 0".to_string(),
             ));
         }
@@ -500,7 +500,7 @@ fn build_builder(profile: &str) -> config::ConfigBuilder<config::builder::Defaul
 }
 
 #[cfg(feature = "database")]
-fn apply_database_url(cfg: &mut Config) -> Result<(), crate::AppError> {
+fn apply_database_url(cfg: &mut Config) -> Result<(), shared_core::error::AppError> {
     if let Ok(real) = env::var("DATABASE_URL") {
         if !real.is_empty() {
             cfg.database.url = SecretString::new(real.into());
@@ -509,7 +509,7 @@ fn apply_database_url(cfg: &mut Config) -> Result<(), crate::AppError> {
     }
     // SecretString doesn't implement PartialEq/PartialOrd; compare inner values explicitly
     if cfg.database.url.expose_secret() == DATABASE_URL_PLACEHOLDER {
-        return Err(crate::AppError::ConfigValueMissing(
+        return Err(shared_core::error::AppError::ConfigValueMissing(
             "DATABASE_URL".to_string(),
         ));
     }

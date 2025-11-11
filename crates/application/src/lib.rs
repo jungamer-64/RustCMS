@@ -51,7 +51,6 @@ pub mod category;
 pub mod queries;
 
 pub mod use_cases;
-pub use use_cases::*;
 
 pub mod services {
     // Re-exports for service-like modules (eg: limiter, auth glue) can go here.

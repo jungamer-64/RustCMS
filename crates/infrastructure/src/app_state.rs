@@ -2,7 +2,7 @@
 //!
 //! Provides access to configuration, database pools, cache, and event bus.
 
-use crate::common::{InfrastructureError, InfrastructureResult};
+use shared_core::error::{InfrastructureError, Result as InfrastructureResult};
 use crate::config::Config;
 use crate::events::AppEvent;
 use std::sync::Arc;

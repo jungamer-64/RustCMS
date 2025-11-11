@@ -10,11 +10,10 @@ fn user_role_variants() {
     use cms_backend::models::UserRole;
 
     let roles = vec![
-        UserRole::SuperAdmin,
+        UserRole::Admin,
         UserRole::Admin,
         UserRole::Editor,
         UserRole::Author,
-        UserRole::Contributor,
         UserRole::Subscriber,
     ];
 
@@ -30,7 +29,7 @@ fn user_role_hierarchy() {
     // Verify role hierarchy ordering
     use cms_backend::models::UserRole;
 
-    let super_admin = UserRole::SuperAdmin;
+    let super_admin = UserRole::Admin;
     let admin = UserRole::Admin;
     let subscriber = UserRole::Subscriber;
 

@@ -3,7 +3,9 @@
 //!
 //! Post エンティティと HTTP レスポンス/リクエストの間のデータ変換を担当します。
 
-use domain::post::{Content, Post, PostStatus, Slug, Title};
+use domain::post::{Post, PostStatus};
+#[cfg(test)]
+use domain::post::{Content, Slug, Title};
 use domain::user::UserId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

@@ -3,5 +3,31 @@ name = "cms-server"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["auth", "cache", "compression", "database", "email", "search", "restructure_domain"]
+auth = ["cms-backend/auth"]
+cache = ["cms-backend/cache"]
+compression = ["cms-backend/compression"]
+database = ["cms-backend/database"]
+dev-tools = ["cms-backend/dev-tools"]
+development = ["cms-backend/development"]
+dev = ["cms-backend/dev"]
+email = ["cms-backend/email"]
+minimal = ["cms-backend/minimal"]
+monitoring = ["cms-backend/monitoring"]
+production = ["cms-backend/production"]
+search = ["cms-backend/search"]
+restructure_domain = ["cms-backend/restructure_domain"]
+restructure_application = ["cms-backend/restructure_application"]
+restructure_presentation = ["cms-backend/restructure_presentation"]
+full_restructure = ["cms-backend/full_restructure"]
+legacy_handlers = ["cms-backend/legacy_handlers"]
+legacy_repositories = ["cms-backend/legacy_repositories"]
+
 [dependencies]
-presentation = { path = "../presentation" }
+cms-backend = { path = "../.." }
+axum = { version = "0.8", features = ["macros", "ws"] }
+hyper = { version = "1.6", features = ["full"] }
+tokio = { version = "1.47", features = ["full"] }
+tracing = "0.1"
+thiserror = "1.0"

@@ -1,10 +1,13 @@
-//! Shared Security Utilities
+//! Shared Security Utilities (legacy shim).
 //!
-//! Security-related validation and password handling.
+//! Re-export the canonical security helpers from `shared-core` so legacy paths
+//! (`crate::common::security::*`) continue to work while the implementation
+//! lives in a single crate.
 
-pub mod password;
-pub mod security_validation;
+pub use shared_core::security::{
+    self,
+    password,
+    security_validation,
+};
 
-// Re-exports for convenience
-pub use password::*;
-pub use security_validation::*;
+pub use shared_core::security::*;

@@ -57,7 +57,7 @@ pub const HEADER_NAME: &str = "X-API-Key";
 /// - Argon2 ハッシュ検証
 /// - 有効期限チェック
 pub async fn api_key_auth_layer(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     mut req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, &'static str)> {

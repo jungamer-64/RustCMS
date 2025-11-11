@@ -13,13 +13,105 @@ use thiserror::Error;
 /// ドメイン層のエラー
 ///
 /// ビジネスルール違反や不正な状態遷移を表現します。
-pub use domain::common::{DomainError, DomainResult};
+#[derive(Debug, Error, Clone)]
+pub enum DomainError {
+    #[error("Invalid user ID: {0}")]
+    InvalidUserId(String),
+
+    #[error("Invalid email: {0}")]
+    InvalidEmail(String),
+
+    #[error("Invalid username: {0}")]
+    InvalidUsername(String),
+
+    #[error("Invalid slug: {0}")]
+    InvalidSlug(String),
+
+    #[error("Invalid title: {0}")]
+    InvalidTitle(String),
+
+    #[error("Invalid content: {0}")]
+    InvalidContent(String),
+
+    #[error("Invalid published_at: {0}")]
+    InvalidPublishedAt(String),
+
+    #[error("Invalid comment text: {0}")]
+    InvalidCommentText(String),
+
+    #[error("Invalid comment author: {0}")]
+    InvalidCommentAuthor(String),
+
+    #[error("Invalid comment post: {0}")]
+    InvalidCommentPost(String),
+
+    #[error("Invalid comment status: {0}")]
+    InvalidCommentStatus(String),
+
+    #[error("Invalid state transition: {0}")]
+    InvalidStateTransition(String),
+
+    #[error("Invalid tag name: {0}")]
+    InvalidTagName(String),
+
+    #[error("Invalid tag description: {0}")]
+    InvalidTagDescription(String),
+
+    #[error("Invalid tag status: {0}")]
+    InvalidTagStatus(String),
+
+    #[error("Invalid category name: {0}")]
+    InvalidCategoryName(String),
+
+    #[error("Invalid category slug: {0}")]
+    InvalidCategorySlug(String),
+
+    #[error("Invalid category description: {0}")]
+    InvalidCategoryDescription(String),
+
+    #[error("Invalid category status: {0}")]
+    InvalidCategoryStatus(String),
+
+    #[error("Unknown domain error: {0}")]
+    Unknown(String),
+}
+
+/// ドメイン層のResult型
+pub type DomainResult<T> = std::result::Result<T, DomainError>;
 
 // ============================================================================
 // Application Layer Errors
 // ============================================================================
 
-pub use application::common::types::{ApplicationError, ApplicationResult};
+/// アプリケーション層のエラー
+///
+/// ユースケース実行時のエラーを表現します。
+#[derive(Debug, Error, Clone)]
+pub enum ApplicationError {
+    #[error("Domain error: {0}")]
+    DomainError(#[from] DomainError),
+
+    #[error("Repository error: {0}")]
+    RepositoryError(String),
+
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
+    #[error("Not found: {0}")]
+    NotFound(String),
+
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+
+    #[error("Unknown application error: {0}")]
+    Unknown(String),
+}
+
+/// アプリケーション層のResult型
+pub type ApplicationResult<T> = std::result::Result<T, ApplicationError>;
 
 // ============================================================================
 // Infrastructure Layer Errors
@@ -52,11 +144,14 @@ pub enum InfrastructureError {
     Unknown(String),
 }
 
+/// インフラストラクチャ層のResult型
+pub type InfrastructureResult<T> = std::result::Result<T, InfrastructureError>;
+
 // ============================================================================
 // Unified Error Type (既存のAppErrorとの互換性)
 // ============================================================================
 
-/// 統一エラー型（既存の AppError と互換性を保つ）
+/// 統一エラー型(既存の AppError と互換性を保つ)
 ///
 /// 全レイヤーでの使用を想定し、詳細なエラー情報を保持します。
 #[derive(Debug, Clone)]
@@ -69,6 +164,7 @@ pub enum AppError {
     Conflict(String),
     BadRequest(String),
     Unauthorized(String),
+    NotImplemented(String),
 }
 
 impl fmt::Display for AppError {
@@ -82,6 +178,7 @@ impl fmt::Display for AppError {
             AppError::Conflict(e) => write!(f, "Conflict: {e}"),
             AppError::BadRequest(e) => write!(f, "Bad request: {e}"),
             AppError::Unauthorized(e) => write!(f, "Unauthorized: {e}"),
+            AppError::NotImplemented(e) => write!(f, "Not implemented: {e}"),
         }
     }
 }
@@ -110,9 +207,6 @@ impl From<InfrastructureError> for AppError {
 // ============================================================================
 // Result Types
 // ============================================================================
-
-/// インフラストラクチャ層のResult型
-pub type InfrastructureResult<T> = std::result::Result<T, InfrastructureError>;
 
 /// 統一Result型
 pub type Result<T> = std::result::Result<T, AppError>;
@@ -496,7 +590,8 @@ mod tests {
         let result: DomainResult<i32> = Err(DomainError::InvalidUsername("bad".to_string()));
 
         let recovered: DomainResult<i32> = result.or_else(|_| Ok(0));
-        assert_eq!(recovered, Ok(0));
+        assert!(recovered.is_ok());
+        assert_eq!(recovered.unwrap(), 0);
     }
 
     #[test]

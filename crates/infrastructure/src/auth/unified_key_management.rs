@@ -84,8 +84,8 @@ impl UnifiedKeyPair {
 
     /// 新しい鍵ペアを生成
     pub fn generate() -> Result<Self, AuthError> {
-        use rand::RngCore;
-        let mut csprng = rand::rng();
+        use rand::{rngs::OsRng, RngCore};
+        let mut csprng = OsRng;
         let mut secret_bytes = [0u8; Self::SEED_LENGTH];
         csprng.fill_bytes(&mut secret_bytes);
 

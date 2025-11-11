@@ -144,27 +144,17 @@ async fn validate_prerequisites(app_state: &cms_backend::AppState) -> Result<()>
 
     match health_result {
         Ok(Ok(health)) => {
-            if health.database.status != "up" {
-                error!("Database is not available: {:?}", health.database.error);
+            // Phase 2: HealthStatus structure simplified to strings only
+            if health.database != "healthy" {
+                error!("Database is not available: {}", health.database);
                 return Err(AppError::Internal(
                     "Database connection failed. Please verify database is running.".to_string(),
                 ));
             }
 
-            info!(
-                "✓ Database: {} ({}ms)",
-                health.database.status, health.database.response_time_ms
-            );
-            info!("✓ Cache: {}", health.cache.status);
-            info!("✓ Search: {}", health.search.status);
-
-            // Warn if response times are high
-            if health.database.response_time_ms > 1000.0 {
-                warn!(
-                    "⚠️  Database response time is high ({:.2}ms) - performance may be degraded",
-                    health.database.response_time_ms
-                );
-            }
+            info!("✓ Database: {}", health.database);
+            info!("✓ Cache: {}", health.cache);
+            info!("✓ Search: {}", health.search);
         }
         Ok(Err(e)) => {
             error!("Health check failed: {}", e);

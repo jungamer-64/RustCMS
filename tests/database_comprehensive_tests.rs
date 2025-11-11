@@ -278,7 +278,7 @@ mod database_tests {
         use cms_backend::models::UserRole;
 
         let role_str = "editor";
-        let role = UserRole::parse_str(role_str).unwrap();
+        let role = UserRole::from_str(role_str).unwrap();
         assert_eq!(role, UserRole::Editor);
     }
 

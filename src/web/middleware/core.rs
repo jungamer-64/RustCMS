@@ -25,7 +25,7 @@ use axum::{
     extract::ConnectInfo,
     http::{HeaderMap, Request, StatusCode},
     middleware::Next,
-    response::{IntoResponse, Response},
+    response::Response,
 };
 use std::net::SocketAddr;
 use tracing::{error, info, warn};

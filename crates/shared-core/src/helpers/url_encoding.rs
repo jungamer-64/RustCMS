@@ -50,7 +50,7 @@ pub fn encode_url_param(input: &str) -> String {
 ///
 /// # Errors
 /// 入力が不正なエンコードでUTF-8として解釈できない場合、`BadRequest` を返します。
-pub fn decode_url_param(input: &str) -> crate::Result<String> {
+pub fn decode_url_param(input: &str) -> crate::error::Result<String> {
     percent_decode_str(input)
         .decode_utf8()
         .map_err(|e| AppError::BadRequest(format!("Invalid URL encoding: {e}")))
@@ -71,7 +71,7 @@ pub fn encode_slug(input: &str) -> String {
 ///
 /// # Errors
 /// 入力が不正なエンコードでUTF-8として解釈できない場合、`BadRequest` を返します。
-pub fn decode_slug(input: &str) -> crate::Result<String> {
+pub fn decode_slug(input: &str) -> crate::error::Result<String> {
     percent_decode_str(input)
         .decode_utf8()
         .map_err(|e| AppError::BadRequest(format!("Invalid slug encoding: {e}")))
@@ -88,7 +88,7 @@ pub fn url_encode(input: &str) -> String {
 ///
 /// # Errors
 /// 入力が不正なエンコードでUTF-8として解釈できない場合、`BadRequest` を返します。
-pub fn url_decode(input: &str) -> crate::Result<String> {
+pub fn url_decode(input: &str) -> crate::error::Result<String> {
     decode(input)
         .map_err(|e| AppError::BadRequest(format!("URL decode error: {e}")))
         .map(std::borrow::Cow::into_owned)
@@ -118,7 +118,7 @@ pub fn validate_param_length(
     param: &str,
     max_length: usize,
     param_name: &str,
-) -> crate::Result<()> {
+) -> crate::error::Result<()> {
     if param.len() > max_length {
         return Err(AppError::BadRequest(format!(
             "{} is too long: {} characters (max: {})",
@@ -164,7 +164,7 @@ pub fn generate_safe_slug(title: &str) -> String {
 ///
 /// 入力が長過ぎる、無効な文字を含む、あるいはデコードできない場合に
 /// `BadRequest` を返します。
-pub fn validate_url_param(input: &str) -> crate::Result<()> {
+pub fn validate_url_param(input: &str) -> crate::error::Result<()> {
     // 最大長チェック
     if input.len() > 2048 {
         return Err(AppError::BadRequest("URL parameter too long".to_string()));
@@ -189,7 +189,7 @@ pub fn validate_url_param(input: &str) -> crate::Result<()> {
 ///
 /// 入力が長過ぎる、空、無効な文字を含む、あるいはデコードできない場合に
 /// `BadRequest` を返します。
-pub fn validate_slug(input: &str) -> crate::Result<()> {
+pub fn validate_slug(input: &str) -> crate::error::Result<()> {
     // 最大長チェック
     if input.len() > 255 {
         return Err(AppError::BadRequest("Slug too long".to_string()));

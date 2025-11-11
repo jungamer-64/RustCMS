@@ -76,7 +76,7 @@ where
         let ip = extract_ip_from_request(&request).unwrap_or_else(|| IpAddr::from([127, 0, 0, 1]));
 
         // Pull state extension
-        let state_opt = request.extensions().get::<Arc<AppState>>().cloned();
+        let _state_opt = request.extensions().get::<Arc<AppState>>().cloned();
 
         // TODO Phase 5.3: キャッシュベースのレート制限を実装
         // let allowed = state_opt.as_ref().map_or(true, |s| s.check_rate_limit(&ip));

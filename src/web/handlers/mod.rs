@@ -3,7 +3,6 @@
 //!
 //! Phase 7: Legacy handlers removed, only v2 handlers remain
 
-use crate::AppError;
 use axum::{
     http::StatusCode,
     response::{Html, IntoResponse, Json},
@@ -21,6 +20,7 @@ pub mod users_v2;
 // Public endpoints and HTTP methods used to determine security configuration.
 // NOTE: When adding new unauthenticated endpoints, update this list to keep the
 // generated OpenAPI specification accurate.
+#[allow(dead_code)]
 const PUBLIC_ENDPOINTS: &[(&str, &str)] = &[
     ("/api/v1/auth/register", "post"),
     ("/api/v1/auth/login", "post"),
@@ -35,6 +35,7 @@ const PUBLIC_ENDPOINTS: &[(&str, &str)] = &[
     ("/api/v1/search/health", "get"),
 ];
 
+#[allow(dead_code)]
 const HTTP_METHODS: &[&str] = &["get", "post", "put", "delete", "patch"];
 
 // (previously had redundant re-exports here; modules are public via `pub mod` already)

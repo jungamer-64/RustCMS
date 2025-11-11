@@ -19,9 +19,9 @@ use crate::auth::unified_key_management::UnifiedKeyPair;
 use domain::user::UserRole;
 
 #[cfg(not(feature = "restructure_domain"))]
-use crate::models::UserRole;
+use domain::user::UserRole;
 
-use crate::common::type_utils::common_types::SessionId;
+use shared_core::types::common_types::SessionId;
 
 /// JWT トークン種別
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -105,17 +105,6 @@ impl Default for JwtConfig {
             access_token_ttl_secs: 900,        // 15分
             refresh_token_ttl_secs: 2_592_000, // 30日
             remember_me_ttl_secs: 86_400,      // 24時間
-        }
-    }
-}
-
-impl JwtConfig {
-    /// Config から JwtConfig を作成
-    pub fn from_config(config: &crate::config::Config) -> Self {
-        Self {
-            access_token_ttl_secs: config.auth.access_token_ttl_secs,
-            refresh_token_ttl_secs: config.auth.refresh_token_ttl_secs,
-            remember_me_ttl_secs: config.auth.remember_me_access_ttl_secs,
         }
     }
 }

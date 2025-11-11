@@ -306,6 +306,14 @@ impl fmt::Display for UserRole {
     }
 }
 
+impl std::str::FromStr for UserRole {
+    type Err = UserRoleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::from_str(s)
+    }
+}
+
 /// UserRole変換エラー
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum UserRoleError {
